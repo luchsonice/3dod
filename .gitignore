@@ -15,4 +15,4 @@ cubercnn/external/
 */output*/*
 *~
 *.so
-*.ipynb
+#*.ipynb
