@@ -3,26 +3,15 @@ import random
 from cubercnn import util,vis,data
 import numpy as np
     
-
-
 def load_gt(dataset='SUNRGBD'):
-    if dataset == 'SUNRGBD':
-        dataset_paths_to_json = ['/work3/s194235/3dod/datasets/Omni3D/SUNRGBD_test.json']
-    elif dataset == 'ARKitScenes':
-        dataset_paths_to_json = ['/work3/s194235/3dod/datasets/Omni3D/ARKitScenes_test.json']
-    elif dataset == 'KITTI':
-        dataset_paths_to_json = ['/work3/s194235/3dod/datasets/Omni3D/KITTI_test.json']
-    elif dataset == 'nuScenes':
-        dataset_paths_to_json = ['/work3/s194235/3dod/datasets/Omni3D/nuScenes_test.json']
-    elif dataset == 'Objectron':
-        dataset_paths_to_json = ['/work3/s194235/3dod/datasets/Omni3D/Objectron_test.json']
-    elif dataset == 'Hypersim':
-        dataset_paths_to_json = ['/work3/s194235/3dod/datasets/Omni3D/Hypersim_test.json']
-    else:
-        print('Dataset does not exist!')
+    dataset_paths_to_json = ['/work3/s194235/3dod/datasets/Omni3D/'+dataset+'_test.json']
 
     # Get Image and annotations
-    dataset = data.Omni3D(dataset_paths_to_json)
+    try:
+        dataset = data.Omni3D(dataset_paths_to_json)
+    except:
+        print('Dataset does not exist or is not in the correct format!')
+        exit()
     imgIds = dataset.getImgIds()
     imgs = dataset.loadImgs(imgIds)
     img = random.choice(imgs)
