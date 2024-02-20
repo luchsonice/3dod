@@ -6,6 +6,7 @@ import numpy as np
 import copy
 from collections import OrderedDict
 import torch
+import datetime
 from torch.nn.parallel import DistributedDataParallel
 import torch.distributed as dist
 import detectron2.utils.comm as comm
@@ -21,8 +22,11 @@ from detectron2.engine import (
 from detectron2.solver import build_lr_scheduler
 from detectron2.utils.events import EventStorage
 from detectron2.utils.logger import setup_logger
+import wandb
 
 logger = logging.getLogger("cubercnn")
+
+
 
 sys.dont_write_bytecode = True
 sys.path.append(os.getcwd())
@@ -352,6 +356,9 @@ def setup(args):
 def main(args):
     
     cfg = setup(args)
+    
+    name = f'cube {datetime.datetime.now().isoformat()}'
+    wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
 
     logger.info('Preprocessing Training Datasets')
 
