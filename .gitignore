@@ -8,6 +8,7 @@ training/image_2
 output/
 cubercnn/external/
 wandb/
+hpc_logs/
 
 # filetypes
 *.pyc
