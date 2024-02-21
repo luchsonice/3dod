@@ -2,7 +2,7 @@
 datasets/*
 testing/image_2
 training/image_2
-.vscode/
+# .vscode/
 .ipynb_checkpoints/
 .idea/
 output/

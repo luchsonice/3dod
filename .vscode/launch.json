@@ -1,0 +1,44 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Cube R-CNN Demo",
+            "type": "python",
+            "request": "launch",
+            "program": "demo/demo.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--config-file", "cubercnn://omni3d/cubercnn_DLA34_FPN.yaml", "--input-folder", "datasets/coco_examples", "--threshold", "0.25", "--display", "MODEL.WEIGHTS", "cubercnn://omni3d/cubercnn_DLA34_FPN.pth", "OUTPUT_DIR", "output/demo"]
+        },
+        {
+            "name": "train",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/train_net.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--config-file", "configs/Base_Omni3D.yaml", "OUTPUT_DIR", "output/omni3d_example_run"]
+        },
+        {
+            "name": "eval",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/train_net.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--eval-only", "--config-file", "cubercnn://omni3d/cubercnn_DLA34_FPN.yaml", "MODEL.WEIGHTS", "cubercnn://omni3d/cubercnn_DLA34_FPN.pth"]
+        },
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": []
+        }
+    ]
+}
