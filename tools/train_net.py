@@ -334,6 +334,8 @@ def setup(args):
 
     cfg.merge_from_file(config_file)
     cfg.merge_from_list(args.opts)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    cfg.MODEL.DEVICE = device
     cfg.freeze()
     default_setup(cfg, args)
 

@@ -399,6 +399,7 @@ def load_omni3d_json(json_file, image_root, dataset_name, filter_settings, filte
         image_id = record["image_id"] = img_dict["id"]
 
         objs = []
+        # where invalid annotations are removed
         for anno in anno_dict_list:
             assert anno["image_id"] == image_id
 
