@@ -289,7 +289,7 @@ def approx_eval_resolution(h, w, scale_min=0, scale_max=1e10):
     return h, w, h/orig_h
 
 
-def compute_priors(cfg, datasets, max_cluster_rounds=1000, min_points_for_std=5):
+def compute_priors(cfg, datasets, max_cluster_rounds=1000, min_points_for_std=5, n_bins=None):
     """
     Computes priors via simple averaging or a custom K-Means clustering. 
     """
@@ -363,6 +363,7 @@ def compute_priors(cfg, datasets, max_cluster_rounds=1000, min_points_for_std=5)
         'dataset', 'image', 
         'fy', 'f', 'scale'
     ])
+    # ^ the elements ending in w/h/l3d are the actual sizes, while the x/y/z3d are the camera perspective sizes.
 
     priors_bins = []
     priors_dims_per_cat = []
@@ -373,7 +374,8 @@ def compute_priors(cfg, datasets, max_cluster_rounds=1000, min_points_for_std=5)
     priors_z3d = [df_raw.z3d.mean(), df_raw.z3d.std()]
     priors_y3d = [df_raw.y3d.mean(), df_raw.y3d.std()]
 
-    n_bins = cfg.MODEL.ROI_CUBE_HEAD.CLUSTER_BINS
+    if n_bins is None:
+        n_bins = cfg.MODEL.ROI_CUBE_HEAD.CLUSTER_BINS
 
     # Each prior is pre-computed per category
     for cat in category_names:
