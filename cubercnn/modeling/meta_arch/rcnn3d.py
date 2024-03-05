@@ -59,6 +59,7 @@ class RCNN3D(GeneralizedRCNN):
 
         # the backbone is actually a FPN, where the DLA model is the bottom-up structure.
         # FPN: https://arxiv.org/abs/1612.03144v2
+        # backbone and proposal generator only work on 2D images and annotations.
         features = self.backbone(images.tensor)
         proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
 
