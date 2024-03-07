@@ -372,7 +372,7 @@ def init_dataloader():
     for info in infos:
         dataset_id = info['id']
         known_category_training_ids = set()
-
+        
         if not dataset_id in dataset_id_to_src:
             dataset_id_to_src[dataset_id] = info['source']
 
@@ -404,6 +404,54 @@ def init_dataloader():
     for item in data_loader:
         print(item)
 
+def vol_over_cat(dataset):
+    '''
+    Errorbarplot of volume of object category
+    '''
+    # Load Image and Ground Truths
+    image, Rs, center_cams, dimensions_all, cats = load_gt(dataset, mode='train', single_im=False)
+    image_t, Rs_t, center_cams_t, dimensions_all_t, cats_t = load_gt(dataset, mode='test', single_im=False)
+
+    output_dir = 'output/figures/' + dataset
+    util.mkdir_if_missing(output_dir)
+
+    # histogram of categories
+    cats_all = cats + cats_t
+    cats_unique = list(set(cats_all))
+
+    # Create dictionary with np.prod(dimensions) for each category
+    cats_vol = {cat: [] for cat in cats_unique}
+    for cat, dims in zip(cats, dimensions_all):
+        if np.prod(dims) > 0:
+            cats_vol[cat].append(np.prod(dims))
+    for cat, dims in zip(cats_t, dimensions_all_t):
+        if np.prod(dims) > 0:
+            cats_vol[cat].append(np.prod(dims))
+
+    # make dict with mean and std of each category
+    cats_mean = {cat: np.mean(cats_vol[cat]) for cat in cats_unique}
+    cats_error = {cat: np.std(cats_vol[cat]) for cat in cats_unique}
+
+    keys = np.array(list(cats_mean.keys()))
+    means = np.array(list(cats_mean.values()))
+    errors = np.array(list(cats_error.values()))
+
+    print(keys)
+    print(means)
+    print(errors)
+
+
+    plt.figure(figsize=(14,5))
+    plt.errorbar(keys, means, yerr=errors, fmt='o', color='black', ecolor='gray', elinewidth=3, capsize=0)
+    plt.xticks(rotation=60, size=9)
+    plt.xlabel('Category')
+    plt.ylabel('Volume')
+
+    plt.title('Category Distribution')
+    plt.savefig(os.path.join(output_dir, 'volume_distribution.png'),dpi=300, bbox_inches='tight')
+    plt.close()
+
+    return True
 if __name__ == '__main__':
     # show_data('SUNRGBD')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
     # _ = category_distribution('SUNRGBD')
