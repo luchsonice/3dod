@@ -279,26 +279,20 @@ def AP3D_vs_AP2D(dataset, file='output/Baseline_sgd/log.txt'):
     merged_df = merged_df.sort_values(by='cats')
     merged_df = merged_df.drop('index',axis=1)
     merged_df = merged_df.reset_index(drop=True)
-    
+    print(merged_df)
     
     fig, ax = plt.subplots(figsize=(12,8))
     scatter = ax.scatter(merged_df['AP2D'].values, merged_df['AP3D'].values, alpha=0.5, label='')
     for i, txt in enumerate(merged_df['category']):
         ax.text(merged_df['AP2D'].values[i], merged_df['AP3D'].values[i], txt)
-    # correlation_coef = np.corrcoef(merged_df['cats'].values, merged_df['AP3D'].values)[0, 1]
-    # line_fit = np.polyfit(merged_df['cats'].values, merged_df['AP3D'].values, 1)
-
-    # plot the line of best fit
-    # ax.plot(merged_df['cats'].values, np.poly1d(line_fit)(merged_df['cats'].values), linestyle='--', color='black',alpha=0.5, label=f'Linear fit (R={correlation_coef:.2f})')
-    
     # plot average line
-    ax.plot((0, max(merged_df['AP2D'].values)), (0, max(merged_df['AP3D'].values)), linestyle='--', color='black', alpha=0.3, label=f'AP2D=AP3D')
+    ax.plot((0, 70), (0, 70), linestyle='--', color='black', alpha=0.3, label=f'AP2D=AP3D')
 
     # Set labels and title
     ax.set_xlabel('AP2D')
     ax.set_ylabel('AP3D')
-    # ax.set_xscale('log')
-    ax.set_title('AP3D vs No. of annotations')
+    ax.set_xlim(0, 75); ax.set_ylim(0, 75)
+    ax.set_title('AP3D vs AP in 2D annotations')
     ax.legend()
 
     # Save the plot
