@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 from typing import Dict, List, Tuple
 import torch
-#torch.autograd.set_detect_anomaly(True)
+torch.autograd.set_detect_anomaly(True)
 from torch import nn
 import torch.nn.functional as F
 from pytorch3d.transforms.so3 import (
@@ -452,16 +452,17 @@ class ROIHeads3D(StandardROIHeads):
 
                 # losses
                 box3d = torch.cat((_3d, cube_dims), dim=1)
-                proj_2d = torch.zeros((box3d.size()[0],4))
-                c = 0
                 loss_2d_boxes = []
+                c = 0
                 for i,K in enumerate(Ks):
-                    c_temp = c
-                    for _ in range(num_boxes_per_image[i]):
-                        proj_2d[c], _, _ = convert_3d_box_to_2d(K, box3d[c].to(K.device), cube_pose[c].to(K.device))
+                    proj_2d = torch.zeros((num_boxes_per_image[i],4),requires_grad=True)
+                    for j in range(num_boxes_per_image[i]):
+                        proj_2d[j].data, _, _ = convert_3d_box_to_2d(K, box3d[c].clone().to(K.device), cube_pose[c].clone().to(K.device))
                         c += 1
-                    loss_2d_boxes.append(pairwise_iou(gt_2d[i].to(K.device), Boxes(proj_2d[c_temp:c-1])).mean(dim=1))
-   
+                    box1 = gt_2d[i].clone().to(K.device)
+                    box2 = Boxes(proj_2d.clone())
+                    loss_2d_boxes.append(1-pairwise_iou(box1, box2).mean(dim=1))
+
             loss_2d_boxes = torch.cat(loss_2d_boxes)
             total_3D_loss_for_reporting = loss_2d_boxes
 
