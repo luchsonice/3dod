@@ -452,15 +452,19 @@ class ROIHeads3D(StandardROIHeads):
 
                 # losses
                 box3d = torch.cat((_3d, cube_dims), dim=1)
-                proj_2d = torch.zeros((box3d.size()[0],4))
                 c = 0
                 loss_2d_boxes = []
+                device = cube_2d_deltas.device
                 for i,K in enumerate(Ks):
-                    c_temp = c
-                    for _ in range(num_boxes_per_image[i]):
-                        proj_2d[c], _, _ = convert_3d_box_to_2d(K, box3d[c].to(K.device), cube_pose[c].to(K.device))
+                    K = K.to(device)
+                    proj_2d = torch.zeros((num_boxes_per_image[i],4),requires_grad=True, device=device)
+                    for j in range(num_boxes_per_image[i]):
+                        # cliph = features[0].shape[2]*4
+                        # clipw = features[0].shape[3]*4
+                        # https://stackoverflow.com/a/73630234/15107482
+                        proj_2d[j].data, is_behind, is_fully_behind = convert_3d_box_to_2d(K, box3d[c].to(K.device), cube_pose[c].to(K.device))
                         c += 1
-                    loss_2d_boxes.append(pairwise_iou(gt_2d[i].to(K.device), Boxes(proj_2d[c_temp:c-1])).mean(dim=1))
+                    loss_2d_boxes.append(1 - pairwise_iou(gt_2d[i].to(K.device), Boxes(proj_2d.clone())).mean(dim=1))
    
             loss_2d_boxes = torch.cat(loss_2d_boxes)
             total_3D_loss_for_reporting = loss_2d_boxes
