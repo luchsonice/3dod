@@ -258,6 +258,54 @@ def AP_vs_no_of_classes(dataset, file='output/Baseline_sgd/log.txt'):
 
     return
 
+def AP3D_vs_AP2D(dataset, file='output/Baseline_sgd/log.txt'):
+    '''Search the log file for the precision numbers corresponding to the last iteration
+    then parse it in as a pd.DataFrame and plot the AP vs number of classes'''
+
+    # search the file from the back until the line 
+    # cubercnn.vis.logperf INFO: Performance for each of 38 categories on SUNRGBD_test:
+    # is found
+
+    target_line = "cubercnn.vis.logperf INFO: Performance for each of 38 categories on SUNRGBD_test:"
+    df = search_file_backwards(file, target_line)
+    if df is None:
+        print('df not found')
+        return
+
+    cats = category_distribution(dataset)
+    df.sort_values(by='category', inplace=True)
+    cats = dict(sorted(cats.items()))
+    merged_df = pd.merge(df.reset_index(), pd.DataFrame(cats.values(), columns=['cats']), left_index=True, right_index=True)
+    merged_df = merged_df.sort_values(by='cats')
+    merged_df = merged_df.drop('index',axis=1)
+    merged_df = merged_df.reset_index(drop=True)
+    
+    
+    fig, ax = plt.subplots(figsize=(12,8))
+    scatter = ax.scatter(merged_df['AP2D'].values, merged_df['AP3D'].values, alpha=0.5, label='')
+    for i, txt in enumerate(merged_df['category']):
+        ax.text(merged_df['AP2D'].values[i], merged_df['AP3D'].values[i], txt)
+    # correlation_coef = np.corrcoef(merged_df['cats'].values, merged_df['AP3D'].values)[0, 1]
+    # line_fit = np.polyfit(merged_df['cats'].values, merged_df['AP3D'].values, 1)
+
+    # plot the line of best fit
+    # ax.plot(merged_df['cats'].values, np.poly1d(line_fit)(merged_df['cats'].values), linestyle='--', color='black',alpha=0.5, label=f'Linear fit (R={correlation_coef:.2f})')
+    
+    # plot average line
+    ax.plot((0, max(merged_df['AP2D'].values)), (0, max(merged_df['AP3D'].values)), linestyle='--', color='black', alpha=0.3, label=f'AP2D=AP3D')
+
+    # Set labels and title
+    ax.set_xlabel('AP2D')
+    ax.set_ylabel('AP3D')
+    # ax.set_xscale('log')
+    ax.set_title('AP3D vs No. of annotations')
+    ax.legend()
+
+    # Save the plot
+    plt.savefig('output/figures/'+dataset+'/AP3D_vs_AP2D.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+    return
 
 
 def search_file_backwards(file_path:str, target_line:str) -> pd.DataFrame:
@@ -363,8 +411,9 @@ def init_dataloader():
         print(item)
 
 if __name__ == '__main__':
-    show_data('SUNRGBD')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
-    _ = category_distribution('SUNRGBD')
-    AP_vs_no_of_classes('SUNRGBD')
-    spatial_statistics('SUNRGBD')
+    # show_data('SUNRGBD')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
+    # _ = category_distribution('SUNRGBD')
+    # AP_vs_no_of_classes('SUNRGBD')
+    # spatial_statistics('SUNRGBD')
+    AP3D_vs_AP2D('SUNRGBD')
     # init_dataloader()
