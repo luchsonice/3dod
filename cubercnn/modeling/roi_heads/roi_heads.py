@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 from typing import Dict, List, Tuple
 import torch
-#torch.autograd.set_detect_anomaly(True)
+torch.autograd.set_detect_anomaly(True)
 from torch import nn
 import torch.nn.functional as F
 from pytorch3d.transforms.so3 import (
