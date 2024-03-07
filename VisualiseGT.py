@@ -292,7 +292,7 @@ def AP3D_vs_AP2D(dataset, file='output/Baseline_sgd/log.txt'):
     ax.set_xlabel('AP2D')
     ax.set_ylabel('AP3D')
     ax.set_xlim(0, 75); ax.set_ylim(0, 75)
-    ax.set_title('AP3D vs AP in 2D annotations')
+    ax.set_title('AP in 3D vs AP in 2D')
     ax.legend()
 
     # Save the plot
