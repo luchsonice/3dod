@@ -7,6 +7,45 @@ from matplotlib import pyplot as plt
 import numpy as np
 import torch
 from cubercnn import util, vis
+from transformers import AutoImageProcessor, DepthAnythingConfig, DepthAnythingForDepthEstimation
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from PIL import Image
+import requests
+import torch
+
+def depth_of_image(image):
+    '''Use Depth anything from huggingface
+    might need to install pip install git+https://github.com/huggingface/transformers.git
+    '''
+
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw)
+    # configuration = DepthAnythingConfig()
+    image_processor = AutoImageProcessor.from_pretrained("LiheYoung/depth-anything-small-hf")
+    model = DepthAnythingForDepthEstimation.from_pretrained('LiheYoung/depth-anything-small-hf')
+
+    # prepare image for the model
+    inputs = image_processor(images=image, return_tensors="pt")
+
+    with torch.no_grad():
+        outputs = model(**inputs)
+        predicted_depth = outputs.predicted_depth
+
+    # interpolate to original size
+    prediction = torch.nn.functional.interpolate(
+        predicted_depth.unsqueeze(1),
+        size=image.shape[:-1],
+        mode="bicubic",
+        align_corners=False,
+    )
+
+    # visualize the prediction
+    output = prediction.squeeze().cpu().numpy()
+    formatted = (output * 255 / np.max(output)).astype("uint8")
+    return formatted, output
+
 
 def plot_3dbox_in2d(image, pred2d, pred3d):
 
@@ -209,4 +248,25 @@ def visualize(batched_inputs, proposals, instances):
 
 
 if __name__ == "__main__":
-    proposals_3d_from_2d(None, None)
+    # proposals_3d_from_2d(None, None)
+
+    with open('3dboxes/proposals/network_out.pkl', 'rb') as f:
+        batched_inputs, images, features, proposals, Ks, gt_instances, im_scales_ratio, instances = pickle.load(f)
+    
+    n_boxes = 1
+    pred_xyz, pred_whl, pred_pose = make_random_boxes(n_boxes=n_boxes)
+    pred_xyzwhl = torch.cat((pred_xyz, pred_whl), dim=0)
+
+    pred_colors = torch.tensor([util.get_color(i) for i in range(n_boxes)])/255.0
+
+    pred_meshes = util.mesh_cuboid(pred_xyzwhl, pred_pose, pred_colors)
+
+    input_format = 'BGR'
+    img = batched_inputs[0]['image']
+    img = convert_image_to_rgb(img.permute(1, 2, 0), input_format)
+    img_depth, prediction = depth_of_image(img)
+    # plt.imshow(img_depth)
+    # plt.show()
+    plt.figure()
+    plt.matshow(prediction, cmap='magma')
+    plt.show()
