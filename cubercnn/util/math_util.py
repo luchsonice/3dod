@@ -497,6 +497,129 @@ def compute_priors(cfg, datasets, max_cluster_rounds=1000, min_points_for_std=5,
     
     return priors
 
+def compute_priors_custom(cfg, datasets, max_cluster_rounds=1000, min_points_for_std=5):
+    """
+    simplification of the standard compute_priors function
+    
+    Computes priors via simple averaging
+    """
+
+    annIds = datasets.getAnnIds()
+    anns = datasets.loadAnns(annIds)
+
+    data_raw = []
+
+    category_names = MetadataCatalog.get('omni3d_model').thing_classes
+
+    virtual_depth = cfg.MODEL.ROI_CUBE_HEAD.VIRTUAL_DEPTH
+    virtual_focal = cfg.MODEL.ROI_CUBE_HEAD.VIRTUAL_FOCAL
+    test_scale_min = cfg.INPUT.MIN_SIZE_TEST
+    test_scale_max = cfg.INPUT.MAX_SIZE_TEST
+
+    '''
+    Accumulate the annotations while discarding the 2D center information
+    (hence, keeping only the 2D and 3D scale information, and properties.)
+    '''
+
+    for ann_idx, ann in enumerate(anns):
+
+        category_name = ann['category_name'].lower()
+
+        ignore = ann['ignore']
+        dataset_id = ann['dataset_id']
+        image_id = ann['image_id']
+
+        fy = datasets.imgs[image_id]['K'][1][1]
+        im_h = datasets.imgs[image_id]['height']
+        im_w = datasets.imgs[image_id]['width']
+        f = 2 * fy / im_h
+
+        if cfg.DATASETS.MODAL_2D_BOXES and 'bbox2D_tight' in ann and ann['bbox2D_tight'][0] != -1:
+            x, y, w, h =  BoxMode.convert(ann['bbox2D_tight'], BoxMode.XYXY_ABS, BoxMode.XYWH_ABS)
+
+        elif cfg.DATASETS.TRUNC_2D_BOXES and 'bbox2D_trunc' in ann and not np.all([val==-1 for val in ann['bbox2D_trunc']]):
+            x, y, w, h =  BoxMode.convert(ann['bbox2D_trunc'], BoxMode.XYXY_ABS, BoxMode.XYWH_ABS)
+
+        elif 'bbox2D_proj' in ann:
+            x, y, w, h =  BoxMode.convert(ann['bbox2D_proj'], BoxMode.XYXY_ABS, BoxMode.XYWH_ABS)
+
+        else:
+            continue
+
+        x3d, y3d, z3d = ann['center_cam']
+        w3d, h3d, l3d = ann['dimensions']
+        
+        test_h, test_w, sf = approx_eval_resolution(im_h, im_w, test_scale_min, test_scale_max)
+
+        # scale everything to test resolution
+        h *= sf
+        w *= sf
+
+        if virtual_depth:
+            virtual_to_real = compute_virtual_scale_from_focal_spaces(fy, im_h, virtual_focal, test_h)
+            real_to_virtual = 1/virtual_to_real
+            z3d *= real_to_virtual
+
+        scale = np.sqrt(h**2 + w**2)
+
+        if (not ignore) and category_name in category_names:
+            data_raw.append([category_name, w, h, x3d, y3d, z3d, w3d, h3d, l3d, w3d*h3d*l3d, dataset_id, image_id, fy, f, scale])
+
+    # TODO pandas is fairly inefficient to rely on for large scale.
+    df_raw = pd.DataFrame(data_raw, columns=[
+        'name', 
+        'w', 'h', 'x3d', 'y3d', 'z3d', 
+        'w3d', 'h3d', 'l3d', 'volume', 
+        'dataset', 'image', 
+        'fy', 'f', 'scale'
+    ])
+    # ^ the elements ending in w/h/l3d are the actual sizes, while the x/y/z3d are the camera perspective sizes.
+
+    priors_bins = []
+    priors_dims_per_cat = []
+    priors_z3d_per_cat = []
+    priors_y3d_per_cat = []
+
+    # compute priors for z and y globally
+    priors_z3d = [df_raw.z3d.mean(), df_raw.z3d.std()]
+    priors_y3d = [df_raw.y3d.mean(), df_raw.y3d.std()]
+
+
+    # Each prior is pre-computed per category
+    for cat in category_names:
+        
+        df_cat = df_raw[df_raw.name == cat]        
+
+        '''
+        First compute static variable statistics
+        '''
+
+        scales = torch.FloatTensor(np.array(df_cat.scale))
+        n = len(scales)
+
+        if None:
+            priors_dims_per_cat.append([[df_cat.w3d.mean(), df_cat.h3d.mean(), df_cat.l3d.mean()], [df_cat.w3d.std(), df_cat.h3d.std(), df_cat.l3d.std()]])            
+            priors_z3d_per_cat.append([df_cat.z3d.mean(), df_cat.z3d.std()])            
+            priors_y3d_per_cat.append([df_cat.y3d.mean(), df_cat.y3d.std()])
+        
+        else:
+            # dummy data.
+            priors_dims_per_cat.append([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])            
+            priors_z3d_per_cat.append([0, 0])            
+            priors_y3d_per_cat.append([0, 0])
+
+          
+    priors = {
+        'priors_dims_per_cat': priors_dims_per_cat,
+        'priors_z3d_per_cat': priors_z3d_per_cat,
+        'priors_y3d_per_cat': priors_y3d_per_cat,
+        'priors_bins': priors_bins,
+        'priors_y3d': priors_y3d,
+        'priors_z3d': priors_z3d,
+    }
+    
+    return priors
+
 def convert_3d_box_to_2d(K, box3d, R=None, clipw=0, cliph=0, XYWH=True, min_z=0.20):
     """
     Converts a 3D box to a 2D box via projection. 

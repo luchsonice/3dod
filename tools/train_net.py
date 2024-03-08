@@ -5,6 +5,7 @@ import sys
 import numpy as np
 import copy
 from collections import OrderedDict
+import pandas as pd
 import torch
 import datetime
 from torch.nn.parallel import DistributedDataParallel
@@ -27,10 +28,6 @@ import wandb
 logger = logging.getLogger("cubercnn")
 
 
-
-sys.dont_write_bytecode = True
-sys.path.append(os.getcwd())
-np.set_printoptions(suppress=True)
 
 from cubercnn.solver import build_optimizer, freeze_bn, PeriodicCheckpointerOnlyOne
 from cubercnn.config import get_cfg_defaults
@@ -87,7 +84,7 @@ def do_test(cfg, model, iteration='final', storage=None):
         '''
         Distributed Cube R-CNN inference
         '''
-        data_loader = build_detection_test_loader(cfg, dataset_name)
+        data_loader = build_detection_test_loader(cfg, dataset_name, num_workers=4)
         results_json = inference_on_dataset(model, data_loader)
 
         if comm.is_main_process():
@@ -135,7 +132,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     
     # create the dataloader
     data_mapper = DatasetMapper3D(cfg, is_train=True)
-    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src)
+    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=4)
 
     # give the mapper access to dataset_ids
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
@@ -238,7 +235,10 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
 
             # convert exploded to a float, then allreduce it, 
             # if any process gradients have exploded then we skip together.
-            diverging_model = torch.tensor(float(diverging_model)).cuda()
+            if cfg.MODEL.DEVICE == 'cuda':
+                diverging_model = torch.tensor(float(diverging_model)).cuda()
+            else:
+                diverging_model = torch.tensor(float(diverging_model))
 
             if world_size > 1:
                 dist.all_reduce(diverging_model)
@@ -264,7 +264,10 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             
             # Important for dist training. Convert to a float, then allreduce it, 
             # if any process gradients have exploded then we must skip together.
-            retry = torch.tensor(float(retry)).cuda()
+            if cfg.MODEL.DEVICE == 'cuda':
+                retry = torch.tensor(float(retry)).cuda()
+            else:
+                retry = torch.tensor(float(retry))
             
             if world_size > 1:
                 dist.all_reduce(retry)
@@ -336,6 +339,7 @@ def setup(args):
     cfg.merge_from_list(args.opts)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     cfg.MODEL.DEVICE = device
+    cfg.SEED = 12 
     cfg.freeze()
     default_setup(cfg, args)
 
@@ -360,7 +364,7 @@ def main(args):
     cfg = setup(args)
     
     name = f'cube {datetime.datetime.now().isoformat()}'
-    wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
+    # wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
 
     logger.info('Preprocessing Training Datasets')
 
@@ -430,7 +434,18 @@ def main(args):
             logger.info([thing_classes[i] for i in (possible_categories & known_category_training_ids)])
 
         # compute priors given the training data.
-        priors = util.compute_priors(cfg, datasets)
+        if cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_PRECOMPUTED:
+            # priors: dict with: (for all 50 classes, [those not in sunrgb can just be random values])
+                # 'priors_dims_per_cat':
+                # 'priors_z3d_per_cat':
+                # 'priors_y3d_per_cat':
+                # 'priors_bins':
+                # 'priors_y3d':
+                # 'priors_z3d'
+            priors = pd.read_csv('datasets/typical sizes of 3d items.csv')
+        else:
+            priors = util.compute_priors(cfg, datasets)
+            # priors = util.compute_priors_custom(cfg, datasets)
     
     '''
     The training loops can attempt to train for N times.
@@ -445,7 +460,8 @@ def main(args):
 
         if remaining_attempts == MAX_TRAINING_ATTEMPTS:
             # log the first attempt's settings.
-            logger.info("Model:\n{}".format(model))
+            # logger.info("Model:\n{}".format(model))
+            pass
 
         if args.eval_only:
             # skip straight to eval mode
