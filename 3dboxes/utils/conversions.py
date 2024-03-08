@@ -14,15 +14,16 @@ def bube_to_box(bube):
     if bube is None:
         raise ValueError('bube cannot be None')
     
-    bube_corner = bube.get_all_corners()
-    min_x = torch.min(bube_corner[:,0])
-    max_x = torch.max(bube_corner[:,0])
-    min_y = torch.min(bube_corner[:,1])
-    max_y = torch.max(bube_corner[:,1])
+    bube_corners = bube.get_all_corners()
+    min_x = torch.min(bube_corners[:,0])
+    max_x = torch.max(bube_corners[:,0])
+    min_y = torch.min(bube_corners[:,1])
+    max_y = torch.max(bube_corners[:,1])
     width = max_x - min_x
     height = max_y - min_y
+    center = torch.tensor([(max_x + min_x) / 2, (max_y + min_y) / 2])
     
-    return Box(bube.center, torch.tensor([width, height]))
+    return Box(center, torch.tensor([width, height]))
 
 def box_to_bube(box, length, rotation):
     '''

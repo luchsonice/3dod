@@ -1,6 +1,9 @@
 import torch
 from cubercnn import util
 import numpy as np
+import matplotlib.pyploy as plt
+
+
 
 class Box:
     '''
@@ -19,17 +22,16 @@ class Box:
                             w             
 
     '''
-    def __init__(self,tensor: torch.Tensor) -> None:
-        self.tensor = tensor
-        self.c1 = tensor[0]
-        self.c2 = tensor[1]
-        self.width = tensor[2]
-        self.height = tensor[3]
+    def __init__(self,center: torch.Tensor, dimensions: torch.Tensor) -> None:
+        self.c1 = center[0]
+        self.c2 = center[1]
+        self.width = dimensions[0]
+        self.height = dimensions[1]
 
         if self.width < 0:
-            raise ValueError('Width must be greater than 0. Did you make sure that the input is in the correct order? (c1, c2, w, h)')
+            raise ValueError('Width must be greater than 0. Did you make sure that the input is in the correct order? (center, dimensions)')
         if self.height < 0:
-            raise ValueError('Height must be greater than 0. Did you make sure that the input is in the correct order? (c1, c2, w, h)')
+            raise ValueError('Height must be greater than 0. Did you make sure that the input is in the correct order? (center, dimensions)')
 
     def get_all_corners(self) -> torch.Tensor:
         '''
@@ -40,7 +42,7 @@ class Box:
         bl = [self.c1-self.width/2, self.c2-self.height/2]
         br = [self.c1+self.width/2, self.c2-self.height/2]
 
-        return torch.tensor([ul, ur, bl, br])
+        return torch.tensor([ul, ur, br, bl])
     
 
 
@@ -99,7 +101,7 @@ class Cube:
         return self.cube
 
     def get_all_corners(self) -> torch.Tensor:
-        return self.cube.verts_list()
+        return self.cube.verts_list()[0]
 
         
 
@@ -132,7 +134,7 @@ class Bube:
     def __init__(self,cube: Cube, K: torch.Tensor) -> None:
         self.cube = cube
         self.K = K
-        self.center = cube.center[:2] # This is not correct, is it?
+        self.center = cube.center[:2]
         self.dimensions = cube.dimensions
 
         if K.shape != (3,3):
@@ -143,8 +145,17 @@ class Bube:
         It returns the 8 corners of the bube in the format [x, y]
         '''
         corners = self.cube.get_all_corners()
-        corners = torch.cat((corners, torch.ones(8,1)), dim=1)
-        corners = torch.mm(self.K, corners.t()).t()
+        #corners = torch.cat((corners, torch.ones(8,1)), dim=1) 
+        corners = torch.mm(self.K, corners.t()).t() # translation camera missing?
         corners = corners[:,:2]/corners[:,2].unsqueeze(1)
 
         return corners
+    
+    def plot_bube(self):
+        bube_corners = self.get_all_corners(self)
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.plot(torch.cat((bube_corners[:4,0],bube_corners[0,0].reshape(1))),torch.cat((bube_corners[:4,1],bube_corners[0,1].reshape(1))),color='r',linewidth=3)
+        ax.plot(torch.cat((bube_corners[4:,0],bube_corners[4,0].reshape(1))),torch.cat((bube_corners[4:,1],bube_corners[4,1].reshape(1))),color='r')
+        for i in range(4):
+            ax.plot(torch.cat((bube_corners[i,0].reshape(1),bube_corners[4+i,0].reshape(1))),torch.cat((bube_corners[i,1].reshape(1),bube_corners[4+i,1].reshape(1))),color='r')
