@@ -25,6 +25,24 @@ print('bube',bube_corners)
 box = bube_to_box(bube)
 print('box',box.get_all_corners())
 
+# Plot bube on 2D plane
+fig = plt.figure()
+ax = fig.add_subplot(111)
+ax.plot(torch.cat((bube_corners[:4,0],bube_corners[0,0].reshape(1))),torch.cat((bube_corners[:4,1],bube_corners[0,1].reshape(1))),color='r',linewidth=3)
+ax.plot(torch.cat((bube_corners[4:,0],bube_corners[4,0].reshape(1))),torch.cat((bube_corners[4:,1],bube_corners[4,1].reshape(1))),color='r')
+for i in range(4):
+    ax.plot(torch.cat((bube_corners[i,0].reshape(1),bube_corners[4+i,0].reshape(1))),torch.cat((bube_corners[i,1].reshape(1),bube_corners[4+i,1].reshape(1))),color='r')
+ax.scatter(0,0,color='b')
+for i in range(8):
+    ax.text(bube_corners[i,0], bube_corners[i,1], '(%d)' % i, ha='right')
+ax.plot(torch.cat((box.get_all_corners()[:,0],box.get_all_corners()[0,0].reshape(1))),torch.cat((box.get_all_corners()[:,1],box.get_all_corners()[0,1].reshape(1))),color='b')
+plt.savefig(os.path.join('/work3/s194369/3dod/3dboxes/output/trash', 'test.png'),dpi=300, bbox_inches='tight')
+
+
+
+
+
+
 with open('3dboxes/proposals/network_out.pkl', 'rb') as f:
         batched_inputs, images, features, proposals, Ks, gt_instances, im_scales_ratio, instances = pickle.load(f)
 
@@ -45,12 +63,8 @@ def make_random_boxes(n_boxes=10):
 n_boxes = 1
 pred_xyz, pred_whl, pred_pose = make_random_boxes(n_boxes=n_boxes)
 pred_xyzwhl = torch.cat((pred_xyz, pred_whl), dim=0)
-
-cube = Cube(torch.tensor([5,5,10,2,2,4]),pred_pose)
-
-pred_colors = torch.tensor([util.get_color(i) for i in range(n_boxes)])/255.0
-
-pred_meshes = util.mesh_cuboid(pred_xyzwhl, pred_pose, pred_colors)
+pred_cube = Cube(pred_xyzwhl,pred_pose)
+pred_meshes = pred_cube.get_cube()
 
 input_format = 'BGR'
 img = batched_inputs[0]['image']
@@ -63,6 +77,8 @@ scale = input['height']/img.shape[0]
 K_scaled = torch.tensor(
     [[1/scale, 0 , 0], [0, 1/scale, 0], [0, 0, 1.0]], 
     dtype=torch.float32) @ K
+
+pred_box = bube_to_box(cube_to_bube(pred_cube,K_scaled))
 # convert to lists
 pred_meshes = [pred_meshes.__getitem__(i).detach() for i in range(len(pred_meshes))]
 
@@ -89,12 +105,5 @@ vis_img_3d = img_3DPR.astype(np.uint8)
 fig = plt.figure()
 ax = fig.add_subplot(111)
 ax.imshow(vis_img_3d); ax.axis('off')
-ax.plot(torch.cat((bube_corners[:4,0],bube_corners[0,0].reshape(1))),torch.cat((bube_corners[:4,1],bube_corners[0,1].reshape(1))),color='r',linewidth=3)
-ax.plot(torch.cat((bube_corners[4:,0],bube_corners[4,0].reshape(1))),torch.cat((bube_corners[4:,1],bube_corners[4,1].reshape(1))),color='r')
-for i in range(4):
-    ax.plot(torch.cat((bube_corners[i,0].reshape(1),bube_corners[4+i,0].reshape(1))),torch.cat((bube_corners[i,1].reshape(1),bube_corners[4+i,1].reshape(1))),color='r')
-ax.scatter(0,0,color='b')
-for i in range(8):
-    ax.text(bube_corners[i,0], bube_corners[i,1], '(%d)' % i, ha='right')
-ax.plot(torch.cat((box.get_all_corners()[:,0],box.get_all_corners()[0,0].reshape(1))),torch.cat((box.get_all_corners()[:,1],box.get_all_corners()[0,1].reshape(1))),color='b')
+ax.plot(torch.cat((pred_box.get_all_corners()[:,0],pred_box.get_all_corners()[0,0].reshape(1))),torch.cat((pred_box.get_all_corners()[:,1],pred_box.get_all_corners()[0,1].reshape(1))),color='b')
 plt.savefig(os.path.join('/work3/s194369/3dod/3dboxes/output/trash', 'test_real.png'),dpi=300, bbox_inches='tight')

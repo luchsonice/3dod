@@ -1,7 +1,7 @@
 import torch
 from cubercnn import util
 import numpy as np
-import matplotlib.pyploy as plt
+import matplotlib.pyplot as plt
 
 
 
