@@ -80,20 +80,23 @@ def is_box_included_in_other_box(reference_box, proposed_box):
     return (reference_min_x <= proposed_min_x <= proposed_max_x <= reference_max_x and reference_min_y <= proposed_min_y <= proposed_max_y <= reference_max_y)
 
 def propose(reference_box, depth_image, K_scaled, number_of_proposals=1):
-    x_range = torch.tensor([-0.8,0.8])
-    y_range = torch.tensor([-0.8,0.8])
-    w_range = torch.tensor([0.1,1.4])
-    h_range = torch.tensor([0.1,1.4])
-    l_range = torch.tensor([0.1,1.4])
+    x_range = torch.tensor([-0.8,0])
+    y_range = torch.tensor([-0.8,0.4])
+    w_range = torch.tensor([0.2,1])
+    h_range = torch.tensor([0.2,1])
+    l_range = torch.tensor([0.2,1])
 
     list_of_cubes = []
+    c = 0
     while len(list_of_cubes) < number_of_proposals:
+        c += 1
         pred_xyz, pred_whl, pred_pose = make_random_box(x_range,y_range,depth_image,w_range,h_range,l_range)
         pred_cube = Cube(torch.cat((pred_xyz, pred_whl), dim=0),pred_pose)
         pred_box = cube_to_box(pred_cube,K_scaled)
         if is_box_included_in_other_box(reference_box,pred_box):
             list_of_cubes.append(pred_cube)
     
+    print('It took',c,'tries to find',number_of_proposals,'boxes.')
     return list_of_cubes
 
 

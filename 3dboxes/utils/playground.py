@@ -61,20 +61,6 @@ K_scaled = torch.tensor(
     [[1/scale, 0 , 0], [0, 1/scale, 0], [0, 0, 1.0]], 
     dtype=torch.float32) @ K
 
-'''
-x_range = torch.tensor([-0.8,0.8])
-y_range = torch.tensor([-0.8,0.8])
-depth_image = torch.ones([img.shape[0],img.shape[1]])*3
-w_range = torch.tensor([0,1.4])
-h_range = torch.tensor([0,1.4])
-l_range = torch.tensor([0,1.4])
-
-pred_xyz, pred_whl, pred_pose = make_random_box(x_range,y_range,depth_image,w_range,h_range,l_range)
-pred_xyzwhl = torch.cat((pred_xyz, pred_whl), dim=0)
-pred_cube = Cube(pred_xyzwhl,pred_pose)
-pred_meshes = pred_cube.get_cube()
-'''
-
 
 # 2 box
 box_size = min(len(proposals[0].proposal_boxes), 1)
@@ -91,26 +77,23 @@ box_center_y = box[1]+box_height/2
 reference_box = Box(torch.tensor([box_center_x,box_center_y]),torch.tensor([box_width,box_height]))
 
 depth_image = torch.ones([img.shape[0],img.shape[1]])*3
-pred_cubes = propose(reference_box, depth_image, K_scaled, number_of_proposals=1)
-pred_cube = pred_cubes[0]
-pred_meshes = pred_cube.get_cube()
-pred_box = cube_to_box(pred_cube,K_scaled)
-pred_meshes = [pred_meshes.__getitem__(i).detach() for i in range(len(pred_meshes))]
+number_of_proposals = 4
+pred_cubes = propose(reference_box, depth_image, K_scaled, number_of_proposals=number_of_proposals)
+pred_meshes = []
+for i in range(number_of_proposals):
+    cube = pred_cubes[i].get_cube()
+    pred_meshes.append(cube.__getitem__(0).detach())
+
 
 prop_img = v_pred.get_image()
-img_3DPR = vis.draw_scene_view(prop_img, K_scaled.cpu().numpy(), pred_meshes, text=['3d box'], mode='front', blend_weight=0.0, blend_weight_overlay=0.85)
+img_3DPR = vis.draw_scene_view(prop_img, K_scaled.cpu().numpy(), pred_meshes, mode='front', blend_weight=0.0, blend_weight_overlay=0.85)
 vis_img_3d = img_3DPR.astype(np.uint8)
-
-
-
-
-
 
 
 # Plot bube on 2D plane
 fig = plt.figure()
 ax = fig.add_subplot(111)
 ax.imshow(vis_img_3d)#; ax.axis('off')
-ax.plot(torch.cat((pred_box.get_all_corners()[:,0],pred_box.get_all_corners()[0,0].reshape(1))),torch.cat((pred_box.get_all_corners()[:,1],pred_box.get_all_corners()[0,1].reshape(1))),color='b')
+#ax.plot(torch.cat((pred_box.get_all_corners()[:,0],pred_box.get_all_corners()[0,0].reshape(1))),torch.cat((pred_box.get_all_corners()[:,1],pred_box.get_all_corners()[0,1].reshape(1))),color='b')
 ax.plot(torch.cat((reference_box.get_all_corners()[:,0],reference_box.get_all_corners()[0,0].reshape(1))),torch.cat((reference_box.get_all_corners()[:,1],reference_box.get_all_corners()[0,1].reshape(1))),color='purple')
 plt.savefig(os.path.join('/work3/s194369/3dod/3dboxes/output/trash', 'test_real.png'),dpi=300, bbox_inches='tight')
