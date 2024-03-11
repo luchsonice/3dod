@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 class Box:
     '''
     2D box with the format [c1, c2, w, h]
-
+    ```
                  ______________________   
                 |                      |   
                 |                      |   
@@ -20,7 +20,7 @@ class Box:
                 |                      | 
                 |______________________|
                             w             
-
+    ```
     '''
     def __init__(self,center: torch.Tensor, dimensions: torch.Tensor) -> None:
         self.c1 = center[0]
@@ -61,6 +61,7 @@ class Cube:
         h: The height of the box in meters.
         l: The length of the box in meters.
         R: The 3D rotation matrix of the box.
+    ```
 
                       _____________________ 
                     /|                    /|
@@ -77,6 +78,7 @@ class Cube:
                 | /                    | / l
                 |/_____________________|/
                             w             
+    ```
     '''
     def __init__(self,tensor: torch.Tensor, R: torch.Tensor) -> None:
         self.tensor = tensor
@@ -113,8 +115,7 @@ class Bube:
     Args:
         cube: A cube.
         K: The 3D camera matrix of the box.
-
-
+    ```
                       _____________________ 
                     /|                    /|
                    / |                   / |
@@ -129,7 +130,8 @@ class Bube:
                 |  /                   |  /
                 | /                    | / l
                 |/_____________________|/
-                            w             
+                            w    
+    ```       
     '''
     def __init__(self,cube: Cube, K: torch.Tensor) -> None:
         self.cube = cube
