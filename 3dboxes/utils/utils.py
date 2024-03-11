@@ -80,7 +80,6 @@ def is_box_included_in_other_box(reference_box, proposed_box):
     return (reference_min_x <= proposed_min_x <= proposed_max_x <= reference_max_x and reference_min_y <= proposed_min_y <= proposed_max_y <= reference_max_y)
 
 def propose(reference_box, depth_image, K_scaled, number_of_proposals=1):
-    print('reference',reference_box.get_all_corners())
     x_range = torch.tensor([-0.8,0.8])
     y_range = torch.tensor([-0.8,0.8])
     w_range = torch.tensor([0.1,1.4])
@@ -93,7 +92,6 @@ def propose(reference_box, depth_image, K_scaled, number_of_proposals=1):
         pred_cube = Cube(torch.cat((pred_xyz, pred_whl), dim=0),pred_pose)
         pred_box = cube_to_box(pred_cube,K_scaled)
         if is_box_included_in_other_box(reference_box,pred_box):
-            print('pred',pred_box.get_all_corners())
             list_of_cubes.append(pred_cube)
     
     return list_of_cubes

@@ -82,8 +82,13 @@ v_pred = Visualizer(img, None)
 v_pred = v_pred.overlay_instances(
     boxes=proposals[0].proposal_boxes[0:box_size].tensor.cpu().numpy()
 )
+
 box = torch.tensor(proposals[0].proposal_boxes[0:box_size].tensor.cpu().numpy()[0])
-reference_box = Box(box[:2],box[2:])
+box_width = box[2]-box[0]
+box_height = box[3]-box[1]
+box_center_x = box[0]+box_width/2
+box_center_y = box[1]+box_height/2
+reference_box = Box(torch.tensor([box_center_x,box_center_y]),torch.tensor([box_width,box_height]))
 
 depth_image = torch.ones([img.shape[0],img.shape[1]])*3
 pred_cubes = propose(reference_box, depth_image, K_scaled, number_of_proposals=1)
@@ -105,7 +110,7 @@ vis_img_3d = img_3DPR.astype(np.uint8)
 # Plot bube on 2D plane
 fig = plt.figure()
 ax = fig.add_subplot(111)
-ax.imshow(vis_img_3d); ax.axis('off')
+ax.imshow(vis_img_3d)#; ax.axis('off')
 ax.plot(torch.cat((pred_box.get_all_corners()[:,0],pred_box.get_all_corners()[0,0].reshape(1))),torch.cat((pred_box.get_all_corners()[:,1],pred_box.get_all_corners()[0,1].reshape(1))),color='b')
 ax.plot(torch.cat((reference_box.get_all_corners()[:,0],reference_box.get_all_corners()[0,0].reshape(1))),torch.cat((reference_box.get_all_corners()[:,1],reference_box.get_all_corners()[0,1].reshape(1))),color='purple')
 plt.savefig(os.path.join('/work3/s194369/3dod/3dboxes/output/trash', 'test_real.png'),dpi=300, bbox_inches='tight')
