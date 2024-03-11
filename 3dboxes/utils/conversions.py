@@ -55,4 +55,16 @@ def cube_to_bube(cube, K):
     
     return Bube(cube, K)
     
+def cube_to_box(cube,K):
+    '''
+    Converts a Cube to a Box.
+
+    Args:
+        cube: A Cube.
+        K: The 3D camera matrix of the box.
+
+    Returns:
+        A Box.
+    '''
+    return bube_to_box(cube_to_bube(cube,K))
     

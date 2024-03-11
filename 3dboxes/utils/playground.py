@@ -1,5 +1,6 @@
 from spaces import Box, Bube, Cube
-from conversions import bube_to_box, cube_to_bube
+from conversions import bube_to_box, cube_to_bube, cube_to_box
+from utils import compute_rotation_matrix_from_ortho6d, make_random_box, propose
 
 import matplotlib.pyplot as plt
 import torch
@@ -12,7 +13,7 @@ from detectron2.data.detection_utils import convert_image_to_rgb
 from detectron2.utils.visualizer import Visualizer
 
 
-
+"""
 R = torch.eye(3)
 cube = Cube(torch.tensor([5,5,10,2,2,4]),R)
 print('cube',cube.get_all_corners())
@@ -37,7 +38,7 @@ for i in range(8):
     ax.text(bube_corners[i,0], bube_corners[i,1], '(%d)' % i, ha='right')
 ax.plot(torch.cat((box.get_all_corners()[:,0],box.get_all_corners()[0,0].reshape(1))),torch.cat((box.get_all_corners()[:,1],box.get_all_corners()[0,1].reshape(1))),color='b')
 plt.savefig(os.path.join('/work3/s194369/3dod/3dboxes/output/trash', 'test.png'),dpi=300, bbox_inches='tight')
-
+"""
 
 
 
@@ -46,25 +47,7 @@ plt.savefig(os.path.join('/work3/s194369/3dod/3dboxes/output/trash', 'test.png')
 with open('3dboxes/proposals/network_out.pkl', 'rb') as f:
         batched_inputs, images, features, proposals, Ks, gt_instances, im_scales_ratio, instances = pickle.load(f)
 
-
-def make_random_boxes(n_boxes=10):
-    # rotation_matrix = torch.rand(3,3)*2*torch.pi
-
-    rotation_matrix = torch.eye(3) # no rotation
-    
-    # need xyz, whl, and pose (R)
-    # whl = torch.rand(3)*0.5
-    whl = torch.tensor([0.3, 0.3, 0.3])
-    xyz = torch.tensor([-0.1, 0, 1.7])
-    # xyz = torch.rand(3)*1
-    return xyz, whl, rotation_matrix
-
 #####################
-n_boxes = 1
-pred_xyz, pred_whl, pred_pose = make_random_boxes(n_boxes=n_boxes)
-pred_xyzwhl = torch.cat((pred_xyz, pred_whl), dim=0)
-pred_cube = Cube(pred_xyzwhl,pred_pose)
-pred_meshes = pred_cube.get_cube()
 
 input_format = 'BGR'
 img = batched_inputs[0]['image']
@@ -78,19 +61,37 @@ K_scaled = torch.tensor(
     [[1/scale, 0 , 0], [0, 1/scale, 0], [0, 0, 1.0]], 
     dtype=torch.float32) @ K
 
-pred_box = bube_to_box(cube_to_bube(pred_cube,K_scaled))
-# convert to lists
-pred_meshes = [pred_meshes.__getitem__(i).detach() for i in range(len(pred_meshes))]
+'''
+x_range = torch.tensor([-0.8,0.8])
+y_range = torch.tensor([-0.8,0.8])
+depth_image = torch.ones([img.shape[0],img.shape[1]])*3
+w_range = torch.tensor([0,1.4])
+h_range = torch.tensor([0,1.4])
+l_range = torch.tensor([0,1.4])
 
-# horizontal stack 3D GT and pred left/right
+pred_xyz, pred_whl, pred_pose = make_random_box(x_range,y_range,depth_image,w_range,h_range,l_range)
+pred_xyzwhl = torch.cat((pred_xyz, pred_whl), dim=0)
+pred_cube = Cube(pred_xyzwhl,pred_pose)
+pred_meshes = pred_cube.get_cube()
+'''
 
 
 # 2 box
-box_size = min(len(proposals[0].proposal_boxes), 2)
+box_size = min(len(proposals[0].proposal_boxes), 1)
 v_pred = Visualizer(img, None)
 v_pred = v_pred.overlay_instances(
     boxes=proposals[0].proposal_boxes[0:box_size].tensor.cpu().numpy()
 )
+box = torch.tensor(proposals[0].proposal_boxes[0:box_size].tensor.cpu().numpy()[0])
+reference_box = Box(box[:2],box[2:])
+
+depth_image = torch.ones([img.shape[0],img.shape[1]])*3
+pred_cubes = propose(reference_box, depth_image, K_scaled, number_of_proposals=1)
+pred_cube = pred_cubes[0]
+pred_meshes = pred_cube.get_cube()
+pred_box = cube_to_box(pred_cube,K_scaled)
+pred_meshes = [pred_meshes.__getitem__(i).detach() for i in range(len(pred_meshes))]
+
 prop_img = v_pred.get_image()
 img_3DPR = vis.draw_scene_view(prop_img, K_scaled.cpu().numpy(), pred_meshes, text=['3d box'], mode='front', blend_weight=0.0, blend_weight_overlay=0.85)
 vis_img_3d = img_3DPR.astype(np.uint8)
@@ -106,4 +107,5 @@ fig = plt.figure()
 ax = fig.add_subplot(111)
 ax.imshow(vis_img_3d); ax.axis('off')
 ax.plot(torch.cat((pred_box.get_all_corners()[:,0],pred_box.get_all_corners()[0,0].reshape(1))),torch.cat((pred_box.get_all_corners()[:,1],pred_box.get_all_corners()[0,1].reshape(1))),color='b')
+ax.plot(torch.cat((reference_box.get_all_corners()[:,0],reference_box.get_all_corners()[0,0].reshape(1))),torch.cat((reference_box.get_all_corners()[:,1],reference_box.get_all_corners()[0,1].reshape(1))),color='purple')
 plt.savefig(os.path.join('/work3/s194369/3dod/3dboxes/output/trash', 'test_real.png'),dpi=300, bbox_inches='tight')
