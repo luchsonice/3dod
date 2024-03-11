@@ -41,15 +41,14 @@ def compute_rotation_matrix_from_ortho6d(poses):
 
     return matrix[1] # TODO at some point all above should be converted to only output one rotation matrix
 
-def make_random_box(x_range, y_range, depth_image, w_range, h_range, l_range):
+def make_random_box(x_range, y_range, depth_image, w_range, h_range, l_range, im_shape):
     '''
     need xyz, whl, and pose (R)
-    TODO Maybe change such that input is in meters and then converts to vialble range. One problem right now is that z always will be depth of {(0,0),(0,1),(1,0),(1,1)}
     '''
     # xyz
     x = (x_range[0]-x_range[1]) * torch.rand(1) + x_range[1]
     y = (y_range[0]-y_range[1]) * torch.rand(1) + y_range[1]
-    z = depth_image[int(x),int(y)]
+    z = depth_image[int((x+1)*im_shape[0]/2),int((y+1)*im_shape[1]/2)]
     xyz = torch.tensor([x, y, z])
 
     # whl
@@ -79,7 +78,7 @@ def is_box_included_in_other_box(reference_box, proposed_box):
 
     return (reference_min_x <= proposed_min_x <= proposed_max_x <= reference_max_x and reference_min_y <= proposed_min_y <= proposed_max_y <= reference_max_y)
 
-def propose(reference_box, depth_image, K_scaled, number_of_proposals=1):
+def propose(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=1):
     x_range = torch.tensor([-0.8,0])
     y_range = torch.tensor([-0.8,0.4])
     w_range = torch.tensor([0.2,1])
@@ -90,7 +89,7 @@ def propose(reference_box, depth_image, K_scaled, number_of_proposals=1):
     c = 0
     while len(list_of_cubes) < number_of_proposals:
         c += 1
-        pred_xyz, pred_whl, pred_pose = make_random_box(x_range,y_range,depth_image,w_range,h_range,l_range)
+        pred_xyz, pred_whl, pred_pose = make_random_box(x_range,y_range,depth_image,w_range,h_range,l_range,im_shape)
         pred_cube = Cube(torch.cat((pred_xyz, pred_whl), dim=0),pred_pose)
         pred_box = cube_to_box(pred_cube,K_scaled)
         if is_box_included_in_other_box(reference_box,pred_box):
