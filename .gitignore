@@ -9,6 +9,7 @@ output/
 cubercnn/external/
 wandb/
 hpc_logs/
+depth/checkpoints/
 
 # filetypes
 *.pyc

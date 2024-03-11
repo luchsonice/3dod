@@ -1,50 +1,57 @@
+import argparse
 import pickle
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import torchvision.transforms as transforms
+from matplotlib import pyplot as plt
+from PIL import Image
+
+from cubercnn import util, vis
+from depth.metric_depth.zoedepth.models.builder import build_model
+from depth.metric_depth.zoedepth.utils.config import get_config
 from detectron2.data.catalog import MetadataCatalog
 from detectron2.data.detection_utils import convert_image_to_rgb
 from detectron2.layers.nms import batched_nms
 from detectron2.utils.visualizer import Visualizer
-from matplotlib import pyplot as plt
-import numpy as np
-import torch
-from cubercnn import util, vis
-from transformers import AutoImageProcessor, DepthAnythingConfig, DepthAnythingForDepthEstimation
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
-from PIL import Image
-import requests
-import torch
 
-def depth_of_image(image):
-    '''Use Depth anything from huggingface
-    might need to install pip install git+https://github.com/huggingface/transformers.git
-    '''
 
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
-    # configuration = DepthAnythingConfig()
-    image_processor = AutoImageProcessor.from_pretrained("LiheYoung/depth-anything-small-hf")
-    model = DepthAnythingForDepthEstimation.from_pretrained('LiheYoung/depth-anything-small-hf')
+def depth_of_images(image, model):
+    """
+    This function takes in a list of images and returns the depth of the images"""
+    # Born out of Issue 36. 
+    # Allows  the user to set up own test files to infer on (Create a folder my_test and add subfolder input and output in the metric_depth directory before running this script.)
+    # Make sure you have the necessary libraries
+    # Code by @1ssb
 
-    # prepare image for the model
-    inputs = image_processor(images=image, return_tensors="pt")
+    # Global settings
+    DATASET = 'nyu' # Lets not pick a fight with the model's dataloader
 
-    with torch.no_grad():
-        outputs = model(**inputs)
-        predicted_depth = outputs.predicted_depth
+    color_image = Image.fromarray(image).convert('RGB')
+    original_width, original_height = color_image.size
+    image_tensor = transforms.ToTensor()(color_image).unsqueeze(0).to('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # interpolate to original size
-    prediction = torch.nn.functional.interpolate(
-        predicted_depth.unsqueeze(1),
-        size=image.shape[:-1],
-        mode="bicubic",
-        align_corners=False,
-    )
+    pred = model(image_tensor, dataset=DATASET)
+    if isinstance(pred, dict):
+        pred = pred.get('metric_depth', pred.get('out'))
+    elif isinstance(pred, (list, tuple)):
+        pred = pred[-1]
+    pred = pred.squeeze().detach().cpu().numpy()
 
-    # visualize the prediction
-    output = prediction.squeeze().cpu().numpy()
-    formatted = (output * 255 / np.max(output)).astype("uint8")
-    return formatted, output
+    # Resize color image and depth to final size
+    resized_pred = Image.fromarray(pred).resize((original_width, original_height), Image.NEAREST)
+
+    # resized_pred is the image shaped to the original image size, depth is in meters
+    return np.array(resized_pred)
+
+def setup_depth_model(model_name, pretrained_resource):
+    DATASET = 'nyu' # Lets not pick a fight with the model's dataloader
+    config = get_config(model_name, "eval", DATASET)
+    config.pretrained_resource = pretrained_resource
+    model = build_model(config).to('cuda' if torch.cuda.is_available() else 'cpu')
+    model.eval()
+    return model
 
 
 def plot_3dbox_in2d(image, pred2d, pred3d):
@@ -264,9 +271,13 @@ if __name__ == "__main__":
     input_format = 'BGR'
     img = batched_inputs[0]['image']
     img = convert_image_to_rgb(img.permute(1, 2, 0), input_format)
-    img_depth, prediction = depth_of_image(img)
-    # plt.imshow(img_depth)
-    # plt.show()
-    plt.figure()
-    plt.matshow(prediction, cmap='magma')
+
+    depth_model = 'zoedepth'
+    # the local:: thing of the model path is just to indicate that the model is loaded local storage
+    pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
+    model = setup_depth_model(depth_model, pretrained_resource)
+
+    resized_pred = depth_of_images(img, model)
+
+    plt.matshow(resized_pred)
     plt.show()
