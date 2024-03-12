@@ -7,6 +7,7 @@ import torch
 import torchvision.transforms as transforms
 from matplotlib import pyplot as plt
 from PIL import Image
+import os
 
 from cubercnn import util, vis
 from depth.metric_depth.zoedepth.models.builder import build_model
@@ -280,4 +281,5 @@ if __name__ == "__main__":
     resized_pred = depth_of_images(img, model)
 
     plt.matshow(resized_pred)
+    plt.savefig(os.path.join('/work3/s194369/3dod/3dboxes/output/trash', 'depth_img.png'),dpi=300, bbox_inches='tight')
     plt.show()
