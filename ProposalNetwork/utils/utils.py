@@ -51,7 +51,6 @@ def make_random_box(x_range, y_range, depth_image, w_range, h_range, l_range, im
     whl = torch.tensor([w, h, l])
 
     # R
-    #rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.vstack([torch.zeros(6),torch.rand(6)]))
     rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6))
 
     return xyz, whl, rotation_matrix
