@@ -102,6 +102,8 @@ def intersection_over_proposal_area(gt_box,proposal_box):
     gt_box: detectron Boxes
     proposal_box: Box
     '''
+    if proposal_box.format == 'x1, y1, x2, y2':
+        proposal_box.convert_boxmode('c1, c2, w, h')
     proposal_corner = proposal_box.get_all_corners()
     proposal_lt = proposal_corner[0]
     proposal_rb = proposal_corner[2]

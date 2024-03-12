@@ -2,7 +2,7 @@ from ProposalNetwork.proposals.proposals import setup_depth_model, depth_of_imag
 
 from spaces import Box, Bube, Cube
 from conversions import bube_to_box, cube_to_bube, cube_to_box
-from utils import compute_rotation_matrix_from_ortho6d, make_random_box, propose
+from utils import compute_rotation_matrix_from_ortho6d, make_random_box, propose, intersection_over_proposal_area
 
 import matplotlib.pyplot as plt
 import torch
@@ -49,6 +49,13 @@ plt.savefig(os.path.join('/work3/s194369/3dod/ProposalNetwork/output/trash', 'te
 # Get image and scale intrinsics
 with open('ProposalNetwork/proposals/network_out.pkl', 'rb') as f:
         batched_inputs, images, features, proposals, Ks, gt_instances, im_scales_ratio, instances = pickle.load(f)
+
+
+prop_box = Box(gt_instances[0].gt_boxes[0].tensor.squeeze(),format='x1, y1, x2, y2')
+IoA = intersection_over_proposal_area(gt_instances[0].gt_boxes[0], prop_box)
+print(IoA)
+
+
 input_format = 'BGR'
 img = batched_inputs[0]['image']
 img = convert_image_to_rgb(img.permute(1, 2, 0), input_format)
