@@ -14,6 +14,7 @@ from cubercnn import util, vis
 from detectron2.data.detection_utils import convert_image_to_rgb
 from detectron2.utils.visualizer import Visualizer
 
+#torch.manual_seed(1)
 
 """
 R = torch.eye(3)
@@ -51,7 +52,6 @@ with open('ProposalNetwork/proposals/network_out.pkl', 'rb') as f:
 input_format = 'BGR'
 img = batched_inputs[0]['image']
 img = convert_image_to_rgb(img.permute(1, 2, 0), input_format)
-img_3DPR = np.ascontiguousarray(img.copy()[:, :, [2, 1, 1]]) # BGR
 input = batched_inputs[0]
 
 K = torch.tensor(input['K'])
@@ -78,9 +78,10 @@ depth_model = 'zoedepth'
 pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
 model = setup_depth_model(depth_model, pretrained_resource)
 depth_image = depth_of_images(img, model)
+#depth_image = torch.ones((img.shape[0],img.shape[1]))*3 # faster for checking
 
 # Get Proposals
-number_of_proposals = 4
+number_of_proposals = 1
 pred_cubes = propose(reference_box, depth_image, K_scaled, img.shape[:2],number_of_proposals=number_of_proposals)
 pred_meshes = []
 for i in range(number_of_proposals):

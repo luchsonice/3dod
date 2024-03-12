@@ -82,6 +82,7 @@ def propose(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=
     c = 0
     while len(list_of_cubes) < number_of_proposals:
         c += 1
+        print(c)
         pred_xyz, pred_whl, pred_pose = make_random_box(x_range,y_range,depth_image,w_range,h_range,l_range,im_shape)
         pred_cube = Cube(torch.cat((pred_xyz, pred_whl), dim=0),pred_pose)
         pred_box = cube_to_box(pred_cube,K_scaled)
