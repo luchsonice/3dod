@@ -54,13 +54,6 @@ def setup_depth_model(model_name, pretrained_resource):
     model.eval()
     return model
 
-
-def plot_3dbox_in2d(image, pred2d, pred3d):
-
-    
-
-    return
-
 def make_random_boxes(n_boxes=10):
     # rotation_matrix = torch.rand(3,3)*2*torch.pi
 
@@ -258,7 +251,7 @@ def visualize(batched_inputs, proposals, instances):
 if __name__ == "__main__":
     # proposals_3d_from_2d(None, None)
 
-    with open('3dboxes/proposals/network_out.pkl', 'rb') as f:
+    with open('ProposalNetwork/proposals/network_out.pkl', 'rb') as f:
         batched_inputs, images, features, proposals, Ks, gt_instances, im_scales_ratio, instances = pickle.load(f)
     
     n_boxes = 1

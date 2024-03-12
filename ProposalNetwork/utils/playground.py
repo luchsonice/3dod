@@ -71,7 +71,7 @@ box_width = box[2]-box[0]
 box_height = box[3]-box[1]
 box_center_x = box[0]+box_width/2
 box_center_y = box[1]+box_height/2
-reference_box = Box(torch.tensor([box_center_x,box_center_y]),torch.tensor([box_width,box_height]))
+reference_box = Box(torch.tensor([box_center_x,box_center_y, box_width,box_height]))
 
 # Get depth info
 depth_model = 'zoedepth'
@@ -97,4 +97,4 @@ vis_img_3d = img_3DPR.astype(np.uint8)
 ax.imshow(vis_img_3d); ax.axis('off')
 #ax.plot(torch.cat((pred_box.get_all_corners()[:,0],pred_box.get_all_corners()[0,0].reshape(1))),torch.cat((pred_box.get_all_corners()[:,1],pred_box.get_all_corners()[0,1].reshape(1))),color='b')
 ax.plot(torch.cat((reference_box.get_all_corners()[:,0],reference_box.get_all_corners()[0,0].reshape(1))),torch.cat((reference_box.get_all_corners()[:,1],reference_box.get_all_corners()[0,1].reshape(1))),color='purple')
-plt.savefig(os.path.join('/work3/s194369/3dod/ProposalNetwork/output/trash', 'test_real.png'),dpi=300, bbox_inches='tight')
+plt.savefig(os.path.join('ProposalNetwork/output/trash', 'test_real.png'),dpi=300, bbox_inches='tight')

@@ -23,7 +23,7 @@ def bube_to_box(bube):
     height = max_y - min_y
     center = torch.tensor([(max_x + min_x) / 2, (max_y + min_y) / 2])
     
-    return Box(center, torch.tensor([width, height]))
+    return Box(torch.tensor([center[0], center[1], width, height]))
 
 def box_to_bube(box, length, rotation):
     '''
