@@ -10,6 +10,7 @@ cubercnn/external/
 wandb/
 hpc_logs/
 depth/checkpoints/
+ProposalNetwork/proposals/network_out.pkl
 
 # filetypes
 *.pyc
