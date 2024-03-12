@@ -3,13 +3,24 @@ from cubercnn import util
 import numpy as np
 import matplotlib.pyplot as plt
 
+'''
+coordinate system is assumed to have origin in the upper left
+(0,0) _________________(0,N)
+|  
+|    
+| 
+|
+|
+(0,M)
+'''
 
 
 class Box:
     '''
-    2D box with the format [c1, c2, w, h]
+    2D box with the format [c1, c2, w, h] or
+    [x1, y1, x2, y2]
     ```
-                 ______________________   
+         (x1, y1)______________________   
                 |                      |   
                 |                      |   
                 |                      |   
@@ -18,32 +29,65 @@ class Box:
                 |                      |   
                 |                      |  
                 |                      | 
-                |______________________|
-                            w             
+                |______________________|(x2, y2)
+                            w                      
     ```
     '''
-    def __init__(self,center: torch.Tensor, dimensions: torch.Tensor) -> None:
-        self.c1 = center[0]
-        self.c2 = center[1]
-        self.width = dimensions[0]
-        self.height = dimensions[1]
+    def __init__(self, coords: torch.Tensor, format='c1, c2, w, h') -> None:
+        
+        self.format = format
+        if self.format == 'c1, c2, w, h':    
+            self.c1 = coords[0]
+            self.c2 = coords[1]
+            self.width = coords[2]
+            self.height = coords[3]
+            if self.width < 0:
+                raise ValueError('Width must be greater than 0. Did you make sure that the input is in the correct order? (center, dimensions)')
+            if self.height < 0:
+                raise ValueError('Height must be greater than 0. Did you make sure that the input is in the correct order? (center, dimensions)')
+            
+        elif self.format == 'x1, y1, x2, y2':
+            self.x1 = coords[0]
+            self.y1 = coords[1]
+            self.x2 = coords[2]
+            self.y2 = coords[3]
 
-        if self.width < 0:
-            raise ValueError('Width must be greater than 0. Did you make sure that the input is in the correct order? (center, dimensions)')
-        if self.height < 0:
-            raise ValueError('Height must be greater than 0. Did you make sure that the input is in the correct order? (center, dimensions)')
+            # check that (x1, y1) is indeed the upper left corner
+            if self.x1 > self.x2 or self.y1 > self.y2:
+                raise ValueError('(x1, y1) must be the upper left corner. Did you make sure that the input is in the correct order? (upper left, bottom right)')
+
+    def convert_boxmode(self, format_to: str) -> None:
+        '''Set the format of the box, changes the coordinates inplace
+        '''
+        if format_to == 'c1, c2, w, h':
+            self.c1, self.c2, self.width, self.height = (self.x1+self.x2)/2, (self.y1+self.y2)/2, self.x2-self.x1, self.y2-self.y1
+            self.x1, self.y1, self.x2, self.y2 = None, None, None, None
+            self.format = 'c1, c2, w, h'
+        elif format_to == 'x1, y1, x2, y2':
+            # essentially ul and br of get_all_corners
+            self.x1, self.y1, self.x2, self.y2 = self.c1-self.width/2, self.c2-self.height/2, self.c1+self.width/2, self.c2+self.height/2
+            self.c1, self.c2, self.width, self.height = None, None, None, None
+            self.format = 'x1, y1, x2, y2'
+        else:
+            raise ValueError('Format not supported.')
 
     def get_all_corners(self) -> torch.Tensor:
         '''
         It returns the 4 corners of the box in the format [x, y]
         '''
-        ul = [self.c1-self.width/2, self.c2+self.height/2]
-        ur = [self.c1+self.width/2, self.c2+self.height/2]
-        bl = [self.c1-self.width/2, self.c2-self.height/2]
-        br = [self.c1+self.width/2, self.c2-self.height/2]
+        ul = [self.c1-self.width/2, self.c2-self.height/2]
+        ur = [self.c1+self.width/2, self.c2-self.height/2]
+        br = [self.c1+self.width/2, self.c2+self.height/2]
+        bl = [self.c1-self.width/2, self.c2+self.height/2]
 
         return torch.tensor([ul, ur, br, bl])
     
+    def __repr__(self) -> str:
+        if self.format == 'c1, c2, w, h':
+            return f"Box({self.c1}, {self.c2}, {self.width}, {self.height}), format: '{self.format}'"
+        elif self.format == 'x1, y1, x2, y2':
+            return f"Box({self.x1}, {self.y1}, {self.x2}, {self.y2}), format: '{self.format}'"
+
 
 
 
