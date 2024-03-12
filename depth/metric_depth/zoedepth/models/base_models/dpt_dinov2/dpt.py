@@ -134,8 +134,6 @@ class DPT_DINOv2(nn.Module):
     def __init__(self, encoder='vitl', features=256, use_bn=False, out_channels=[256, 512, 1024, 1024], use_clstoken=False):
 
         super(DPT_DINOv2, self).__init__()
-
-        torch.manual_seed(1)
         
         self.pretrained = torch.hub.load('depth/torchhub/facebookresearch_dinov2_main', 'dinov2_{:}14'.format(encoder), source='local', pretrained=False)
         

@@ -2,6 +2,7 @@ import torch
 from spaces import Box, Bube, Cube
 from conversions import bube_to_box, cube_to_bube, cube_to_box
 
+##### Proposal
 def normalize_vector(v):
     v_mag = torch.sqrt(v.pow(2).sum())
     v_mag = torch.max(v_mag, torch.autograd.Variable(torch.FloatTensor([1e-8])))
@@ -82,6 +83,7 @@ def propose(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=
     c = 0
     while len(list_of_cubes) < number_of_proposals:
         c += 1
+        print(c)
         pred_xyz, pred_whl, pred_pose = make_random_box(x_range,y_range,depth_image,w_range,h_range,l_range,im_shape)
         pred_cube = Cube(torch.cat((pred_xyz, pred_whl), dim=0),pred_pose)
         pred_box = cube_to_box(pred_cube,K_scaled)
@@ -90,3 +92,23 @@ def propose(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=
     
     print('It took',c,'tries to find',number_of_proposals,'boxes.')
     return list_of_cubes
+
+
+
+
+##### Scoring
+def intersection_over_proposal_area(gt_box,proposal_box):
+    '''
+    gt_box: detectron Boxes
+    proposal_box: Box
+    '''
+    proposal_corner = proposal_box.get_all_corners()
+    proposal_lt = proposal_corner[0]
+    proposal_rb = proposal_corner[2]
+    gt_box = gt_box.tensor
+    lt = torch.max(gt_box[:,:2],proposal_lt)
+    rb = torch.min(gt_box[:,2:],proposal_rb)
+    wh = (rb-lt).clamp(min=0)
+    i = wh[:,0] * wh[:,1]
+    a = proposal_box.width * proposal_box.height
+    return i/a
