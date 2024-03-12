@@ -114,3 +114,9 @@ def intersection_over_proposal_area(gt_box,proposal_box):
     i = wh[:,0] * wh[:,1]
     a = proposal_box.width * proposal_box.height
     return i/a
+
+def custom_mapping(x,beta=1.7):
+    '''
+    beta: number > 1 higher beta is more aggressive
+    '''
+    return (1 / (1 + (x/(1-x))**(-beta)))

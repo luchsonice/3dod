@@ -2,7 +2,7 @@ from ProposalNetwork.proposals.proposals import setup_depth_model, depth_of_imag
 
 from spaces import Box, Bube, Cube
 from conversions import bube_to_box, cube_to_bube, cube_to_box
-from utils import compute_rotation_matrix_from_ortho6d, make_random_box, propose, intersection_over_proposal_area
+from utils import compute_rotation_matrix_from_ortho6d, make_random_box, propose, intersection_over_proposal_area, custom_mapping
 
 import matplotlib.pyplot as plt
 import torch
@@ -51,9 +51,12 @@ with open('ProposalNetwork/proposals/network_out.pkl', 'rb') as f:
         batched_inputs, images, features, proposals, Ks, gt_instances, im_scales_ratio, instances = pickle.load(f)
 
 
-prop_box = Box(gt_instances[0].gt_boxes[0].tensor.squeeze(),format='x1, y1, x2, y2')
+prop_box = Box(gt_instances[0].gt_boxes[0].tensor.squeeze()*1.1,format='x1, y1, x2, y2')
 IoA = intersection_over_proposal_area(gt_instances[0].gt_boxes[0], prop_box)
 print(IoA)
+IoA = custom_mapping(IoA)
+print(IoA)
+exit()
 
 
 input_format = 'BGR'

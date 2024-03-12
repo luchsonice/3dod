@@ -1,9 +1,9 @@
 import torch
-from ProposalNetwork.utils.utils import intersection_over_proposal_area
+from ProposalNetwork.utils.utils import intersection_over_proposal_area, custom_mapping
 
 def scoring_proposal_in_2dgt(gt_box, proposal_box):
     IoA = intersection_over_proposal_area(gt_box,proposal_box)
-    #IoA = custom_softmax(IoA)
+    IoA = custom_mapping(IoA)
     return IoA
 
 def scoring_function(weights, gt_box, proposal_box):
