@@ -75,12 +75,20 @@ class Box:
         '''
         It returns the 4 corners of the box in the format [x, y]
         '''
-        ul = [self.c1-self.width/2, self.c2-self.height/2]
-        ur = [self.c1+self.width/2, self.c2-self.height/2]
-        br = [self.c1+self.width/2, self.c2+self.height/2]
-        bl = [self.c1-self.width/2, self.c2+self.height/2]
+        if self.format == 'c1, c2, w, h':
+            ul = [self.c1-self.width/2, self.c2-self.height/2]
+            ur = [self.c1+self.width/2, self.c2-self.height/2]
+            br = [self.c1+self.width/2, self.c2+self.height/2]
+            bl = [self.c1-self.width/2, self.c2+self.height/2]
+
+        elif self.format == 'x1, y1, x2, y2':
+            ul = [self.x1, self.y1]
+            ur = [self.x2, self.y1]
+            br = [self.x2, self.y2]
+            bl = [self.x1, self.y2]
 
         return torch.tensor([ul, ur, br, bl])
+    
     
     def __repr__(self) -> str:
         if self.format == 'c1, c2, w, h':
