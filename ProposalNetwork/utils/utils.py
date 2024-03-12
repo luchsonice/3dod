@@ -19,20 +19,20 @@ def cross_product(u, v):
     return out[0]
 
 def compute_rotation_matrix_from_ortho6d(poses):
-    x_raw = poses[0:3]#batch*3
-    y_raw = poses[3:6]#batch*3
+    x_raw = poses[0:3]
+    y_raw = poses[3:6]
         
-    x = normalize_vector(x_raw) #batch*3
-    z = cross_product(x,y_raw) #batch*3
-    z = normalize_vector(z)#batch*3
-    y = cross_product(z,x)#batch*3
+    x = normalize_vector(x_raw)
+    z = cross_product(x,y_raw)
+    z = normalize_vector(z)
+    y = cross_product(z,x)
         
     x = x.view(-1,3,1)
     y = y.view(-1,3,1)
     z = z.view(-1,3,1)
     matrix = torch.cat((x,y,z), 2)[0]
 
-    return matrix#[1] # TODO at some point all above should be converted to only output one rotation matrix
+    return matrix
 
 def make_random_box(x_range, y_range, depth_image, w_range, h_range, l_range, im_shape):
     '''
