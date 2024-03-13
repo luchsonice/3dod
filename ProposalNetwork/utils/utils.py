@@ -73,9 +73,8 @@ def is_box_included_in_other_box(reference_box, proposed_box):
     return (reference_min_x <= proposed_min_x <= proposed_max_x <= reference_max_x and reference_min_y <= proposed_min_y <= proposed_max_y <= reference_max_y)
 
 def propose(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=1):
-    # TODO with referencebox and im_shape center prior can be made more precise
-    x_range = torch.tensor([-0.8,0])
-    y_range = torch.tensor([-0.8,0.4])
+    x_range = pixel_to_normalised_space([reference_box.x1+reference_box.width/4,reference_box.x2-reference_box.width/4],im_shape)
+    y_range = pixel_to_normalised_space([reference_box.y1+reference_box.height/4,reference_box.y2-reference_box.height/4],im_shape)
     w_range = torch.tensor([0.2,1])
     h_range = torch.tensor([0.2,1])
     l_range = torch.tensor([0.2,1])

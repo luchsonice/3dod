@@ -67,4 +67,21 @@ def cube_to_box(cube,K):
         A Box.
     '''
     return bube_to_box(cube_to_bube(cube,K))
+
+def Boxes_to_list_of_Box(Boxes):
+    '''
+    Boxes: detectron2 Boxes
+    '''
+    detectron_boxes = Boxes.tensor
+    return [Box(detectron_boxes[i,:], format='x1, y1, x2, y2') for i in range(detectron_boxes.shape[1])]
+
+def pixel_to_normalised_space(pixel_coord, im_shape):
+    '''
+    pixel_coord: Nx2
+    '''
+    pixel_coord = torch.tensor(pixel_coord, dtype=torch.float)
+    im_shape = torch.tensor(im_shape, dtype=torch.float)
+    pixel_coord[:,0] = 2 * pixel_coord[:,0] / im_shape[0] - 1
+    pixel_coord[:,1] = 2 * pixel_coord[:,1] / im_shape[1] - 1
+    return pixel_coord
     
