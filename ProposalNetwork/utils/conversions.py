@@ -68,3 +68,21 @@ def cube_to_box(cube,K):
     '''
     return bube_to_box(cube_to_bube(cube,K))
     
+def Boxes_to_Box(boxes: detectron2.structures.boxes.Boxes) -> Box:
+    '''
+    Converts a detectron2 Boxes object to a spaces.Box.
+    if the input is many boxes, it will return a list of spaces.Boxes
+
+    Args:
+        boxes: A Boxes.
+
+    Returns:
+        A Box. or list of Boxes
+    '''
+    if boxes is None:
+        raise ValueError('boxes cannot be None')
+    if boxes.tensor.shape[0] == 1:
+        return Box(boxes.tensor.squeeze(),format='x1, y1, x2, y2')
+    else:
+        return [Box(i, format='x1, y1, x2, y2') for i in boxes.tensor]
+    
