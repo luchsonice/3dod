@@ -73,6 +73,7 @@ def is_box_included_in_other_box(reference_box, proposed_box):
     return (reference_min_x <= proposed_min_x <= proposed_max_x <= reference_max_x and reference_min_y <= proposed_min_y <= proposed_max_y <= reference_max_y)
 
 def propose(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=1):
+    # TODO with referencebox and im_shape center prior can be made more precise
     x_range = torch.tensor([-0.8,0])
     y_range = torch.tensor([-0.8,0.4])
     w_range = torch.tensor([0.2,1])
@@ -96,23 +97,32 @@ def propose(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=
 
 
 ##### Scoring
-def intersection_over_proposal_area(gt_box,proposal_box):
+def intersection_over_proposal_area(gt_boxes,proposal_boxes):
     '''
-    gt_box: detectron Boxes
-    proposal_box: Box
+    gt_box: list of Box
+    proposal_box: list of Box
     '''
-    if proposal_box.format == 'x1, y1, x2, y2':
-        proposal_box.convert_boxmode('c1, c2, w, h')
-    proposal_corner = proposal_box.get_all_corners()
-    proposal_lt = proposal_corner[0]
-    proposal_rb = proposal_corner[2]
-    gt_box = gt_box.tensor
-    lt = torch.max(gt_box[:,:2],proposal_lt)
-    rb = torch.min(gt_box[:,2:],proposal_rb)
-    wh = (rb-lt).clamp(min=0)
-    i = wh[:,0] * wh[:,1]
-    a = proposal_box.width * proposal_box.height
-    return i/a
+    IoA = []
+    for i in range(len(gt_box)):
+        gt_box = gt_boxes[i]
+        proposal_box = proposal_boxes[i]
+        if proposal_box.format == 'c1, c2, w, h':
+            proposal_box.convert_boxmode('x1, y1, x2, y2')
+        if gt_box.format == 'c1, c2, w, h':
+            gt_box.convert_boxmode('x1, y1, x2, y2')
+
+        gt_ul = torch.tensor([gt_box.x1,gt_box.y1])
+        gt_br = torch.tensor([gt_box.x2,gt_box.y2])
+        proposal_ul = torch.tensor([proposal_box.x1,proposal_box.y1])
+        proposal_br = torch.tensor([proposal_box.x2,proposal_box.y2])
+
+        lt = torch.max(gt_ul,proposal_ul)
+        rb = torch.min(gt_br,proposal_br)
+        wh = (rb-lt).clamp(min=0)
+        i = wh[:,0] * wh[:,1]
+        a = proposal_box.width * proposal_box.height
+        IoA.append(i/a)
+    return IoA
 
 def custom_mapping(x,beta=1.7):
     '''
@@ -120,5 +130,14 @@ def custom_mapping(x,beta=1.7):
     
     Args:
         beta: number > 1, higher beta is more aggressive
+    x: list of floats betweeen and including 0 and 1
+    beta: number > 1 higher beta is more aggressive
     '''
-    return (1 / (1 + (x/(1-x))**(-beta)))
+    return [(1 / (1 + (val / (1 - val)) ** (-beta))) for val in x]
+
+def Boxes_to_list_of_Box(Boxes):
+    '''
+    Boxes: detectron2 Boxes
+    '''
+    detectron_boxes = Boxes.tensor
+    return [Box(detectron_boxes[i,:], format='x1, y1, x2, y2') for i in range(detectron_boxes.shape[1])]
