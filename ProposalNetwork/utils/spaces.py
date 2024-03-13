@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 '''
 coordinate system is assumed to have origin in the upper left
-(0,0) _________________(0,N)
+(0,0) _________________(N,0)
 |  
 |    
 | 
@@ -34,7 +34,9 @@ class Box:
     ```
     '''
     def __init__(self, coords: torch.Tensor, format='c1, c2, w, h') -> None:
-        
+        '''
+        Args:
+            format can be either, 'c1, c2, w, h' or 'x1, y1, x2, y2' '''
         self.format = format
         if self.format == 'c1, c2, w, h':    
             self.c1 = coords[0]
@@ -92,11 +94,9 @@ class Box:
     
     def __repr__(self) -> str:
         if self.format == 'c1, c2, w, h':
-            return f"Box({self.c1}, {self.c2}, {self.width}, {self.height}), format: '{self.format}'"
+            return f"Box({self.c1:.2f}, {self.c2:.2f}, {self.width:.2f}, {self.height:.2f}), format: '{self.format}'"
         elif self.format == 'x1, y1, x2, y2':
-            return f"Box({self.x1}, {self.y1}, {self.x2}, {self.y2}), format: '{self.format}'"
-
-
+            return f"Box({self.x1:.2f}, {self.y1:.2f}, {self.x2:.2f}, {self.y2:.2f}), format: '{self.format}'"
 
 
 
