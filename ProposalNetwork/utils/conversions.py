@@ -1,4 +1,4 @@
-from spaces import Box, Cube
+from spaces import Box
 import torch
     
 def cube_to_box(cube,K):
@@ -12,9 +12,7 @@ def cube_to_box(cube,K):
     Returns:
         A Box.
     '''
-    cube_corners = cube.get_all_corners()
-    cube_corners = torch.mm(K, cube_corners.t()).t()
-    bube_corners = cube_corners[:,:2]/cube_corners[:,2].unsqueeze(1)
+    bube_corners = cube.get_bube_corners(K)
     
     min_x = torch.min(bube_corners[:,0])
     max_x = torch.max(bube_corners[:,0])
@@ -36,6 +34,10 @@ def pixel_to_normalised_space(pixel_coord, im_shape):
     '''
     pixel_coord = torch.tensor(pixel_coord, dtype=torch.float)
     im_shape = torch.tensor(im_shape, dtype=torch.float)
+
+    if pixel_coord.dim() == 1:
+        pixel_coord = pixel_coord.reshape(1,2)
+
     pixel_coord[:,0] = 2 * pixel_coord[:,0] / im_shape[0] - 1
     pixel_coord[:,1] = 2 * pixel_coord[:,1] / im_shape[1] - 1
     return pixel_coord
