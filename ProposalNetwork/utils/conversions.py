@@ -1,4 +1,4 @@
-from spaces import Box
+from ProposalNetwork.utils.spaces import Box
 import torch
     
 def cube_to_box(cube,K):
