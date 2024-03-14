@@ -18,14 +18,16 @@ from detectron2.utils.visualizer import Visualizer
 
 #torch.manual_seed(1)
 '''
-R = torch.eye(3)
-cube = Cube(torch.tensor([5,5,10,2,2,4]),R)
+R = compute_rotation_matrix_from_ortho6d(torch.rand(6)*np.pi)
+cube = Cube(torch.tensor([-0.4,-0.5,1,1,1.5,0.5]),R)
 print('cube',cube.get_all_corners())
 
 box = cube_to_box(cube,torch.eye(3))
 print('box',box.get_all_corners())
 
-bube_corners = cube.get_bube_corners(torch.eye(3))
+bube_corners = cube.get_bube_corners(torch.tensor([[570.3422,   0.0000, 310.0000],
+                                                   [  0.0000, 570.3422, 225.0000],
+                                                   [  0.0000,   0.0000,   1.0000]]))
 
 # Plot bube on 2D plane
 fig = plt.figure()
@@ -34,14 +36,17 @@ ax.plot(torch.cat((bube_corners[:4,0],bube_corners[0,0].reshape(1))),torch.cat((
 ax.plot(torch.cat((bube_corners[4:,0],bube_corners[4,0].reshape(1))),torch.cat((bube_corners[4:,1],bube_corners[4,1].reshape(1))),color='r')
 for i in range(4):
     ax.plot(torch.cat((bube_corners[i,0].reshape(1),bube_corners[4+i,0].reshape(1))),torch.cat((bube_corners[i,1].reshape(1),bube_corners[4+i,1].reshape(1))),color='r')
-ax.scatter(0,0,color='b')
+ax.scatter(-1,-1,color='b')
+ax.scatter(-1,1,color='b')
+ax.scatter(1,-1,color='b')
+ax.scatter(1,1,color='b')
+ax.scatter(-0.4,-0.5,color='b')
 for i in range(8):
     ax.text(bube_corners[i,0], bube_corners[i,1], '(%d)' % i, ha='right')
 ax.plot(torch.cat((box.get_all_corners()[:,0],box.get_all_corners()[0,0].reshape(1))),torch.cat((box.get_all_corners()[:,1],box.get_all_corners()[0,1].reshape(1))),color='b')
 plt.savefig(os.path.join('/work3/s194369/3dod/ProposalNetwork/output/trash', 'test.png'),dpi=300, bbox_inches='tight')
+#exit()
 '''
-
-
 
 
 # Get image and scale intrinsics
@@ -64,14 +69,10 @@ K_scaled = torch.tensor(
 reference_box = Box(proposals[0].proposal_boxes[0].tensor[0])
 
 # Get depth info
-depth_model = 'zoedepth'
-pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
-model = setup_depth_model(depth_model, pretrained_resource)
-depth_image = depth_of_images(img, model)
-#depth_image = torch.ones((img.shape[0],img.shape[1]))*3 # faster for checking
+depth_image = np.load(f"datasets/depth_maps/{batched_inputs[0]['image_id']}.npz")['depth']
 
 # Get Proposals
-x_points = [1, 10, 100, 1000, 10000]#, 100000]
+x_points = [1, 10, 100, 1000]#, 10000]#, 100000]
 number_of_proposals = x_points[-1]
 pred_cubes = propose_random(reference_box, depth_image, K_scaled, img.shape[:2],number_of_proposals=number_of_proposals)
 gt_box = Box(gt_instances[0].gt_boxes[0].tensor.squeeze())
@@ -104,21 +105,26 @@ v_pred = v_pred.overlay_instances(
     boxes=proposals[0].proposal_boxes[0:box_size].tensor.cpu().numpy()
 )
 
-#pred_meshes = []
-#for i in range(number_of_proposals):
-#    cube = pred_cubes[i].get_cube()
-#    pred_meshes.append(cube.__getitem__(0).detach())
-
+pred_meshes = []
+for i in idx_scores[1:]:
+    cube = pred_cubes[i].get_cube()
+    pred_meshes.append(cube.__getitem__(0).detach())
 # Take box with highest iou
-
 pred_meshes = [pred_cubes[idx_highest_iou].get_cube().__getitem__(0).detach()]
+
+R = compute_rotation_matrix_from_ortho6d(torch.rand(6)*np.pi)
+R = torch.eye(3)
+extra_cube = Cube(torch.tensor([1,0,2.5,1,1,1]),R).get_cube()
+pred_meshes.append(extra_cube.__getitem__(0).detach())
 
 fig = plt.figure()
 ax = fig.add_subplot(111)
 prop_img = v_pred.get_image()
-img_3DPR = vis.draw_scene_view(prop_img, K_scaled.cpu().numpy(), pred_meshes, mode='front', blend_weight=0.0, blend_weight_overlay=0.85)
+img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, K_scaled.cpu().numpy(), pred_meshes, blend_weight=0.5, blend_weight_overlay=0.85,scale = img.shape[0])
+im_concat = np.concatenate((img_3DPR, img_novel), axis=1)
 vis_img_3d = img_3DPR.astype(np.uint8)
-ax.imshow(vis_img_3d); ax.axis('off')
+ax.imshow(vis_img_3d)
 #ax.plot(torch.cat((pred_box.get_all_corners()[:,0],pred_box.get_all_corners()[0,0].reshape(1))),torch.cat((pred_box.get_all_corners()[:,1],pred_box.get_all_corners()[0,1].reshape(1))),color='b')
 ax.plot(torch.cat((gt_box.get_all_corners()[:,0],gt_box.get_all_corners()[0,0].reshape(1))),torch.cat((gt_box.get_all_corners()[:,1],gt_box.get_all_corners()[0,1].reshape(1))),color='purple')
 plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'box_with_highest_iou.png'),dpi=300, bbox_inches='tight')
+util.imwrite(im_concat, os.path.join('ProposalNetwork/output/AMOB', 'result.jpg'))

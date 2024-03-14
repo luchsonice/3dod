@@ -45,8 +45,8 @@ def make_cube(x_range, y_range, depth_image, w_range, h_range, l_range, im_shape
     # xyz
     x = (x_range[0]-x_range[1]) * torch.rand(1) + x_range[1]
     y = (y_range[0]-y_range[1]) * torch.rand(1) + y_range[1]
-    z = depth_image[int((x+1)*im_shape[0]/2),int((y+1)*im_shape[1]/2)]
-    xyz = torch.tensor([x, y, z])
+    z = depth_image[int((x+1)*im_shape[0]/2),int((y+1)*im_shape[1]/2)] # cammera is in [0,0,1]
+    xyz = torch.tensor([x, y, 1+z])
 
     # whl
     w = (w_range[0]-w_range[1]) * torch.rand(1) + w_range[1]

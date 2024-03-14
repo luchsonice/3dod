@@ -4,8 +4,14 @@ from ProposalNetwork.utils.utils import make_cube, is_box_included_in_other_box,
 import torch
 
 def propose_random(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=1):
+    x1 = torch.max(torch.tensor(0),reference_box.x1-reference_box.width/5)
+    x2 = torch.min(torch.tensor(im_shape[0]),reference_box.x2+reference_box.width/5)
+    y1 = torch.max(torch.tensor(0),reference_box.y1-reference_box.height/5)
+    y2 = torch.min(torch.tensor(im_shape[1]),reference_box.y2+reference_box.height/5)
     x_range = torch.tensor([-0.8,0.8])
     y_range = torch.tensor([-0.8,0.8])
+    x_range = pixel_to_normalised_space([x1,x2],im_shape)[0]
+    y_range = pixel_to_normalised_space([y1,y2],im_shape)[0]
     w_range = torch.tensor([0.2,2])
     h_range = torch.tensor([0.2,2])
     l_range = torch.tensor([0.2,2])
