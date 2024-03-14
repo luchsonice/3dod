@@ -1,8 +1,8 @@
 from ProposalNetwork.proposals.proposals import setup_depth_model, depth_of_images
 
-from spaces import Box, Bube, Cube
-from conversions import bube_to_box, cube_to_bube, cube_to_box
-from utils import compute_rotation_matrix_from_ortho6d, make_random_box, propose, intersection_over_proposal_area, custom_mapping
+from spaces import Box, Cube
+from conversions import cube_to_box
+from utils import compute_rotation_matrix_from_ortho6d, make_random_box, propose, iou_2d, custom_mapping
 
 import matplotlib.pyplot as plt
 import torch
@@ -15,19 +15,15 @@ from detectron2.data.detection_utils import convert_image_to_rgb
 from detectron2.utils.visualizer import Visualizer
 
 #torch.manual_seed(1)
-
-"""
+'''
 R = torch.eye(3)
 cube = Cube(torch.tensor([5,5,10,2,2,4]),R)
 print('cube',cube.get_all_corners())
 
-K = torch.eye(3)
-bube = cube_to_bube(cube,K)
-bube_corners = bube.get_all_corners()
-print('bube',bube_corners)
-
-box = bube_to_box(bube)
+box = cube_to_box(cube,torch.eye(3))
 print('box',box.get_all_corners())
+
+bube_corners = cube.get_bube_corners(torch.eye(3))
 
 # Plot bube on 2D plane
 fig = plt.figure()
@@ -41,7 +37,7 @@ for i in range(8):
     ax.text(bube_corners[i,0], bube_corners[i,1], '(%d)' % i, ha='right')
 ax.plot(torch.cat((box.get_all_corners()[:,0],box.get_all_corners()[0,0].reshape(1))),torch.cat((box.get_all_corners()[:,1],box.get_all_corners()[0,1].reshape(1))),color='b')
 plt.savefig(os.path.join('/work3/s194369/3dod/ProposalNetwork/output/trash', 'test.png'),dpi=300, bbox_inches='tight')
-"""
+'''
 
 
 
@@ -50,13 +46,6 @@ plt.savefig(os.path.join('/work3/s194369/3dod/ProposalNetwork/output/trash', 'te
 with open('ProposalNetwork/proposals/network_out.pkl', 'rb') as f:
         batched_inputs, images, features, proposals, Ks, gt_instances, im_scales_ratio, instances = pickle.load(f)
 
-
-prop_box = Box(gt_instances[0].gt_boxes[0].tensor.squeeze()*1.1,format='x1, y1, x2, y2')
-IoA = intersection_over_proposal_area(gt_instances[0].gt_boxes[0], prop_box)
-print(IoA)
-IoA = custom_mapping(IoA)
-print(IoA)
-exit()
 
 
 input_format = 'BGR'
@@ -76,12 +65,8 @@ v_pred = Visualizer(img, None)
 v_pred = v_pred.overlay_instances(
     boxes=proposals[0].proposal_boxes[0:box_size].tensor.cpu().numpy()
 )
-box = torch.tensor(proposals[0].proposal_boxes[0:box_size].tensor.cpu().numpy()[0])
-box_width = box[2]-box[0]
-box_height = box[3]-box[1]
-box_center_x = box[0]+box_width/2
-box_center_y = box[1]+box_height/2
-reference_box = Box(torch.tensor([box_center_x,box_center_y, box_width,box_height]))
+
+reference_box = Box(proposals[0].proposal_boxes[0:box_size].tensor[0])
 
 # Get depth info
 depth_model = 'zoedepth'
@@ -91,12 +76,35 @@ depth_image = depth_of_images(img, model)
 #depth_image = torch.ones((img.shape[0],img.shape[1]))*3 # faster for checking
 
 # Get Proposals
-number_of_proposals = 1
+number_of_proposals = 1000
 pred_cubes = propose(reference_box, depth_image, K_scaled, img.shape[:2],number_of_proposals=number_of_proposals)
 pred_meshes = []
 for i in range(number_of_proposals):
     cube = pred_cubes[i].get_cube()
     pred_meshes.append(cube.__getitem__(0).detach())
+
+
+gt_box = Box(gt_instances[0].gt_boxes[0].tensor.squeeze())
+prop_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_proposals)]
+IoU = iou_2d(gt_box, prop_box)
+#print(IoU)
+#IoU = custom_mapping(IoU)
+#print(IoU)
+
+#OB Plot
+x_points = [1, 10, 100, 1000, 10000]
+max_values = [np.max(IoU[:n]) for n in x_points]
+
+# Plotting
+plt.plot(x_points, max_values, marker='o', linestyle='-') 
+plt.xscale('log')
+plt.xlabel('Number of Proposals')
+plt.ylabel('Maximum 2D IoU')
+plt.title('Maximum 2D IoU vs Number of Proposals')
+plt.grid(True)
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'random.png'),dpi=300, bbox_inches='tight')
+
+exit()
 
 # Plot
 fig = plt.figure()

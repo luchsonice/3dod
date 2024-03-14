@@ -1,6 +1,8 @@
 import torch
-from spaces import Box, Bube, Cube
-from conversions import bube_to_box, cube_to_bube, cube_to_box
+from spaces import Box, Cube
+from conversions import cube_to_box, pixel_to_normalised_space
+
+from detectron2.structures import pairwise_iou
 
 ##### Proposal
 def normalize_vector(v):
@@ -73,8 +75,12 @@ def is_box_included_in_other_box(reference_box, proposed_box):
     return (reference_min_x <= proposed_min_x <= proposed_max_x <= reference_max_x and reference_min_y <= proposed_min_y <= proposed_max_y <= reference_max_y)
 
 def propose(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=1):
-    x_range = pixel_to_normalised_space([reference_box.x1+reference_box.width/4,reference_box.x2-reference_box.width/4],im_shape)
-    y_range = pixel_to_normalised_space([reference_box.y1+reference_box.height/4,reference_box.y2-reference_box.height/4],im_shape)
+    x_range = pixel_to_normalised_space([reference_box.x1,reference_box.x2],im_shape)[0]
+    y_range = pixel_to_normalised_space([reference_box.y1,reference_box.y2],im_shape)[0]
+    x_range = torch.tensor([-0.8,0])
+    y_range = torch.tensor([-0.8,0.4])
+    print(x_range)
+    print(y_range)
     w_range = torch.tensor([0.2,1])
     h_range = torch.tensor([0.2,1])
     l_range = torch.tensor([0.2,1])
@@ -96,32 +102,16 @@ def propose(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=
 
 
 ##### Scoring
-def intersection_over_proposal_area(gt_boxes,proposal_boxes):
+def iou_2d(gt_box,proposal_boxes):
     '''
-    gt_box: list of Box
+    gt_box: Box
     proposal_box: list of Box
     '''
-    IoA = []
-    for i in range(len(gt_box)):
-        gt_box = gt_boxes[i]
+    IoU = []
+    for i in range(len(proposal_boxes)):
         proposal_box = proposal_boxes[i]
-        if proposal_box.format == 'c1, c2, w, h':
-            proposal_box.convert_boxmode('x1, y1, x2, y2')
-        if gt_box.format == 'c1, c2, w, h':
-            gt_box.convert_boxmode('x1, y1, x2, y2')
-
-        gt_ul = torch.tensor([gt_box.x1,gt_box.y1])
-        gt_br = torch.tensor([gt_box.x2,gt_box.y2])
-        proposal_ul = torch.tensor([proposal_box.x1,proposal_box.y1])
-        proposal_br = torch.tensor([proposal_box.x2,proposal_box.y2])
-
-        lt = torch.max(gt_ul,proposal_ul)
-        rb = torch.min(gt_br,proposal_br)
-        wh = (rb-lt).clamp(min=0)
-        i = wh[:,0] * wh[:,1]
-        a = proposal_box.width * proposal_box.height
-        IoA.append(i/a)
-    return IoA
+        IoU.append(pairwise_iou(gt_box.box,proposal_box.box)[0][0].item())
+    return IoU
 
 def custom_mapping(x,beta=1.7):
     '''
