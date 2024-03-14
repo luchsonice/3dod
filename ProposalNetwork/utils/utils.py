@@ -1,6 +1,7 @@
 import torch
-from spaces import Box, Cube
-from conversions import cube_to_box, pixel_to_normalised_space
+from ProposalNetwork.utils.spaces import Box, Cube
+from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_space
+import numpy as np
 
 from detectron2.structures import pairwise_iou
 
@@ -37,7 +38,7 @@ def compute_rotation_matrix_from_ortho6d(poses):
 
     return matrix
 
-def make_random_box(x_range, y_range, depth_image, w_range, h_range, l_range, im_shape):
+def make_cube(x_range, y_range, depth_image, w_range, h_range, l_range, im_shape):
     '''
     need xyz, whl, and pose (R)
     '''
@@ -54,7 +55,7 @@ def make_random_box(x_range, y_range, depth_image, w_range, h_range, l_range, im
     whl = torch.tensor([w, h, l])
 
     # R
-    rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6))
+    rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6)*np.pi)
 
     return xyz, whl, rotation_matrix
 
@@ -73,30 +74,6 @@ def is_box_included_in_other_box(reference_box, proposed_box):
     proposed_max_y = torch.max(proposed_corners[:,1])
 
     return (reference_min_x <= proposed_min_x <= proposed_max_x <= reference_max_x and reference_min_y <= proposed_min_y <= proposed_max_y <= reference_max_y)
-
-def propose(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=1):
-    x_range = pixel_to_normalised_space([reference_box.x1,reference_box.x2],im_shape)[0]
-    y_range = pixel_to_normalised_space([reference_box.y1,reference_box.y2],im_shape)[0]
-    x_range = torch.tensor([-0.8,0])
-    y_range = torch.tensor([-0.8,0.4])
-    print(x_range)
-    print(y_range)
-    w_range = torch.tensor([0.2,1])
-    h_range = torch.tensor([0.2,1])
-    l_range = torch.tensor([0.2,1])
-
-    list_of_cubes = []
-    c = 0
-    while len(list_of_cubes) < number_of_proposals:
-        c += 1
-        pred_xyz, pred_whl, pred_pose = make_random_box(x_range,y_range,depth_image,w_range,h_range,l_range,im_shape)
-        pred_cube = Cube(torch.cat((pred_xyz, pred_whl), dim=0),pred_pose)
-        pred_box = cube_to_box(pred_cube,K_scaled)
-        if is_box_included_in_other_box(reference_box,pred_box):
-            list_of_cubes.append(pred_cube)
-    
-    print('It took',c,'tries to find',number_of_proposals,'boxes.')
-    return list_of_cubes
 
 
 
@@ -122,7 +99,14 @@ def custom_mapping(x,beta=1.7):
     x: list of floats betweeen and including 0 and 1
     beta: number > 1 higher beta is more aggressive
     '''
-    return [(1 / (1 + (val / (1 - val)) ** (-beta))) for val in x]
+    mapped_list = []
+    for i in range(len(x)):
+        if x[i] <= 0:
+            mapped_list.append(0.0)
+        else:
+            mapped_list.append((1 / (1 + (x[i] / (1 - x[i])) ** (-beta))))
+    
+    return mapped_list
 
 def Boxes_to_list_of_Box(Boxes):
     '''

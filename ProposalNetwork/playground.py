@@ -1,8 +1,10 @@
-from ProposalNetwork.proposals.proposals import setup_depth_model, depth_of_images
+from ProposalNetwork.proposals.playground import setup_depth_model, depth_of_images
+from ProposalNetwork.proposals.proposals import propose_random
 
-from spaces import Box, Cube
-from conversions import cube_to_box
-from utils import compute_rotation_matrix_from_ortho6d, make_random_box, propose, iou_2d, custom_mapping
+from ProposalNetwork.utils.spaces import Box, Cube
+from ProposalNetwork.utils.conversions import cube_to_box
+from ProposalNetwork.utils.utils import compute_rotation_matrix_from_ortho6d, make_cube, iou_2d, custom_mapping
+
 
 import matplotlib.pyplot as plt
 import torch
@@ -59,14 +61,7 @@ K_scaled = torch.tensor(
     [[1/scale, 0 , 0], [0, 1/scale, 0], [0, 0, 1.0]], 
     dtype=torch.float32) @ K
 
-# Get 2 proposal boxes
-box_size = min(len(proposals[0].proposal_boxes), 1)
-v_pred = Visualizer(img, None)
-v_pred = v_pred.overlay_instances(
-    boxes=proposals[0].proposal_boxes[0:box_size].tensor.cpu().numpy()
-)
-
-reference_box = Box(proposals[0].proposal_boxes[0:box_size].tensor[0])
+reference_box = Box(proposals[0].proposal_boxes[0].tensor[0])
 
 # Get depth info
 depth_model = 'zoedepth'
@@ -76,37 +71,48 @@ depth_image = depth_of_images(img, model)
 #depth_image = torch.ones((img.shape[0],img.shape[1]))*3 # faster for checking
 
 # Get Proposals
-number_of_proposals = 1000
-pred_cubes = propose(reference_box, depth_image, K_scaled, img.shape[:2],number_of_proposals=number_of_proposals)
-pred_meshes = []
-for i in range(number_of_proposals):
-    cube = pred_cubes[i].get_cube()
-    pred_meshes.append(cube.__getitem__(0).detach())
-
-
+x_points = [1, 10, 100, 1000, 10000]#, 100000]
+number_of_proposals = x_points[-1]
+pred_cubes = propose_random(reference_box, depth_image, K_scaled, img.shape[:2],number_of_proposals=number_of_proposals)
 gt_box = Box(gt_instances[0].gt_boxes[0].tensor.squeeze())
-prop_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_proposals)]
-IoU = iou_2d(gt_box, prop_box)
-#print(IoU)
-#IoU = custom_mapping(IoU)
-#print(IoU)
+proposed_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_proposals)]
+IoU = iou_2d(gt_box, proposed_box)
+#IoU_mapped = custom_mapping(IoU)
 
 #OB Plot
-x_points = [1, 10, 100, 1000, 10000]
 max_values = [np.max(IoU[:n]) for n in x_points]
+idx_scores = [np.argmax(IoU[:n]) for n in x_points]
+max_scores = [custom_mapping([IoU[i]])[0] for i in idx_scores]
+idx_highest_iou = idx_scores[-1]
 
 # Plotting
+plt.figure()
 plt.plot(x_points, max_values, marker='o', linestyle='-') 
+plt.grid(True)
+plt.scatter(x_points,max_scores,c='r')
 plt.xscale('log')
 plt.xlabel('Number of Proposals')
 plt.ylabel('Maximum 2D IoU')
 plt.title('Maximum 2D IoU vs Number of Proposals')
-plt.grid(True)
 plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'random.png'),dpi=300, bbox_inches='tight')
 
-exit()
-
 # Plot
+# Get 2 proposal boxes
+box_size = min(len(proposals[0].proposal_boxes), 1)
+v_pred = Visualizer(img, None)
+v_pred = v_pred.overlay_instances(
+    boxes=proposals[0].proposal_boxes[0:box_size].tensor.cpu().numpy()
+)
+
+#pred_meshes = []
+#for i in range(number_of_proposals):
+#    cube = pred_cubes[i].get_cube()
+#    pred_meshes.append(cube.__getitem__(0).detach())
+
+# Take box with highest iou
+
+pred_meshes = [pred_cubes[idx_highest_iou].get_cube().__getitem__(0).detach()]
+
 fig = plt.figure()
 ax = fig.add_subplot(111)
 prop_img = v_pred.get_image()
@@ -114,5 +120,5 @@ img_3DPR = vis.draw_scene_view(prop_img, K_scaled.cpu().numpy(), pred_meshes, mo
 vis_img_3d = img_3DPR.astype(np.uint8)
 ax.imshow(vis_img_3d); ax.axis('off')
 #ax.plot(torch.cat((pred_box.get_all_corners()[:,0],pred_box.get_all_corners()[0,0].reshape(1))),torch.cat((pred_box.get_all_corners()[:,1],pred_box.get_all_corners()[0,1].reshape(1))),color='b')
-ax.plot(torch.cat((reference_box.get_all_corners()[:,0],reference_box.get_all_corners()[0,0].reshape(1))),torch.cat((reference_box.get_all_corners()[:,1],reference_box.get_all_corners()[0,1].reshape(1))),color='purple')
-plt.savefig(os.path.join('ProposalNetwork/output/trash', 'test_real.png'),dpi=300, bbox_inches='tight')
+ax.plot(torch.cat((gt_box.get_all_corners()[:,0],gt_box.get_all_corners()[0,0].reshape(1))),torch.cat((gt_box.get_all_corners()[:,1],gt_box.get_all_corners()[0,1].reshape(1))),color='purple')
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'box_with_highest_iou.png'),dpi=300, bbox_inches='tight')
