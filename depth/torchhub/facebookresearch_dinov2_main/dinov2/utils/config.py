@@ -56,7 +56,7 @@ def default_setup(args):
     setup_logging(output=args.output_dir, level=logging.INFO)
     logger = logging.getLogger("dinov2")
 
-    utils.fix_random_seeds(seed + rank)
+    # utils.fix_random_seeds(seed + rank)
     logger.info("git:\n  {}\n".format(utils.get_sha()))
     logger.info("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
 
