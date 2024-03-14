@@ -20,3 +20,4 @@ ProposalNetwork/proposals/network_out.pkl
 *~
 *.so
 #*.ipynb
+ProposalNetwork/proposals/figs/*

@@ -276,6 +276,11 @@ class Omni3D(COCO):
 
             self.dataset['annotations'] = valid_anns
 
+            # append depth image path to each image corresponding to the id
+            for img in self.dataset['images']:
+                img_id = img['id']
+                img['depth_image'] = f'datasets/depth_maps/{img_id}.npz'
+
         self.createIndex()
 
     def info(self):
@@ -398,6 +403,7 @@ def load_omni3d_json(json_file, image_root, dataset_name, filter_settings, filte
 
         image_id = record["image_id"] = img_dict["id"]
 
+        record["depth_image"] = f'datasets/depth_maps/{image_id}.npz'
         objs = []
         # where invalid annotations are removed
         for anno in anno_dict_list:

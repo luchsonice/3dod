@@ -13,6 +13,7 @@ from detectron2.structures import (
     BoxMode,
     Instances,
 )
+from PIL import Image
 
 class DatasetMapper3D(DatasetMapper):
 
@@ -22,11 +23,14 @@ class DatasetMapper3D(DatasetMapper):
         
         image = detection_utils.read_image(dataset_dict["file_name"], format=self.image_format)
         detection_utils.check_image_size(dataset_dict, image)
+        dp_img = Image.fromarray(np.load(dataset_dict["depth_image"])['depth'])
 
         aug_input = T.AugInput(image)
         transforms = self.augmentations(aug_input)
         image = aug_input.image
 
+        dp_img = np.array(dp_img.resize(image.shape[:2][::-1], Image.NEAREST))
+        dataset_dict["depth_map"] = torch.as_tensor(np.ascontiguousarray(dp_img))
         image_shape = image.shape[:2]  # h, w
 
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
