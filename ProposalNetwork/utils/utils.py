@@ -1,6 +1,6 @@
 import torch
 from ProposalNetwork.utils.spaces import Box, Cube
-from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_space
+from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_space, normalised_space_to_pixel
 import numpy as np
 
 from detectron2.structures import pairwise_iou
@@ -45,8 +45,10 @@ def make_cube(x_range, y_range, depth_image, w_range, h_range, l_range, im_shape
     # xyz
     x = (x_range[0]-x_range[1]) * torch.rand(1) + x_range[1]
     y = (y_range[0]-y_range[1]) * torch.rand(1) + y_range[1]
-    z = depth_image[int((x+1)*im_shape[0]/2),int((y+1)*im_shape[1]/2)] # cammera is in [0,0,1]
-    xyz = torch.tensor([x, y, 1+z])
+    [x_pixel,y_pixel] = normalised_space_to_pixel([x[0],y[0]],im_shape)[0]
+    z = depth_image[int(x_pixel),int(y_pixel)]
+    z = 1.6 # TODO make range
+    xyz = torch.tensor([x, y, z]) # TODO need to add x,y,z from camera
 
     # whl
     w = (w_range[0]-w_range[1]) * torch.rand(1) + w_range[1]
@@ -55,7 +57,7 @@ def make_cube(x_range, y_range, depth_image, w_range, h_range, l_range, im_shape
     whl = torch.tensor([w, h, l])
 
     # R
-    rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6)*np.pi)
+    rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6))
 
     return xyz, whl, rotation_matrix
 
