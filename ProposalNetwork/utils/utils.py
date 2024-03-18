@@ -4,6 +4,7 @@ from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_s
 import numpy as np
 
 from detectron2.structures import pairwise_iou
+from pytorch3d.ops import box3d_overlap
 
 ##### Proposal
 def normalize_vector(v):
@@ -47,7 +48,7 @@ def make_cube(x_range, y_range, depth_image, w_range, h_range, l_range, im_shape
     y = (y_range[0]-y_range[1]) * torch.rand(1) + y_range[1]
     [x_pixel,y_pixel] = normalised_space_to_pixel([x[0],y[0]],im_shape)[0]
     z = depth_image[int(x_pixel),int(y_pixel)]
-    z = 1.6 # TODO make range
+    z = torch.max(torch.tensor(0),torch.rand(1)*2-1)+z # Ranges +-1 from predicted z
     xyz = torch.tensor([x, y, z]) # TODO need to add x,y,z from camera
 
     # whl
@@ -81,7 +82,7 @@ def is_box_included_in_other_box(reference_box, proposed_box):
 
 
 ##### Scoring
-def iou_2d(gt_box,proposal_boxes):
+def iou_2d(gt_box, proposal_boxes):
     '''
     gt_box: Box
     proposal_box: list of Box
@@ -91,6 +92,27 @@ def iou_2d(gt_box,proposal_boxes):
         proposal_box = proposal_boxes[i]
         IoU.append(pairwise_iou(gt_box.box,proposal_box.box)[0][0].item())
     return IoU
+
+def iou_3d(gt_cube, proposal_cubes):
+    """
+    Compute the Intersection over Union (IoU) of two 3D cubes.
+
+    Parameters:
+    - gt_cube: GT Cube.
+    - proposal_cube: List of Proposal Cubes.
+
+    Returns:
+    - iou: Intersection over Union (IoU) value.
+    """
+    gt_corners = torch.stack([gt_cube.get_all_corners()])
+    proposal_corners = torch.stack([cube.get_all_corners() for cube in proposal_cubes])
+
+
+    # TODO check if corners in correct order; Should be
+    vol, iou = box3d_overlap(gt_corners,proposal_corners)
+    iou = np.array(iou[0])
+
+    return iou
 
 def custom_mapping(x,beta=1.7):
     '''
