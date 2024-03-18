@@ -49,7 +49,7 @@ def make_cube(x_range, y_range, depth_image, w_range, h_range, l_range, im_shape
     [x_pixel,y_pixel] = normalised_space_to_pixel([x[0],y[0]],im_shape)[0]
     z = depth_image[int(x_pixel),int(y_pixel)]
     z = torch.max(torch.tensor(0),torch.rand(1)*2-1)+z # Ranges +-1 from predicted z
-    xyz = torch.tensor([x, y, z]) # TODO need to add x,y,z from camera
+    xyz = torch.tensor([x, y, z-1]) # TODO maybe need to subtract x,y,z from camera (center_cam), ca. 0,0,1 for test case
 
     # whl
     w = (w_range[0]-w_range[1]) * torch.rand(1) + w_range[1]

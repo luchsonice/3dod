@@ -81,11 +81,10 @@ from skimage.transform import resize
 depth_image = resize(depth_image,(img.shape[0],img.shape[1]))
 
 # Get Proposals
-x_points = [1, 10, 100, 1000, 10000, 100000]
+x_points = [1, 10, 100, 1000]#, 10000, 100000]
 number_of_proposals = x_points[-1]
 pred_cubes = propose_random(reference_box, depth_image, K_scaled, img.shape[:2],number_of_proposals=number_of_proposals)
 proposed_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_proposals)]
-#IoU_mapped = custom_mapping(IoU)
 
 # OB IoU2D
 IoU2D = iou_2d(gt_box, proposed_box)
