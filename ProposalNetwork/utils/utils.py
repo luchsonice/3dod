@@ -142,19 +142,22 @@ def Boxes_to_list_of_Box(Boxes):
     detectron_boxes = Boxes.tensor
     return [Box(detectron_boxes[i,:]) for i in range(detectron_boxes.shape[1])]
 
-def mask_ioa(segmentation_mask, bube_mask):
+def mask_iou(segmentation_mask, bube_mask):
     '''
     Area is of segmentation_mask
     '''
     # Compute intersection mask
     intersection_mask = np.logical_and(segmentation_mask, bube_mask).astype(np.uint8)
-
     # Count pixels in intersection
     intersection_area = np.sum(intersection_mask)
-    # Count pixels in segmentation mask
-    segmentation_area = np.sum(segmentation_mask)
+
+    # Compute union mask
+    union_mask = np.logical_or(segmentation_mask, bube_mask).astype(np.uint8)
+    # Count pixels in union mask
+    union_area = np.sum(union_mask)
+
 
     # Compute IoA
-    ioa = intersection_area / segmentation_area
+    iou = intersection_area / union_area
 
-    return ioa
+    return iou
