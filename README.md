@@ -1,13 +1,23 @@
-# Omni3D & Cube R-CNN
-
-[![Support Ukraine](https://img.shields.io/badge/Support-Ukraine-FFD500?style=flat&labelColor=005BBB)](https://opensource.fb.com/support-ukraine)
-
-**Omni3D: A Large Benchmark and Model for 3D Object Detection in the Wild**
-
-[Garrick Brazil][gb], [Abhinav Kumar][ak], [Julian Straub][js], [Nikhila Ravi][nr], [Justin Johnson][jj], [Georgia Gkioxari][gg]
-
+# Weak supervised 3D Object Detection
+based on the Omni3D dataset & Cube R-CNN model 
 [[`Project Page`](https://garrickbrazil.com/omni3d)] [[`arXiv`](https://arxiv.org/abs/2207.10660)] [[`BibTeX`](#citing)]
 
+# Setup
+```sh
+# to get the submodules
+git submodule update --init
+# to get the segmentation method
+./download_segment_anything.sh
+cd segment-anything
+pip install -e .
+cd ..
+# to get the depth model
+cd depth
+./download_models.sh
+cd ..
+```
+
+## Original readme
 
 <table style="border-collapse: collapse; border: none;">
 <tr>
@@ -34,14 +44,19 @@
 -->
 
 ## Table of Contents:
-1. [Installation](#installation)
-2. [Demo](#demo)
-3. [Omni3D Data](#data)
-4. [Cube R-CNN Training](#training)
-5. [Cube R-CNN Inference](#inference)
-6. [Results](#results)
-7. [License](#license)
-8. [Citing](#citing)
+- [Weak supervised 3D Object Detection](#weak-supervised-3d-object-detection)
+- [Setup](#setup)
+  - [Original readme](#original-readme)
+  - [Table of Contents:](#table-of-contents)
+  - [Installation ](#installation-)
+  - [Demo ](#demo-)
+  - [Omni3D Data ](#omni3d-data-)
+  - [Training Cube R-CNN on Omni3D ](#training-cube-r-cnn-on-omni3d-)
+    - [Tips for Tuning Hyperparameters ](#tips-for-tuning-hyperparameters-)
+  - [Inference on Omni3D ](#inference-on-omni3d-)
+  - [Results ](#results-)
+  - [License ](#license-)
+  - [Citing ](#citing-)
 
 
 ## Installation <a name="installation"></a>
@@ -53,7 +68,7 @@
 
 ``` bash
 # setup new evironment
-conda create -n cubercnn python=3.8
+conda create -n cubercnn python=3.10
 source activate cubercnn
 
 # main dependencies
