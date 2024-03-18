@@ -61,6 +61,7 @@ gt_R = gt_instances[0].gt_poses[0]
 gt_cube_ = Cube(torch.cat([gt____whlxyz[6:],gt____whlxyz[3:6]]),gt_R)
 gt_cube = gt_cube_.get_cube()
 
+
 # image
 input_format = 'BGR'
 img = batched_inputs[0]['image']
@@ -72,7 +73,8 @@ scale = input['height']/img.shape[0]
 K_scaled = torch.tensor(
     [[1/scale, 0 , 0], [0, 1/scale, 0], [0, 0, 1.0]], 
     dtype=torch.float32) @ K
-
+print(gt_cube_.get_bube_corners(K_scaled))
+exit()
 reference_box = Box(proposals[0].proposal_boxes[0].tensor[0])
 
 # Get depth info

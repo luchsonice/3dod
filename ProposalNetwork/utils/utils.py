@@ -81,6 +81,9 @@ def is_box_included_in_other_box(reference_box, proposed_box):
 
 
 
+
+
+
 ##### Scoring
 def iou_2d(gt_box, proposal_boxes):
     '''
@@ -137,4 +140,21 @@ def Boxes_to_list_of_Box(Boxes):
     Boxes: detectron2 Boxes
     '''
     detectron_boxes = Boxes.tensor
-    return [Box(detectron_boxes[i,:], format='x1, y1, x2, y2') for i in range(detectron_boxes.shape[1])]
+    return [Box(detectron_boxes[i,:]) for i in range(detectron_boxes.shape[1])]
+
+def mask_ioa(segmentation_mask, bube_mask):
+    '''
+    Area is of segmentation_mask
+    '''
+    # Compute intersection mask
+    intersection_mask = np.logical_and(segmentation_mask, bube_mask).astype(np.uint8)
+
+    # Count pixels in intersection
+    intersection_area = np.sum(intersection_mask)
+    # Count pixels in segmentation mask
+    segmentation_area = np.sum(segmentation_mask)
+
+    # Compute IoA
+    ioa = intersection_area / segmentation_area
+
+    return ioa
