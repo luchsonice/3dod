@@ -80,6 +80,7 @@ gt____whlxyz = gt_instances[0].gt_boxes3D[0]
 gt_R = gt_instances[0].gt_poses[0]
 gt_cube_ = Cube(torch.cat([gt____whlxyz[6:],gt____whlxyz[3:6]]),gt_R)
 gt_cube = gt_cube_.get_cube()
+gt_z = gt_cube_.center[2]
 
 
 # image
@@ -105,7 +106,6 @@ x_points = [1, 10, 100, 1000]#, 10000, 100000]
 number_of_proposals = x_points[-1]
 pred_cubes = propose_random(reference_box, depth_image, K_scaled, img.shape[:2],number_of_proposals=number_of_proposals)
 proposed_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_proposals)]
-
 
 # OB IoU2D
 IoU2D = iou_2d(gt_box, proposed_box)
@@ -149,19 +149,23 @@ print('Segment score of box with highest 2D IoU',segment_ious[idx_highest_iou])
 print('Segment score of box with highest 3D IoU',segment_ious[idx_highest_iou3D])
 print('Highest segment score overall', max_scores_segment[-1])
 
+iou3d_of_highest_segment = IoU3D[idx_scores_segment]
+iou3d_of_highest_iou2d = IoU3D[idx_scores]
+iou3d_of_highest_iou3d = IoU3D[idx_scores3D]
 # Plotting
 plt.figure()
-plt.plot(x_points, max_values, marker='o', linestyle='-', label='2D') 
-plt.plot(x_points, max_values3D, marker='o', linestyle='-', label='3D') 
+plt.plot(x_points, iou3d_of_highest_iou3d, marker='o', linestyle='--',c='grey', label='best IoU3D')
+plt.plot(x_points, iou3d_of_highest_segment, marker='o', linestyle='-',c='purple', label='segment') 
+plt.plot(x_points, iou3d_of_highest_iou2d, marker='o', linestyle='-',c='orange', label='2D IoU') 
 plt.grid(True)
-plt.scatter(x_points,max_scores,c='b')
-plt.scatter(x_points,max_scores3D,c='orange')
+plt.scatter(x_points, max_scores_segment,c='violet')
+plt.scatter(x_points, max_scores, c='gold')
 plt.xscale('log')
 plt.xlabel('Number of Proposals')
-plt.ylabel('Maximum IoU')
-plt.title('Maximum IoU vs Number of Proposals')
+plt.ylabel('3D IoU')
+plt.title('IoU vs Number of Proposals')
 plt.legend()
-plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'OB.png'),dpi=300, bbox_inches='tight')
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO.png'),dpi=300, bbox_inches='tight')
 
 # Plot
 # Get 2 proposal boxes
@@ -176,7 +180,7 @@ for i in idx_scores[1:]:
     cube = pred_cubes[i].get_cube()
     pred_meshes.append(cube.__getitem__(0).detach())
 # Take box with highest iou
-pred_meshes = [pred_cubes[idx_highest_iou].get_cube().__getitem__(0).detach()]
+pred_meshes = [pred_cubes[idx_highest_iou3D].get_cube().__getitem__(0).detach()]
 
 # Add 3D GT
 meshes_text = ['' for _ in range(len(pred_meshes))]
