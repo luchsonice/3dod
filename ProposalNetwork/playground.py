@@ -4,6 +4,9 @@ from ProposalNetwork.utils.spaces import Box, Cube
 from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_space
 from ProposalNetwork.utils.utils import compute_rotation_matrix_from_ortho6d, make_cube, iou_2d, iou_3d, custom_mapping
 
+from ProposalNetwork.scoring.scorefunction import score_segmentation
+
+from ProposalNetwork.segment import show_mask
 
 import matplotlib.pyplot as plt
 import torch
@@ -14,6 +17,23 @@ import numpy as np
 from cubercnn import util, vis
 from detectron2.data.detection_utils import convert_image_to_rgb
 from detectron2.utils.visualizer import Visualizer
+
+from segment_anything import sam_model_registry, SamPredictor
+
+# 1) first cd into the segment_anything and pip install -e .
+# to get the model stary in the root foler folder and run the download_model.sh 
+# 2) chmod +x download_model.sh && ./download_model.sh
+# the largest model: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
+# this is the smallest model
+sam_checkpoint = "segment-anything/sam_vit_b_01ec64.pth"
+model_type = "vit_b"
+
+device = "cpu"
+
+sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
+sam.to(device=device)
+
+predictor = SamPredictor(sam)
 
 #torch.manual_seed(1)
 '''
@@ -60,6 +80,7 @@ gt____whlxyz = gt_instances[0].gt_boxes3D[0]
 gt_R = gt_instances[0].gt_poses[0]
 gt_cube_ = Cube(torch.cat([gt____whlxyz[6:],gt____whlxyz[3:6]]),gt_R)
 gt_cube = gt_cube_.get_cube()
+gt_z = gt_cube_.center[2]
 
 
 # image
@@ -73,8 +94,6 @@ scale = input['height']/img.shape[0]
 K_scaled = torch.tensor(
     [[1/scale, 0 , 0], [0, 1/scale, 0], [0, 0, 1.0]], 
     dtype=torch.float32) @ K
-print(gt_cube_.get_bube_corners(K_scaled))
-exit()
 reference_box = Box(proposals[0].proposal_boxes[0].tensor[0])
 
 # Get depth info
@@ -102,19 +121,51 @@ idx_scores3D = [np.argmax(IoU3D[:n]) for n in x_points]
 max_scores3D = [custom_mapping([IoU3D[i]])[0] for i in idx_scores3D]
 idx_highest_iou3D = idx_scores3D[-1]
 
+# Segment Score
+if os.path.exists('/work3/s194369/3dod/ProposalNetwork/mask.pkl'):
+      # load
+     with open('/work3/s194369/3dod/ProposalNetwork/mask.pkl', 'rb') as f:
+        masks = pickle.load(f)
+else:
+    predictor.set_image(img)
+    input_box = np.array([reference_box.x1,reference_box.y1,reference_box.x2,reference_box.y2])#np.array(reference_box.get_all_corners()).flatten()
+
+    masks, _, _ = predictor.predict(
+        point_coords=None,
+        point_labels=None,
+        box=input_box[None, :],
+        multimask_output=False,
+    )
+    # dump
+    with open('/work3/s194369/3dod/ProposalNetwork/mask.pkl', 'wb') as f:
+        pickle.dump(masks, f)
+
+seg_mask = masks[0]
+segment_ious = [score_segmentation(pred_cubes[i].get_bube_corners(K_scaled),seg_mask) for i in range(number_of_proposals)]
+idx_scores_segment = [np.argmax(segment_ious[:n]) for n in x_points]
+max_scores_segment = [segment_ious[i] for i in idx_scores_segment]
+idx_highest_segment = idx_scores_segment[-1]
+print('Segment score of box with highest 2D IoU',segment_ious[idx_highest_iou])
+print('Segment score of box with highest 3D IoU',segment_ious[idx_highest_iou3D])
+print('Highest segment score overall', max_scores_segment[-1])
+
+iou3d_of_highest_segment = IoU3D[idx_scores_segment]
+iou3d_of_highest_iou2d = IoU3D[idx_scores]
+iou3d_of_highest_iou3d = IoU3D[idx_scores3D]
 # Plotting
 plt.figure()
-plt.plot(x_points, max_values, marker='o', linestyle='-', label='2D') 
-plt.plot(x_points, max_values3D, marker='o', linestyle='-', label='3D') 
+plt.plot(x_points, iou3d_of_highest_iou3d, marker='o', linestyle='--',c='grey', label='best IoU3D')
+plt.plot(x_points, iou3d_of_highest_segment, marker='o', linestyle='-',c='purple', label='segment') 
+plt.plot(x_points, iou3d_of_highest_iou2d, marker='o', linestyle='-',c='orange', label='2D IoU') 
 plt.grid(True)
-plt.scatter(x_points,max_scores,c='b')
-plt.scatter(x_points,max_scores3D,c='orange')
+plt.scatter(x_points, max_scores_segment,c='violet')
+plt.scatter(x_points, max_scores, c='gold')
 plt.xscale('log')
 plt.xlabel('Number of Proposals')
-plt.ylabel('Maximum IoU')
-plt.title('Maximum IoU vs Number of Proposals')
+plt.ylabel('3D IoU')
+plt.title('IoU vs Number of Proposals')
 plt.legend()
-plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'OB.png'),dpi=300, bbox_inches='tight')
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO.png'),dpi=300, bbox_inches='tight')
 
 # Plot
 # Get 2 proposal boxes
@@ -129,7 +180,7 @@ for i in idx_scores[1:]:
     cube = pred_cubes[i].get_cube()
     pred_meshes.append(cube.__getitem__(0).detach())
 # Take box with highest iou
-pred_meshes = [pred_cubes[idx_highest_iou].get_cube().__getitem__(0).detach()]
+pred_meshes = [pred_cubes[idx_highest_iou3D].get_cube().__getitem__(0).detach()]
 
 # Add 3D GT
 meshes_text = ['' for _ in range(len(pred_meshes))]
@@ -145,8 +196,30 @@ vis_img_3d = img_3DPR.astype(np.uint8)
 ax.imshow(vis_img_3d)
 #ax.plot(torch.cat((pred_box.get_all_corners()[:,0],pred_box.get_all_corners()[0,0].reshape(1))),torch.cat((pred_box.get_all_corners()[:,1],pred_box.get_all_corners()[0,1].reshape(1))),color='b')
 ax.plot(torch.cat((gt_box.get_all_corners()[:,0],gt_box.get_all_corners()[0,0].reshape(1))),torch.cat((gt_box.get_all_corners()[:,1],gt_box.get_all_corners()[0,1].reshape(1))),color='purple')
+show_mask(masks,ax)
 plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'box_with_highest_iou.png'),dpi=300, bbox_inches='tight')
 
 # convert from BGR to RGB
 im_concat = im_concat[..., ::-1]
 util.imwrite(im_concat, os.path.join('ProposalNetwork/output/AMOB', 'vis_result.jpg'))
+
+
+# Take box with highest iou
+pred_meshes = [pred_cubes[idx_highest_segment].get_cube().__getitem__(0).detach()]
+
+# Add 3D GT
+meshes_text = ['highest segment']
+meshes_text.append('gt cube')
+pred_meshes.append(gt_cube.__getitem__(0).detach())
+
+fig = plt.figure()
+ax = fig.add_subplot(111)
+prop_img = v_pred.get_image()
+img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, K_scaled.cpu().numpy(), pred_meshes,text=meshes_text, blend_weight=0.5, blend_weight_overlay=0.85,scale = img.shape[0])
+im_concat = np.concatenate((img_3DPR, img_novel), axis=1)
+vis_img_3d = img_3DPR.astype(np.uint8)
+ax.imshow(vis_img_3d)
+#ax.plot(torch.cat((pred_box.get_all_corners()[:,0],pred_box.get_all_corners()[0,0].reshape(1))),torch.cat((pred_box.get_all_corners()[:,1],pred_box.get_all_corners()[0,1].reshape(1))),color='b')
+ax.plot(torch.cat((gt_box.get_all_corners()[:,0],gt_box.get_all_corners()[0,0].reshape(1))),torch.cat((gt_box.get_all_corners()[:,1],gt_box.get_all_corners()[0,1].reshape(1))),color='purple')
+show_mask(masks,ax)
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'box_with_highest_segment.png'),dpi=300, bbox_inches='tight')
