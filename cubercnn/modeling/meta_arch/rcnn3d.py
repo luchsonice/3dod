@@ -247,6 +247,65 @@ class RCNN3D(GeneralizedRCNN):
 
             break  # only visualize one image in a batch
 
+
+@META_ARCH_REGISTRY.register()
+class BoxNet(RCNN3D):
+    
+    @classmethod
+    def from_config(cls, cfg, priors=None):
+        backbone = build_backbone(cfg, priors=priors)
+        return {
+            "backbone": backbone,
+            "proposal_generator": build_proposal_generator(cfg, backbone.output_shape()),
+            "roi_heads": build_roi_heads(cfg, backbone.output_shape(), priors=priors),
+            "input_format": cfg.INPUT.FORMAT,
+            "vis_period": cfg.VIS_PERIOD,
+            "pixel_mean": cfg.MODEL.PIXEL_MEAN,
+            "pixel_std": cfg.MODEL.PIXEL_STD,
+        }
+
+
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]]):
+        
+        if not self.training:
+            return self.inference(batched_inputs)
+
+        images = self.preprocess_image(batched_inputs)
+
+        # scaling factor for the sample relative to its original scale
+        # e.g., how much has the image been upsampled by? or downsampled?
+        im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
+
+        # The unmodified intrinsics for the image
+        Ks = [torch.FloatTensor(info['K']) for info in batched_inputs]
+
+        if "instances" in batched_inputs[0]:
+            gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
+        else:
+            gt_instances = None
+
+        # the backbone is actually a FPN, where the DLA model is the bottom-up structure.
+        # FPN: https://arxiv.org/abs/1612.03144v2
+        # backbone and proposal generator only work on 2D images and annotations.
+        features = self.backbone(images.tensor)
+        proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
+
+        instances, detector_losses = self.roi_heads(
+            images, features, proposals, 
+            Ks, im_scales_ratio, 
+            gt_instances
+        )
+
+        if self.vis_period > 0:
+            storage = get_event_storage()
+            if storage.iter % self.vis_period == 0 and storage.iter > 0:
+                self.visualize_training(batched_inputs, proposals, instances)
+
+        losses = {}
+        losses.update(detector_losses)
+        losses.update(proposal_losses)
+        return losses
+
 def build_model(cfg, priors=None):
     """
     Build the whole model architecture, defined by ``cfg.MODEL.META_ARCHITECTURE``.

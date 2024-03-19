@@ -195,6 +195,75 @@ class CubeHead(nn.Module):
             box_z = box_z.view(n, self.num_classes, -1)
             
         return box_2d_deltas, box_z, box_dims, box_pose, box_uncert
+    
+
+@ROI_CUBE_HEAD_REGISTRY.register()
+class CubeHead_vanilla(nn.Module):
+
+    def __init__(self, cfg, input_shape: Dict[str, ShapeSpec]):
+        super().__init__()
+
+        #-------------------------------------------
+        # Settings
+        #-------------------------------------------
+        self.num_classes        = cfg.MODEL.ROI_HEADS.NUM_CLASSES
+        self.use_conf           = cfg.MODEL.ROI_CUBE_HEAD.USE_CONFIDENCE
+        self.z_type             = cfg.MODEL.ROI_CUBE_HEAD.Z_TYPE
+        self.pose_type          = cfg.MODEL.ROI_CUBE_HEAD.POSE_TYPE
+        self.cluster_bins       = cfg.MODEL.ROI_CUBE_HEAD.CLUSTER_BINS
+        self.shared_fc          = cfg.MODEL.ROI_CUBE_HEAD.SHARED_FC
+
+        #-------------------------------------------
+        # Feature generator
+        #-------------------------------------------
+
+        num_conv = cfg.MODEL.ROI_CUBE_HEAD.NUM_CONV
+        conv_dim = cfg.MODEL.ROI_CUBE_HEAD.CONV_DIM
+        num_fc = cfg.MODEL.ROI_CUBE_HEAD.NUM_FC
+        fc_dim = cfg.MODEL.ROI_CUBE_HEAD.FC_DIM
+
+        conv_dims = [conv_dim] * num_conv
+        fc_dims = [fc_dim] * num_fc
+
+        assert len(conv_dims) + len(fc_dims) > 0
+
+        self._output_size = (input_shape.channels, input_shape.height, input_shape.width)
+
+ 
+
+    def forward(self, x):
+    
+        n = x.shape[0]
+        
+        box_z = None
+        box_uncert = None
+        box_2d_deltas = None
+
+        # do the actual thing here
+        print('hej')
+        # TODO: implement the cube prediction method here
+        # we definitely need to return the following:
+        # box_z, box_dims, box_pose. I think the others can be None for now
+
+
+        # ####
+
+        if self.pose_type == '6d':
+            box_pose = rotation_6d_to_matrix(box_pose.view(-1, 6))
+
+        elif self.pose_type == 'euler':
+            box_pose = euler_angles_to_matrix(box_pose.view(-1, 3), 'XYZ')
+
+        box_dims = box_dims.view(n, self.num_classes, 3)
+        box_pose = box_pose.view(n, self.num_classes, 3, 3)
+
+        if self.cluster_bins > 1:
+            box_z = box_z.view(n, self.cluster_bins, self.num_classes, -1)
+
+        else:
+            box_z = box_z.view(n, self.num_classes, -1)
+        # these are the things it should return to mimic the original cube head
+        return box_2d_deltas, box_z, box_dims, box_pose, box_uncert
 
 
 def build_cube_head(cfg, input_shape: Dict[str, ShapeSpec]):

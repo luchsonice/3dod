@@ -434,18 +434,7 @@ def main(args):
             logger.info([thing_classes[i] for i in (possible_categories & known_category_training_ids)])
 
         # compute priors given the training data.
-        if cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_PRECOMPUTED:
-            # priors: dict with: (for all 50 classes, [those not in sunrgb can just be random values])
-                # 'priors_dims_per_cat':
-                # 'priors_z3d_per_cat':
-                # 'priors_y3d_per_cat':
-                # 'priors_bins':
-                # 'priors_y3d':
-                # 'priors_z3d'
-            priors = pd.read_csv('datasets/typical sizes of 3d items.csv')
-        else:
-            priors = util.compute_priors(cfg, datasets)
-            # priors = util.compute_priors_custom(cfg, datasets)
+        priors = util.compute_priors(cfg, datasets)
     
     '''
     The training loops can attempt to train for N times.
