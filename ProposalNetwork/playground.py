@@ -4,7 +4,7 @@ from ProposalNetwork.utils.spaces import Box, Cube
 from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_space
 from ProposalNetwork.utils.utils import compute_rotation_matrix_from_ortho6d, make_cube, iou_2d, iou_3d, custom_mapping
 
-from ProposalNetwork.scoring.scorefunction import score_segmentation
+from ProposalNetwork.scoring.scorefunction import score_segmentation, score_dimensions, score_iou
 
 from ProposalNetwork.segment import show_mask
 
@@ -129,7 +129,7 @@ print('highest possible IoU', np.max(IoU3D))
 
 
 # OB IoU2D
-IoU2D = iou_2d(gt_box, proposed_box)
+IoU2D = score_iou(gt_box, proposed_box)
 idx_scores_iou2d = np.argsort(IoU2D)
 sorted_iou2d_IoU = [IoU3D[i] for i in idx_scores_iou2d]
 iou2d_ious = [np.max(sorted_iou2d_IoU[:n]) for n in x_points]
@@ -186,6 +186,23 @@ plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO_segment.png'),dpi=30
 
 
 
+# OB Dimensions
+dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
+dim_scores = score_dimensions(gt_instances[0].gt_classes[0], dimensions)
+idx_scores_iou2d = np.argsort(IoU2D)
+sorted_iou2d_IoU = [IoU3D[i] for i in idx_scores_iou2d]
+iou2d_ious = [np.max(sorted_iou2d_IoU[:n]) for n in x_points]
+print('IoU2D score of best 3dIoU',IoU2D[idx_scores_iou2d[0]])
+
+# Plotting
+plt.figure()
+plt.plot(x_points, iou2d_ious, marker='o', linestyle='-',c='green') 
+plt.grid(True)
+plt.xscale('log')
+plt.xlabel('Number of Proposals')
+plt.ylabel('3D IoU')
+plt.title('IoU vs Number of Proposals')
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO_dim.png'),dpi=300, bbox_inches='tight')
 
 
 
