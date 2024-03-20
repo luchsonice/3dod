@@ -46,10 +46,9 @@ def make_cube(x_range, y_range, depth_image, w_range, h_range, l_range, im_shape
     # xyz
     x = (x_range[0]-x_range[1]) * torch.rand(1) + x_range[1]
     y = (y_range[0]-y_range[1]) * torch.rand(1) + y_range[1]
-    [x_pixel,y_pixel] = normalised_space_to_pixel([x[0],y[0]],im_shape)[0]
-    z = depth_image[int(x_pixel),int(y_pixel)]
-    z = torch.max(torch.tensor(0),torch.rand(1)*2-1)+z # Ranges +-1 from predicted z
-    xyz = torch.tensor([x, y, z-1]) # TODO maybe need to subtract x,y,z from camera (center_cam), ca. 0,0,1 for test case
+    # TODO only min and max of proposal area?
+    z = (np.max(depth_image)-np.min(depth_image)) * torch.rand(1) + np.min(depth_image)
+    xyz = torch.tensor([x, y, z])
 
     # whl
     w = (w_range[0]-w_range[1]) * torch.rand(1) + w_range[1]
