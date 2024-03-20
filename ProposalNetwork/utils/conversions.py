@@ -62,5 +62,5 @@ def normalised_space_to_pixel(coords,im_shape):
     new_coords[:, 0] += 0.5 * new_width
     new_coords[:, 1] += 0.5 * new_height
 
-    return new_coords
+    return [[int(entry) for entry in sublist] for sublist in new_coords][0]
     

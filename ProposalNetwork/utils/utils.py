@@ -39,15 +39,14 @@ def compute_rotation_matrix_from_ortho6d(poses):
 
     return matrix
 
-def make_cube(x_range, y_range, depth_image, w_range, h_range, l_range, im_shape):
+def make_cube(x_range, y_range, z_range, w_range, h_range, l_range, im_shape):
     '''
     need xyz, whl, and pose (R)
     '''
     # xyz
     x = (x_range[0]-x_range[1]) * torch.rand(1) + x_range[1]
     y = (y_range[0]-y_range[1]) * torch.rand(1) + y_range[1]
-    # TODO only min and max of proposal area?
-    z = (np.max(depth_image)-np.min(depth_image)) * torch.rand(1) + np.min(depth_image)
+    z = (z_range[0]-z_range[1]) * torch.rand(1) + z_range[1]
     xyz = torch.tensor([x, y, z])
 
     # whl
