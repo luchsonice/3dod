@@ -20,20 +20,24 @@ from detectron2.utils.visualizer import Visualizer
 
 from segment_anything import sam_model_registry, SamPredictor
 
-# 1) first cd into the segment_anything and pip install -e .
-# to get the model stary in the root foler folder and run the download_model.sh 
-# 2) chmod +x download_model.sh && ./download_model.sh
-# the largest model: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
-# this is the smallest model
-sam_checkpoint = "segment-anything/sam_vit_b_01ec64.pth"
-model_type = "vit_b"
+def init_segmentation():
+    # 1) first cd into the segment_anything and pip install -e .
+    # to get the model stary in the root foler folder and run the download_model.sh 
+    # 2) chmod +x download_model.sh && ./download_model.sh
+    # the largest model: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
+    # this is the smallest model
+    sam_checkpoint = "segment-anything/sam_vit_b_01ec64.pth"
+    model_type = "vit_b"
 
-device = "cpu"
+    device = "cpu"
 
-sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
-sam.to(device=device)
+    sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
+    sam.to(device=device)
 
-predictor = SamPredictor(sam)
+    predictor = SamPredictor(sam)
+    return predictor
+
+predictor = init_segmentation()
 
 #torch.manual_seed(1)
 '''
