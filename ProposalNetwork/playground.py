@@ -1,10 +1,10 @@
-from ProposalNetwork.proposals.proposals import propose_random
+from ProposalNetwork.proposals.proposals import propose_random, propose
 
 from ProposalNetwork.utils.spaces import Box, Cube
 from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_space
 from ProposalNetwork.utils.utils import compute_rotation_matrix_from_ortho6d, make_cube, iou_2d, iou_3d, custom_mapping
 
-from ProposalNetwork.scoring.scorefunction import score_segmentation
+from ProposalNetwork.scoring.scorefunction import score_segmentation, score_dimensions, score_iou
 
 from ProposalNetwork.segment import show_mask
 
@@ -101,25 +101,51 @@ depth_image = np.load(f"datasets/depth_maps/{batched_inputs[0]['image_id']}.npz"
 from skimage.transform import resize
 depth_image = resize(depth_image,(img.shape[0],img.shape[1]))
 
+
+
+
+
+
+
+
+
+
+
+
+
 # Get Proposals
 x_points = [1, 10, 100, 1000]#, 10000, 100000]
 number_of_proposals = x_points[-1]
-pred_cubes = propose_random(reference_box, depth_image, K_scaled, img.shape[:2],number_of_proposals=number_of_proposals)
+pred_cubes = propose(reference_box, depth_image, K_scaled, img.shape[:2],number_of_proposals=number_of_proposals)
 proposed_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_proposals)]
-
-# OB IoU2D
-IoU2D = iou_2d(gt_box, proposed_box)
-max_values = [np.max(IoU2D[:n]) for n in x_points]
-idx_scores = [np.argmax(IoU2D[:n]) for n in x_points]
-max_scores = [custom_mapping([IoU2D[i]])[0] for i in idx_scores]
-idx_highest_iou = idx_scores[-1]
 
 # OB IoU3D
 IoU3D = iou_3d(gt_cube_,pred_cubes)
 max_values3D = [np.max(IoU3D[:n]) for n in x_points]
 idx_scores3D = [np.argmax(IoU3D[:n]) for n in x_points]
-max_scores3D = [custom_mapping([IoU3D[i]])[0] for i in idx_scores3D]
+max_scores3D = [IoU3D[i] for i in idx_scores3D]
 idx_highest_iou3D = idx_scores3D[-1]
+print('highest possible IoU', np.max(IoU3D))
+
+
+# OB IoU2D
+IoU2D = score_iou(gt_box, proposed_box)
+idx_scores_iou2d = np.argsort(IoU2D)
+sorted_iou2d_IoU = [IoU3D[i] for i in idx_scores_iou2d]
+iou2d_ious = [np.max(sorted_iou2d_IoU[:n]) for n in x_points]
+print('IoU2D score of best 3dIoU',IoU2D[idx_scores_iou2d[0]])
+
+# Plotting
+plt.figure()
+plt.plot(x_points, iou2d_ious, marker='o', linestyle='-',c='orange') 
+plt.grid(True)
+plt.xscale('log')
+plt.xlabel('Number of Proposals')
+plt.ylabel('3D IoU')
+plt.title('IoU vs Number of Proposals')
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO_iou2d.png'),dpi=300, bbox_inches='tight')
+
+
 
 # Segment Score
 if os.path.exists('/work3/s194369/3dod/ProposalNetwork/mask.pkl'):
@@ -141,31 +167,52 @@ else:
         pickle.dump(masks, f)
 
 seg_mask = masks[0]
-segment_ious = [score_segmentation(pred_cubes[i].get_bube_corners(K_scaled),seg_mask) for i in range(number_of_proposals)]
-idx_scores_segment = [np.argmax(segment_ious[:n]) for n in x_points]
-max_scores_segment = [segment_ious[i] for i in idx_scores_segment]
-idx_highest_segment = idx_scores_segment[-1]
-print('Segment score of box with highest 2D IoU',segment_ious[idx_highest_iou])
-print('Segment score of box with highest 3D IoU',segment_ious[idx_highest_iou3D])
-print('Highest segment score overall', max_scores_segment[-1])
+segment_scores = [score_segmentation(pred_cubes[i].get_bube_corners(K_scaled),seg_mask) for i in range(number_of_proposals)]
+idx_scores_segment = np.argsort(segment_scores)
+sorted_segment_IoU = [IoU3D[i] for i in idx_scores_segment]
+segment_ious = [np.max(sorted_segment_IoU[:n]) for n in x_points]
+print('Segment score of best 3dIoU',segment_scores[idx_scores_segment[0]])
 
-iou3d_of_highest_segment = IoU3D[idx_scores_segment]
-iou3d_of_highest_iou2d = IoU3D[idx_scores]
-iou3d_of_highest_iou3d = IoU3D[idx_scores3D]
 # Plotting
 plt.figure()
-plt.plot(x_points, iou3d_of_highest_iou3d, marker='o', linestyle='--',c='grey', label='best IoU3D')
-plt.plot(x_points, iou3d_of_highest_segment, marker='o', linestyle='-',c='purple', label='segment') 
-plt.plot(x_points, iou3d_of_highest_iou2d, marker='o', linestyle='-',c='orange', label='2D IoU') 
+plt.plot(x_points, segment_ious, marker='o', linestyle='-',c='purple') 
 plt.grid(True)
-plt.scatter(x_points, max_scores_segment,c='violet')
-plt.scatter(x_points, max_scores, c='gold')
 plt.xscale('log')
 plt.xlabel('Number of Proposals')
 plt.ylabel('3D IoU')
 plt.title('IoU vs Number of Proposals')
-plt.legend()
-plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO.png'),dpi=300, bbox_inches='tight')
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO_segment.png'),dpi=300, bbox_inches='tight')
+
+
+
+
+# OB Dimensions
+dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
+dim_scores = score_dimensions(gt_instances[0].gt_classes[0], dimensions)
+idx_scores_iou2d = np.argsort(IoU2D)
+sorted_iou2d_IoU = [IoU3D[i] for i in idx_scores_iou2d]
+iou2d_ious = [np.max(sorted_iou2d_IoU[:n]) for n in x_points]
+print('IoU2D score of best 3dIoU',IoU2D[idx_scores_iou2d[0]])
+
+# Plotting
+plt.figure()
+plt.plot(x_points, iou2d_ious, marker='o', linestyle='-',c='green') 
+plt.grid(True)
+plt.xscale('log')
+plt.xlabel('Number of Proposals')
+plt.ylabel('3D IoU')
+plt.title('IoU vs Number of Proposals')
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO_dim.png'),dpi=300, bbox_inches='tight')
+
+
+
+
+
+
+
+
+
+
 
 # Plot
 # Get 2 proposal boxes
@@ -175,10 +222,11 @@ v_pred = v_pred.overlay_instances(
     boxes=proposals[0].proposal_boxes[0:box_size].tensor.cpu().numpy()
 )
 
-pred_meshes = []
-for i in idx_scores[1:]:
-    cube = pred_cubes[i].get_cube()
-    pred_meshes.append(cube.__getitem__(0).detach())
+
+#pred_meshes = []
+#for i in idx_scores[1:]:
+#    cube = pred_cubes[i].get_cube()
+#    pred_meshes.append(cube.__getitem__(0).detach())
 # Take box with highest iou
 pred_meshes = [pred_cubes[idx_highest_iou3D].get_cube().__getitem__(0).detach()]
 
@@ -205,7 +253,7 @@ util.imwrite(im_concat, os.path.join('ProposalNetwork/output/AMOB', 'vis_result.
 
 
 # Take box with highest iou
-pred_meshes = [pred_cubes[idx_highest_segment].get_cube().__getitem__(0).detach()]
+pred_meshes = [pred_cubes[idx_highest_iou3D].get_cube().__getitem__(0).detach()]
 
 # Add 3D GT
 meshes_text = ['highest segment']
