@@ -528,50 +528,6 @@ class ROIHeads_Boxer(StandardROIHeads):
                 if self.loss_w_joint > 0:
                     loss_joint *= inverse_z_w
 
-            if self.use_confidence > 0:
-                
-                uncert_sf = SQRT_2_CONSTANT * torch.exp(-cube_uncert)
-                
-                loss_dims *= uncert_sf
-
-                if not cube_2d_deltas is None:
-                    loss_xy *= uncert_sf
-
-                if not loss_z is None:
-                    loss_z *= uncert_sf
-
-                if loss_pose is not None:
-                    loss_pose *= uncert_sf
-    
-                if self.loss_w_joint > 0:
-                    loss_joint *= uncert_sf
-
-                losses.update({prefix + 'uncert': self.use_confidence*self.safely_reduce_losses(cube_uncert.clone())})
-                storage.put_scalar(prefix + 'conf', torch.exp(-cube_uncert).mean().item(), smoothing_hint=False)
-
-            # store per batch loss stats temporarily
-            self.batch_losses = [batch_losses.mean().item() for batch_losses in total_3D_loss_for_reporting.split(num_boxes_per_image)]
-            
-            if self.loss_w_dims > 0:
-                losses.update({
-                    prefix + 'loss_dims': self.safely_reduce_losses(loss_dims) * self.loss_w_dims * self.loss_w_3d,
-                })
-
-            if not cube_2d_deltas is None:
-                losses.update({
-                    prefix + 'loss_xy': self.safely_reduce_losses(loss_xy) * self.loss_w_xy * self.loss_w_3d,
-                })
-
-            if not loss_z is None:
-                losses.update({
-                    prefix + 'loss_z': self.safely_reduce_losses(loss_z) * self.loss_w_z * self.loss_w_3d,
-                })
-
-            if loss_pose is not None:
-                
-                losses.update({
-                    prefix + 'loss_pose': self.safely_reduce_losses(loss_pose) * self.loss_w_pose * self.loss_w_3d, 
-                })
 
         total_3D_loss_for_reporting = loss_dims*self.loss_w_dims
 

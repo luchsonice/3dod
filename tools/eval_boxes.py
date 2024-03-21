@@ -74,6 +74,7 @@ def inference_on_dataset_custom(model, data_loader):
         stack.enter_context(torch.no_grad())
 
         for idx, inputs in enumerate(data_loader):
+            # model should be modified in cubercnn.modeling.roi_heads.cube_head.py class CubeHead_Vanilla forward function"
             outputs = model(inputs)
             for input, output in zip(inputs, outputs):
 
@@ -93,6 +94,8 @@ def inference_on_dataset_custom(model, data_loader):
 
     return inference_json
 
+def mean_average_best_overlap(model, data_loader):
+    pass
 
 
 def do_test(cfg, model, iteration='final', storage=None):
