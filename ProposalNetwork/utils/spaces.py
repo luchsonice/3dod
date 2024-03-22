@@ -104,11 +104,11 @@ class Cube:
         self.rotation = R
 
         if self.dimensions[0] < 0:
-            raise ValueError('Width must be greater than 0. Did you make sure that the input is in the correct order? (c1, c2, c3, w, h, l, p)')
+            raise ValueError('Width must be greater than 0.')
         if self.dimensions[1] < 0:
-            raise ValueError('Height must be greater than 0. Did you make sure that the input is in the correct order? (c1, c2, c3, w, h, l, p)')
+            raise ValueError('Height must be greater than 0.')
         if self.dimensions[2] < 0:
-            raise ValueError('Length must be greater than 0. Did you make sure that the input is in the correct order? (c1, c2, c3, w, h, l, p)')
+            raise ValueError('Length must be greater than 0.')
         
         if self.rotation.shape != (3,3):
             raise ValueError('Rotation must be a 3x3 matrix.')

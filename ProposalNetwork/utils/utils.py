@@ -39,7 +39,15 @@ def compute_rotation_matrix_from_ortho6d(poses):
 
     return matrix
 
-def make_cube(x_range, y_range, z_range, w_range, h_range, l_range, im_shape):
+def sample_normal_greater_than(mean, std, threshold):
+    samples = []
+    while len(samples) < 1:
+        sample = np.random.normal(mean, std)
+        if sample > threshold:
+            samples.append(sample)
+    return samples[0]
+
+def make_cube(x_range, y_range, z_range, w_prior, h_prior, l_prior):
     '''
     need xyz, whl, and pose (R)
     '''
@@ -50,9 +58,9 @@ def make_cube(x_range, y_range, z_range, w_range, h_range, l_range, im_shape):
     xyz = torch.tensor([x, y, z])
 
     # whl
-    w = (w_range[0]-w_range[1]) * torch.rand(1) + w_range[1]
-    h = (h_range[0]-h_range[1]) * torch.rand(1) + h_range[1]
-    l = (l_range[0]-l_range[1]) * torch.rand(1) + l_range[1]
+    w = np.log(sample_normal_greater_than(w_prior[0],w_prior[1],0.1)/w_prior[0]) + 1
+    h = np.log(sample_normal_greater_than(h_prior[0],h_prior[1],0.1)/h_prior[0]) + 1
+    l = np.log(sample_normal_greater_than(l_prior[0],l_prior[1],0.05)/l_prior[0]) + 1
     whl = torch.tensor([w, h, l])
 
     # R
