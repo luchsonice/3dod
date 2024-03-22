@@ -46,8 +46,12 @@ def make_cube(x_range, y_range, z_range, w_range, h_range, l_range, im_shape):
     # xyz
     x = (x_range[0]-x_range[1]) * torch.rand(1) + x_range[1]
     y = (y_range[0]-y_range[1]) * torch.rand(1) + y_range[1]
-    z = (z_range[0]-z_range[1]) * torch.rand(1) + z_range[1]
-    z = 1.618
+
+    device = 'cpu'
+    if type(z_range[0]) == torch.Tensor:
+        device = z_range[0].device
+    z = (z_range[0]-z_range[1]) * torch.rand(1, device=device) + z_range[1]
+    # z = 1.618
     xyz = torch.tensor([x, y, z])
 
     # whl
