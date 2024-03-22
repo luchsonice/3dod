@@ -1,6 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates
 import logging
 from detectron2.data.detection_utils import convert_image_to_rgb
+from matplotlib import pyplot as plt
 import numpy as np
 import cv2
 from typing import Dict, List, Tuple
@@ -26,7 +27,7 @@ from ProposalNetwork.utils.spaces import Box
 from cubercnn.modeling.roi_heads.cube_head import build_cube_head
 from cubercnn.modeling.proposal_generator.rpn import subsample_labels
 from cubercnn.modeling.roi_heads.fast_rcnn import FastRCNNOutputs
-from cubercnn import util
+from cubercnn import util, vis
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +228,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             # we can utilise the fact that the objectness_logits are sorted
             for instance in pred_instances:
                 for i, score in enumerate(instance.scores):
-                    if score < 0.5: # TODO: is is correct to only select those with a score > 0.5?
+                    if score < 0.1: # TODO: is is correct to only select those with a score > 0.5?
                         pred_boxes = instance.pred_boxes[:i]
                         scores = instance.scores[:i]
                         scores_full = instance.scores_full[:i]
@@ -246,10 +247,10 @@ class ROIHeads_Boxer(StandardROIHeads):
                 segmentor.set_image(img)
                 for i, box in enumerate(instance.proposal_boxes): # over all predicted boxes in image
                     # TODO: maybe modify SAM to accept tensors?? 
-                    mask_per_image[i], _, _ = segmentor.predict(box=box.numpy(), multimask_output=False)
+                    mask_per_image[i], _, _ = segmentor.predict(box=box.cpu().numpy(), multimask_output=False)
 
             if self.loss_w_3d > 0:
-                pred_instances = self._forward_cube(images, mask_per_image, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio)
+                pred_instances = self._forward_cube(images, images_raw, mask_per_image, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio)
             return pred_instances, {}
     
 
@@ -330,7 +331,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         return proposal_boxes_scaled
     
-    def _forward_cube(self, images, mask_per_image, depth_maps, features, instances, Ks, im_current_dims, im_scales_ratio):
+    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, features, instances, Ks, im_current_dims, im_scales_ratio):
         
         features = [features[f] for f in self.in_features]
 
@@ -441,11 +442,12 @@ class ROIHeads_Boxer(StandardROIHeads):
         cube_dims = torch.zeros(n, 3)
         cube_pose = torch.zeros(n, 3, 3)
         cube_z = torch.zeros(n)
+        pred_cube_meshes = []
         for i, proposal in enumerate(proposal_boxes_scaled[0]): ## NOTE:this works assuming batch_size=1
-            reference_box = Box(proposal)
-            pred_cubes = propose(reference_box, depth_maps.tensor, Ks_scaled_per_box[i], images.tensor.shape[2:], number_of_proposals=number_of_proposals)
+            reference_box = Box(proposal.cpu())
+            pred_cubes = propose(reference_box, depth_maps.tensor.cpu(), Ks_scaled_per_box[i].cpu(), images.tensor.shape[2:], number_of_proposals=number_of_proposals)
 
-            segment_scores = [score_segmentation(pred_cubes[j].get_bube_corners(Ks_scaled_per_box[i]), mask_per_image[0]) for j in range(number_of_proposals)]
+            segment_scores = [score_segmentation(pred_cubes[j].get_bube_corners(Ks_scaled_per_box[i].cpu()), mask_per_image[0]) for j in range(number_of_proposals)]
             highest_score = np.argmax(segment_scores)
 
             pred_cube = pred_cubes[highest_score]
@@ -454,8 +456,23 @@ class ROIHeads_Boxer(StandardROIHeads):
             cube_dims[i] = pred_cube.dimensions
             cube_pose[i] = pred_cube.rotation
             cube_z[i] = pred_cube.center[2]
+
+            pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
         # ################
         
+        cube_dims = cube_dims.to(cube_features.device)
+        cube_pose = cube_pose.to(cube_features.device)
+        cube_z = cube_z.to(cube_features.device)
+
+        # ## for debugging
+        meshes_text = ['highest segment']
+
+        fig, ax = plt.subplots()
+        prop_img = images_raw.tensor[0].permute(1, 2, 0).cpu().numpy().copy()
+        img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, Ks_scaled_per_box[0].cpu().numpy(), pred_cube_meshes,text=meshes_text, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0])
+        im_concat = np.concatenate((img_3DPR, img_novel), axis=1)
+        vis_img_3d = img_3DPR.astype(np.uint8)
+        ax.imshow(vis_img_3d)
         
         # cube_2d_deltas = cube_2d_deltas[fg_inds, box_classes, :]
         
@@ -467,23 +484,26 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         cube_dims_norm = cube_dims
         
-        # if self.dims_priors_enabled:
+        if self.dims_priors_enabled:
 
-        #     # gather prior dimensions
-        #     prior_dims = self.priors_dims_per_cat.detach().repeat([n, 1, 1, 1])[fg_inds, box_classes]
-        #     prior_dims_mean = prior_dims[:, 0, :]
-        #     prior_dims_std = prior_dims[:, 1, :]
+            # gather prior dimensions
+            # prior_dims = self.priors_dims_per_cat.detach().repeat([n, 1, 1, 1])[fg_inds, box_classes]
+            prior_dims = self.priors_dims_per_cat.detach()
+            prior_dims = prior_dims[:, box_classes, :, :].squeeze(0)
+            prior_dims_mean = prior_dims[:, 0, :]
+            prior_dims_std = prior_dims[:, 1, :]
 
-        #     if self.dims_priors_func == 'sigmoid':
-        #         prior_dims_min = (prior_dims_mean - 3*prior_dims_std).clip(0.0)
-        #         prior_dims_max = (prior_dims_mean + 3*prior_dims_std)
-        #         cube_dims = util.scaled_sigmoid(cube_dims_norm, min=prior_dims_min, max=prior_dims_max)
-        #     elif self.dims_priors_func == 'exp':
-        #         cube_dims = torch.exp(cube_dims_norm.clip(max=5)) * prior_dims_mean
+            if self.dims_priors_func == 'sigmoid':
+                prior_dims_min = (prior_dims_mean - 3*prior_dims_std).clip(0.0)
+                prior_dims_max = (prior_dims_mean + 3*prior_dims_std)
+                cube_dims = util.scaled_sigmoid(cube_dims_norm, min=prior_dims_min, max=prior_dims_max)
+            elif self.dims_priors_func == 'exp':
+                cube_dims = cube_dims_norm.clip(max=5) * prior_dims_mean
+                # cube_dims = torch.exp(cube_dims_norm.clip(max=5)) * prior_dims_mean
 
         # else:
         #     # no priors are used
-        cube_dims = torch.exp(cube_dims_norm.clip(max=5))
+        # cube_dims = torch.exp(cube_dims_norm.clip(max=5))
         
         if self.allocentric_pose:
             
