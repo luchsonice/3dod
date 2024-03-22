@@ -62,27 +62,28 @@ def propose_tighter_dimensions(reference_box, depth_image, K_scaled, im_shape, n
     
     return list_of_cubes
 
-def propose(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=1):
+def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1):
     '''
     Proposes a cube. The ranges are largely random, except for that the center needs to be inside the reference box.
     Also, objects have a length, width and height according to priors.
+
+    priors = [prior_mean, prior_std] 2x3
     '''
     x_range = pixel_to_normalised_space([reference_box.x1,reference_box.x2],[im_shape[0],im_shape[0]])[0]
     y_range = pixel_to_normalised_space([reference_box.y1,reference_box.y2],[im_shape[1],im_shape[1]])[0]
+    z_range = [depth_image.min(), depth_image.max()]
 
-    # TODO Should be priors in some way. This is still too random for a realistic approach
     width = x_range[1]-x_range[0]
     height = y_range[1]-y_range[0]
     w_range = torch.tensor([0.1,width])
     h_range = torch.tensor([0.1,height])
     l_range = torch.tensor([0.1,height])
 
-    # Get z range
-    x_range_px = normalised_space_to_pixel(x_range,[im_shape[0],im_shape[0]])
-    y_range_px = normalised_space_to_pixel(y_range,[im_shape[1],im_shape[1]])
-    # depth_patch = depth_image[x_range_px[0]:x_range_px[1], y_range_px[0]:y_range_px[1]]
-    z_range = [depth_image.min(), depth_image.max()]
-    #z_range = [np.min(depth_patch), np.max(depth_patch)]
+    # Should also have min and max
+    # Conversion from meter to norm space missing
+    w_range = torch.tensor([priors[0][0] - 2*priors[1][0], priors[0][0] + 2*priors[1][0]])
+    h_range = torch.tensor([priors[0][1] - 2*priors[1][1], priors[0][1] + 2*priors[1][1]])
+    l_range = torch.tensor([priors[0][2] - 2*priors[1][2], priors[0][2] + 2*priors[1][2]])
 
     # Don't know if that is a good idea, i.e. removing the outer 20% on each side of the center proposals
     x_range = [x_range[0]+width/5,x_range[1]-width/5]
@@ -93,5 +94,11 @@ def propose(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=
         pred_xyz, pred_whl, pred_pose = make_cube(x_range,y_range,z_range,w_range,h_range,l_range,im_shape)
         pred_cube = Cube(torch.cat((pred_xyz, pred_whl), dim=0),pred_pose)
         list_of_cubes.append(pred_cube)
+
+
+    # TODO whl Should be priors in some way. This is still too random for a realistic approach
+    # TODO l should be aspect ratio
+    # TODO proposal should be different enough from each other, grid search?
+    # TODO normal distributed center instead of range? 
     
     return list_of_cubes
