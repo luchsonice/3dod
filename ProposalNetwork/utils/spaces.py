@@ -60,6 +60,10 @@ class Box:
         bl = [self.x1, self.y2]
 
         return torch.tensor([ul, ur, br, bl])
+    
+    def __repr__(self) -> str:
+        def __repr__(self) -> str:
+            return f'Box({self.x1:.1f}, {self.y1:.1f}, {self.x2:.1f}, {self.y2:.1f})'
 
 
 class Cube:
@@ -122,3 +126,10 @@ class Cube:
         cube_corners = self.get_all_corners()
         cube_corners = torch.mm(K, cube_corners.t()).t()
         return cube_corners[:,:2]/cube_corners[:,2].unsqueeze(1)
+    
+    def get_cuboid_verts_faces(self):
+        '''wrap ``util.get_cuboid_verts_faces``'''
+        return util.get_cuboid_verts_faces(torch.cat((self.center,self.dimensions)), self.rotation)
+    
+    def __repr__(self) -> str:
+        return f'Cube({self.center}, {self.dimensions}, {self.rotation})'

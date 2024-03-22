@@ -23,7 +23,7 @@ class DatasetMapper3D(DatasetMapper):
         
         image = detection_utils.read_image(dataset_dict["file_name"], format=self.image_format)
         detection_utils.check_image_size(dataset_dict, image)
-        dp_img = Image.fromarray(np.load(dataset_dict["depth_image"])['depth'])
+        dp_img = Image.fromarray(np.load(dataset_dict["depth_image_path"])['depth'])
 
         aug_input = T.AugInput(image)
         transforms = self.augmentations(aug_input)

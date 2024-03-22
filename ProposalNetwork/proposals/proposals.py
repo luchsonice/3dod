@@ -80,8 +80,8 @@ def propose(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=
     # Get z range
     x_range_px = normalised_space_to_pixel(x_range,[im_shape[0],im_shape[0]])
     y_range_px = normalised_space_to_pixel(y_range,[im_shape[1],im_shape[1]])
-    depth_patch = depth_image[x_range_px[0]:x_range_px[1], y_range_px[0]:y_range_px[1]]
-    z_range = [np.min(depth_image), np.max(depth_image)]
+    # depth_patch = depth_image[x_range_px[0]:x_range_px[1], y_range_px[0]:y_range_px[1]]
+    z_range = [depth_image.min(), depth_image.max()]
     #z_range = [np.min(depth_patch), np.max(depth_patch)]
 
     # Don't know if that is a good idea, i.e. removing the outer 20% on each side of the center proposals

@@ -5,6 +5,7 @@ import logging
 import os
 from detectron2.evaluation.evaluator import inference_context
 import numpy as np
+from segment_anything import sam_model_registry, SamPredictor
 import torch
 import datetime
 import detectron2.utils.comm as comm
@@ -18,7 +19,9 @@ from detectron2.engine import (
 from detectron2.utils.logger import setup_logger
 import wandb
 import torch.nn as nn
+from rich.progress import track
 
+from cubercnn.data.dataset_mapper import DatasetMapper3D
 from cubercnn.evaluation.omni3d_evaluation import instances_to_coco_json
 
 logger = logging.getLogger("cubercnn")
@@ -40,9 +43,24 @@ from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
 
 MAX_TRAINING_ATTEMPTS = 10
 
+def init_segmentation(device='cpu'):
+    # 1) first cd into the segment_anything and pip install -e .
+    # to get the model stary in the root foler folder and run the download_model.sh 
+    # 2) chmod +x download_model.sh && ./download_model.sh
+    # the largest model: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
+    # this is the smallest model
+    sam_checkpoint = "segment-anything/sam_vit_b_01ec64.pth"
+    model_type = "vit_b"
+    device = device
+
+    sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
+    sam.to(device=device)
+
+    predictor = SamPredictor(sam)
+    return predictor
 
 
-def inference_on_dataset_custom(model, data_loader):
+def inference_on_dataset_custom(model, data_loader, segmentor):
     """
     Run model on the data_loader. 
     Also benchmark the inference speed of `model.__call__` accurately.
@@ -73,9 +91,10 @@ def inference_on_dataset_custom(model, data_loader):
             stack.enter_context(inference_context(model))
         stack.enter_context(torch.no_grad())
 
-        for idx, inputs in enumerate(data_loader):
+        for idx, inputs in track(enumerate(data_loader), description="Inference", total=total):
             # model should be modified in cubercnn.modeling.roi_heads.cube_head.py class CubeHead_Vanilla forward function"
-            outputs = model(inputs)
+
+            outputs = model(inputs, segmentor)
             for input, output in zip(inputs, outputs):
 
                 prediction = {
@@ -91,6 +110,8 @@ def inference_on_dataset_custom(model, data_loader):
 
                 # store in overall predictions
                 inference_json.append(prediction)
+            if idx > 2:
+                break
 
     return inference_json
 
@@ -118,6 +139,8 @@ def do_test(cfg, model, iteration='final', storage=None):
         only_2d=only_2d,
     )
 
+    segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
+
     for dataset_name in dataset_names_test:
         """
         Cycle through each dataset and test them individually.
@@ -128,8 +151,10 @@ def do_test(cfg, model, iteration='final', storage=None):
         '''
         Distributed Cube R-CNN inference
         '''
-        data_loader = build_detection_test_loader(cfg, dataset_name, num_workers=2)
-        results_json = inference_on_dataset_custom(model, data_loader)
+        # we need the dataset mapper to get 
+        data_mapper = DatasetMapper3D(cfg, is_train=False)
+        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=1)
+        results_json = inference_on_dataset_custom(model, data_loader, segmentor)
 
         '''
         Individual dataset evaluation

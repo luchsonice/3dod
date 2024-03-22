@@ -1,5 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates
 from typing import Dict, List, Optional
+from detectron2.structures.image_list import ImageList
 import torch
 import numpy as np
 from detectron2.layers import ShapeSpec, batched_nms
@@ -264,11 +265,24 @@ class BoxNet(RCNN3D):
             "pixel_std": cfg.MODEL.PIXEL_STD,
         }
 
+    def preprocess_image(self, batched_inputs: List[Dict[str, torch.Tensor]], normalise=True, img_type="image"):
+        """
+        Normalize, pad and batch the input images.
+        """
+        images = [self._move_to_current_device(x[img_type]) for x in batched_inputs]
+        if normalise:
+            images = [(x - self.pixel_mean) / self.pixel_std for x in images]
+        images = ImageList.from_tensors(
+            images,
+            self.backbone.size_divisibility,
+            padding_constraints=self.backbone.padding_constraints,
+        )
+        return images
 
-    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]]):
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor):
         
         if not self.training:
-            return self.inference(batched_inputs)
+            return self.inference(batched_inputs, segmentor=segmentor)
 
         images = self.preprocess_image(batched_inputs)
 
@@ -305,6 +319,39 @@ class BoxNet(RCNN3D):
         losses.update(detector_losses)
         losses.update(proposal_losses)
         return losses
+    
+    def inference(self,
+        batched_inputs: List[Dict[str, torch.Tensor]],
+        detected_instances: Optional[List[Instances]] = None, do_postprocess: bool = True, segmentor=None):
+        assert not self.training
+
+        # must apply the same preprocessing to both the image, the depth map, and the mask
+        # except don't normalise the input for the segmentation method
+        images = self.preprocess_image(batched_inputs)
+        images_raw = self.preprocess_image(batched_inputs, normalise=False)
+        depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False)
+
+
+        # scaling factor for the sample relative to its original scale
+        # e.g., how much has the image been upsampled by? or downsampled?
+        im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
+        
+        # The unmodified intrinsics for the image
+        Ks = [torch.FloatTensor(info['K']) for info in batched_inputs]
+
+        features = self.backbone(images.tensor)
+        # normal inference
+        proposals, _ = self.proposal_generator(images, features, None)
+           
+        # use the mask and the 2D box to predict the 3D box
+        results, _ = self.roi_heads(images, images_raw, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor)
+        
+        # postprocess the images to be the same shape as the original
+        if do_postprocess:
+            assert not torch.jit.is_scripting(), "Scripting is not supported for postprocess."
+            return GeneralizedRCNN._postprocess(results, batched_inputs, images.image_sizes)
+        else:
+            return results
 
 def build_model(cfg, priors=None):
     """

@@ -2,6 +2,7 @@
 from detectron2.utils.registry import Registry
 from typing import Dict
 from detectron2.layers import ShapeSpec
+from segment_anything.predictor import SamPredictor
 from torch import nn
 import torch
 import numpy as np
@@ -13,6 +14,10 @@ from pytorch3d.transforms import (
     euler_angles_to_matrix, 
     quaternion_to_matrix
 )
+
+from ProposalNetwork.proposals.proposals import propose
+from ProposalNetwork.utils.conversions import cube_to_box
+from ProposalNetwork.utils.utils import iou_3d
 
 ROI_CUBE_HEAD_REGISTRY = Registry("ROI_CUBE_HEAD")
 
@@ -229,7 +234,7 @@ class CubeHead_vanilla(nn.Module):
 
         self._output_size = (input_shape.channels, input_shape.height, input_shape.width)
 
- 
+
 
     def forward(self, x):
     
@@ -244,7 +249,19 @@ class CubeHead_vanilla(nn.Module):
         # TODO: implement the cube prediction method here
         # we definitely need to return the following:
         # box_z, box_dims, box_pose. I think the others can be None for now
+        x_points = [1, 10, 100, 1000]#, 10000, 100000]
+        number_of_proposals = x_points[-1]
+        pred_cubes = propose(reference_box, depth_image, K_scaled, img.shape[:2],number_of_proposals=number_of_proposals)
+        proposed_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_proposals)]
 
+        # OB IoU3D
+        IoU3D = iou_3d(gt_cube_,pred_cubes)
+        max_values3D = [np.max(IoU3D[:n]) for n in x_points]
+        idx_scores3D = [np.argmax(IoU3D[:n]) for n in x_points]
+        max_scores3D = [IoU3D[i] for i in idx_scores3D]
+        idx_highest_iou3D = idx_scores3D[-1]
+
+        pred_meshes = [pred_cubes[idx_highest_iou3D].get_cube().__getitem__(0).detach()]
 
         # ####
 

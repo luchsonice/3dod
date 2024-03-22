@@ -1,5 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates
 import logging
+from detectron2.data.detection_utils import convert_image_to_rgb
 import numpy as np
 import cv2
 from typing import Dict, List, Tuple
@@ -18,6 +19,10 @@ from detectron2.modeling.roi_heads import (
     StandardROIHeads, ROI_HEADS_REGISTRY, select_foreground_proposals,
 )
 from detectron2.modeling.poolers import ROIPooler
+from ProposalNetwork.proposals.proposals import propose
+from ProposalNetwork.scoring.scorefunction import score_segmentation
+from ProposalNetwork.utils.conversions import cube_to_box
+from ProposalNetwork.utils.spaces import Box
 from cubercnn.modeling.roi_heads.cube_head import build_cube_head
 from cubercnn.modeling.proposal_generator.rpn import subsample_labels
 from cubercnn.modeling.roi_heads.fast_rcnn import FastRCNNOutputs
@@ -108,6 +113,17 @@ class ROIHeads_Boxer(StandardROIHeads):
         self.dims_priors_func = dims_priors_func
 
 
+        if loss_w_3d > 0:
+            self.cube_head = cube_head
+            self.cube_pooler = cube_pooler
+            
+            # the dimensions could rely on pre-computed priors
+            if self.dims_priors_enabled and priors is not None:
+                self.priors_dims_per_cat = nn.Parameter(torch.FloatTensor(priors['priors_dims_per_cat']).unsqueeze(0))
+            else:
+                self.priors_dims_per_cat = nn.Parameter(torch.ones(1, self.num_classes, 2, 3))
+
+
     @classmethod
     def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec], priors=None):
         
@@ -169,12 +185,9 @@ class ROIHeads_Boxer(StandardROIHeads):
             'scale_roi_boxes': cfg.MODEL.ROI_CUBE_HEAD.SCALE_ROI_BOXES,
         }
 
-
-    def forward(self, images, features, proposals, Ks, im_scales_ratio, targets=None):
+    def forward(self, images, images_raw, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, targets=None):
 
         im_dims = [image.shape[1:] for image in images]
-
-        del images
 
         if self.training:
             proposals = self.label_and_sample_proposals(proposals, targets)
@@ -185,7 +198,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             losses = self._forward_box(features, proposals)
             if self.loss_w_3d > 0:
-                instances_3d, losses_cube = self._forward_cube(features, proposals, Ks, im_dims, im_scales_ratio)
+                instances_3d, losses_cube = self._forward_cube(images, features, proposals, Ks, im_dims, im_scales_ratio)
                 losses.update(losses_cube)
 
             return instances_3d, losses
@@ -207,8 +220,36 @@ class ROIHeads_Boxer(StandardROIHeads):
             else:
                 pred_instances = self._forward_box(features, proposals)
             
+            # we only want proposals with a logit > 0, maybe this corresponds to points with a score > 0.5???
+            # as a logit of 0 indicates that the odds of the event occurring are equal to the odds of the event not occurring
+            # https://deepai.org/machine-learning-glossary-and-terms/logit
+            # iterate over proposals until one with a objectness_logits < 0 is found and take the ones preceeding it
+            # we can utilise the fact that the objectness_logits are sorted
+            for instance in pred_instances:
+                for i, score in enumerate(instance.scores):
+                    if score < 0.5: # TODO: is is correct to only select those with a score > 0.5?
+                        pred_boxes = instance.pred_boxes[:i]
+                        scores = instance.scores[:i]
+                        scores_full = instance.scores_full[:i]
+                        pred_classes = instance.pred_classes[:i]
+
+                        instance.remove('pred_boxes'); instance.remove('scores'); instance.remove('scores_full'); instance.remove('pred_classes')
+                        instance.pred_boxes = pred_boxes; instance.scores = scores; instance.scores_full = scores_full; instance.pred_classes = pred_classes
+                        break
+        
+            # mask for each proposal
+            # NOTE: at the the moment the this assumes a batch size of 1, since the test loader has it hardcoded
+            for img, instance in zip(images_raw.tensor, proposals): # over all images in batch
+                mask_per_image = np.zeros((len(instance), images_raw.tensor.shape[2], images_raw.tensor.shape[3]))
+                img = convert_image_to_rgb(img.permute(1, 2, 0), 'BGR')
+
+                segmentor.set_image(img)
+                for i, box in enumerate(instance.proposal_boxes): # over all predicted boxes in image
+                    # TODO: maybe modify SAM to accept tensors?? 
+                    mask_per_image[i], _, _ = segmentor.predict(box=box.numpy(), multimask_output=False)
+
             if self.loss_w_3d > 0:
-                pred_instances = self._forward_cube(features, pred_instances, Ks, im_dims, im_scales_ratio)
+                pred_instances = self._forward_cube(images, mask_per_image, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio)
             return pred_instances, {}
     
 
@@ -289,7 +330,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         return proposal_boxes_scaled
     
-    def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio):
+    def _forward_cube(self, images, mask_per_image, depth_maps, features, instances, Ks, im_current_dims, im_scales_ratio):
         
         features = [features[f] for f in self.in_features]
 
@@ -391,50 +432,58 @@ class ROIHeads_Boxer(StandardROIHeads):
         
         # forward predictions
         # implement all actual 3D cube prediction in the CubeHead_vanilla class
-        cube_2d_deltas, cube_z, cube_dims, cube_pose, cube_uncert = self.cube_head(cube_features)
-        
-        # simple indexing re-used commonly for selection purposes
-        fg_inds = torch.arange(n)
-        if cube_z is not None:
+        # cube_2d_deltas, cube_z, cube_dims, cube_pose, cube_uncert = self.cube_head(cube_features)
 
-            # if z is available, collect the per-category predictions.
-            cube_z = cube_z[fg_inds, box_classes, :]
-            
-        cube_dims = cube_dims[fg_inds, box_classes, :]
-        cube_pose = cube_pose[fg_inds, box_classes, :, :]
+        # ###### this functionality should prob be implemented in the self.cube_head.forward() ######
 
-        if self.use_confidence:
-            
-            # if uncertainty is available, collect the per-category predictions.
-            cube_uncert = cube_uncert[fg_inds, box_classes]
+        # x_points = 1000 # [1, 10, 100, 1000]#, 10000, 100000]
+        number_of_proposals = 1000
+        cube_dims = torch.zeros(n, 3)
+        cube_pose = torch.zeros(n, 3, 3)
+        cube_z = torch.zeros(n)
+        for i, proposal in enumerate(proposal_boxes_scaled[0]): ## NOTE:this works assuming batch_size=1
+            reference_box = Box(proposal)
+            pred_cubes = propose(reference_box, depth_maps.tensor, Ks_scaled_per_box[i], images.tensor.shape[2:], number_of_proposals=number_of_proposals)
+
+            segment_scores = [score_segmentation(pred_cubes[j].get_bube_corners(Ks_scaled_per_box[i]), mask_per_image[0]) for j in range(number_of_proposals)]
+            highest_score = np.argmax(segment_scores)
+
+            pred_cube = pred_cubes[highest_score]
+
+            # (n_boxes, the thing arrays)
+            cube_dims[i] = pred_cube.dimensions
+            cube_pose[i] = pred_cube.rotation
+            cube_z[i] = pred_cube.center[2]
+        # ################
         
-        cube_2d_deltas = cube_2d_deltas[fg_inds, box_classes, :]
+        
+        # cube_2d_deltas = cube_2d_deltas[fg_inds, box_classes, :]
         
         # apply our predicted deltas based on src boxes.
-        cube_x = src_ctr_x + src_widths * cube_2d_deltas[:, 0]
-        cube_y = src_ctr_y + src_heights * cube_2d_deltas[:, 1]
+        cube_x = src_ctr_x + src_widths
+        cube_y = src_ctr_y + src_heights
         
         cube_xy = torch.cat((cube_x.unsqueeze(1), cube_y.unsqueeze(1)), dim=1)
 
         cube_dims_norm = cube_dims
         
-        if self.dims_priors_enabled:
+        # if self.dims_priors_enabled:
 
-            # gather prior dimensions
-            prior_dims = self.priors_dims_per_cat.detach().repeat([n, 1, 1, 1])[fg_inds, box_classes]
-            prior_dims_mean = prior_dims[:, 0, :]
-            prior_dims_std = prior_dims[:, 1, :]
+        #     # gather prior dimensions
+        #     prior_dims = self.priors_dims_per_cat.detach().repeat([n, 1, 1, 1])[fg_inds, box_classes]
+        #     prior_dims_mean = prior_dims[:, 0, :]
+        #     prior_dims_std = prior_dims[:, 1, :]
 
-            if self.dims_priors_func == 'sigmoid':
-                prior_dims_min = (prior_dims_mean - 3*prior_dims_std).clip(0.0)
-                prior_dims_max = (prior_dims_mean + 3*prior_dims_std)
-                cube_dims = util.scaled_sigmoid(cube_dims_norm, min=prior_dims_min, max=prior_dims_max)
-            elif self.dims_priors_func == 'exp':
-                cube_dims = torch.exp(cube_dims_norm.clip(max=5)) * prior_dims_mean
+        #     if self.dims_priors_func == 'sigmoid':
+        #         prior_dims_min = (prior_dims_mean - 3*prior_dims_std).clip(0.0)
+        #         prior_dims_max = (prior_dims_mean + 3*prior_dims_std)
+        #         cube_dims = util.scaled_sigmoid(cube_dims_norm, min=prior_dims_min, max=prior_dims_max)
+        #     elif self.dims_priors_func == 'exp':
+        #         cube_dims = torch.exp(cube_dims_norm.clip(max=5)) * prior_dims_mean
 
-        else:
-            # no priors are used
-            cube_dims = torch.exp(cube_dims_norm.clip(max=5))
+        # else:
+        #     # no priors are used
+        cube_dims = torch.exp(cube_dims_norm.clip(max=5))
         
         if self.allocentric_pose:
             
@@ -529,18 +578,15 @@ class ROIHeads_Boxer(StandardROIHeads):
                     loss_joint *= inverse_z_w
 
 
-        total_3D_loss_for_reporting = loss_dims*self.loss_w_dims
+        # total_3D_loss_for_reporting = loss_dims*self.loss_w_dims
 
-        if not loss_pose is None:
-            total_3D_loss_for_reporting += loss_pose*self.loss_w_pose
+        # if not loss_pose is None:
+        #     total_3D_loss_for_reporting += loss_pose*self.loss_w_pose
 
-        if not cube_2d_deltas is None:
-            total_3D_loss_for_reporting += loss_xy*self.loss_w_xy
+        # if not loss_z is None:
+        #     total_3D_loss_for_reporting += loss_z*self.loss_w_z
 
-        if not loss_z is None:
-            total_3D_loss_for_reporting += loss_z*self.loss_w_z
-
-        total_3D_loss_for_reporting = total_3D_loss_for_reporting.detach()
+        # total_3D_loss_for_reporting = total_3D_loss_for_reporting.detach()
 
         '''
         Inference
@@ -553,9 +599,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         cube_y3d = cube_z * (cube_y - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
         cube_3D = torch.cat((torch.stack((cube_x3d, cube_y3d, cube_z)).T, cube_dims, cube_xy*im_ratios_per_box.unsqueeze(1)), dim=1)
 
-        if self.use_confidence:
-            cube_conf = torch.exp(-cube_uncert)
-            cube_3D = torch.cat((cube_3D, cube_conf.unsqueeze(1)), dim=1)
 
         # convert the predictions to intances per image
         cube_3D = cube_3D.split(num_boxes_per_image)
@@ -571,12 +614,12 @@ class ROIHeads_Boxer(StandardROIHeads):
             zip(cube_3D, cube_pose, pred_instances, Ks, im_current_dims, im_scales_ratio, box_classes, pred_boxes):
             
             # merge scores if they already exist
-            if hasattr(instances_i, 'scores'):
-                instances_i.scores = (instances_i.scores * cube_3D_i[:, -1])**(1/2)
+            # if hasattr(instances_i, 'scores'):
+            #     instances_i.scores = (instances_i.scores * cube_3D_i[:, -1])**(1/2)
             
             # assign scores if none are present
-            else:
-                instances_i.scores = cube_3D_i[:, -1]
+            # else:
+            #     instances_i.scores = cube_3D_i[:, -1]
             
             # assign box classes if none exist
             if not hasattr(instances_i, 'pred_classes'):
