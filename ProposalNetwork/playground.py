@@ -152,9 +152,9 @@ plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO_iou2d.png'),dpi=300,
 
 
 # Segment Score
-if os.path.exists('/work3/s194369/3dod/ProposalNetwork/mask.pkl'):
+if os.path.exists('ProposalNetwork/mask.pkl'):
       # load
-     with open('/work3/s194369/3dod/ProposalNetwork/mask.pkl', 'rb') as f:
+     with open('ProposalNetwork/mask.pkl', 'rb') as f:
         masks = pickle.load(f)
 else:
     predictor.set_image(img)
@@ -167,7 +167,7 @@ else:
         multimask_output=False,
     )
     # dump
-    with open('/work3/s194369/3dod/ProposalNetwork/mask.pkl', 'wb') as f:
+    with open('ProposalNetwork/mask.pkl', 'wb') as f:
         pickle.dump(masks, f)
 
 seg_mask = masks[0]
