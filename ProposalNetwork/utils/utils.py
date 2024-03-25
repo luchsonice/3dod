@@ -2,6 +2,7 @@ import torch
 from ProposalNetwork.utils.spaces import Box, Cube
 from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_space, normalised_space_to_pixel
 import numpy as np
+from cubercnn import util
 
 from detectron2.structures import pairwise_iou
 from pytorch3d.ops import box3d_overlap
@@ -40,12 +41,10 @@ def compute_rotation_matrix_from_ortho6d(poses):
     return matrix
 
 def sample_normal_greater_than(mean, std, threshold):
-    samples = []
-    while len(samples) < 1:
+    sample = np.random.normal(mean, std)
+    while sample < threshold:
         sample = np.random.normal(mean, std)
-        if sample > threshold:
-            samples.append(sample)
-    return samples[0]
+    return sample
 
 def make_cube(x_range, y_range, z_range, w_prior, h_prior, l_prior):
     '''
@@ -58,18 +57,22 @@ def make_cube(x_range, y_range, z_range, w_prior, h_prior, l_prior):
     device = 'cpu'
     if type(z_range[0]) == torch.Tensor:
         device = z_range[0].device
-    z = (z_range[0]-z_range[1]) * torch.rand(1, device=device) + z_range[1]
-    # z = 1.618
+    z = (z_range[0]-z_range[1]) * torch.rand(1, device=device) + z_range[1] # Make this grid like? hmmm
     xyz = torch.tensor([x, y, z])
 
     # whl
-    w = np.log(sample_normal_greater_than(w_prior[0],w_prior[1],0.1)/w_prior[0]) + 1
-    h = np.log(sample_normal_greater_than(h_prior[0],h_prior[1],0.1)/h_prior[0]) + 1
-    l = np.log(sample_normal_greater_than(l_prior[0],l_prior[1],0.05)/l_prior[0]) + 1
+    w = np.log(sample_normal_greater_than(w_prior[0],w_prior[1],0.1)/w_prior[0] + 1)
+    h = np.log(sample_normal_greater_than(h_prior[0],h_prior[1],0.1)/h_prior[0] + 1)
+    l = np.log(sample_normal_greater_than(l_prior[0],l_prior[1],0.05)/l_prior[0] + 1)
     whl = torch.tensor([w, h, l])
 
     # R
+    #rx = np.random.normal(0, 0.26) # normal dist mean=0 std=0.26
+    #ry = np.random.rand(1) * np.pi - np.pi/2 # pi/2 i hver retning
+    #rz = np.random.normal(0, 0.26) # normal dist mean=0 std=0.26
+    #rotation_matrix = util.euler2mat([rx,ry,rz])
     rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6))
+    
 
     return xyz, whl, rotation_matrix
 

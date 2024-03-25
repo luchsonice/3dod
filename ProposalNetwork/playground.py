@@ -87,6 +87,7 @@ gt_R = gt_instances[image].gt_poses[gt_obj]
 gt_cube_ = Cube(torch.cat([gt____whlxyz[6:],gt____whlxyz[3:6]]),gt_R)
 gt_cube = gt_cube_.get_cube()
 gt_z = gt_cube_.center[2]
+print('gt depth',gt_z)
 
 
 # image
@@ -106,6 +107,7 @@ reference_box = Box(proposals[image].proposal_boxes[0].tensor[0])
 depth_image = np.load(f"datasets/depth_maps/{batched_inputs[image]['image_id']}.npz")['depth']
 from skimage.transform import resize
 depth_image = resize(depth_image,(img.shape[0],img.shape[1]))
+depth_patch = depth_image[int(reference_box.x1):int(reference_box.x2),int(reference_box.y1):int(reference_box.y2)]
 
 
 
@@ -128,7 +130,7 @@ with open('filetransfer/priors.pkl', 'rb') as f:
 category = gt_instances[image].gt_classes[gt_obj]
 priors_propose = priors['priors_dims_per_cat'][category]
 
-pred_cubes = propose(reference_box, depth_image, priors_propose, img.shape[:2],number_of_proposals=number_of_proposals)
+pred_cubes = propose(reference_box, depth_patch, priors_propose, img.shape[:2],number_of_proposals=number_of_proposals)
 proposed_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_proposals)]
 
 # OB IoU3D
@@ -146,7 +148,7 @@ IoU2D = score_iou(gt_box, proposed_box)
 idx_scores_iou2d = np.argsort(IoU2D)
 sorted_iou2d_IoU = [IoU3D[i] for i in idx_scores_iou2d]
 iou2d_ious = [np.max(sorted_iou2d_IoU[:n]) for n in x_points]
-print('IoU2D score of best 3dIoU',IoU2D[idx_scores_iou2d[0]])
+print('IoU3D of best IoU2D score',sorted_iou2d_IoU[0])
 
 # Plotting
 plt.figure()
@@ -184,7 +186,7 @@ segment_scores = [score_segmentation(pred_cubes[i].get_bube_corners(K_scaled),se
 idx_scores_segment = np.argsort(segment_scores)
 sorted_segment_IoU = [IoU3D[i] for i in idx_scores_segment]
 segment_ious = [np.max(sorted_segment_IoU[:n]) for n in x_points]
-print('Segment score of best 3dIoU',segment_scores[idx_scores_segment[0]])
+print('IoU3D of best segment score',sorted_segment_IoU[0])
 
 # Plotting
 plt.figure()
@@ -202,14 +204,14 @@ plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO_segment.png'),dpi=30
 # OB Dimensions
 dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
 dim_scores = score_dimensions(category, dimensions)
-idx_scores_iou2d = np.argsort(IoU2D)
-sorted_iou2d_IoU = [IoU3D[i] for i in idx_scores_iou2d]
-iou2d_ious = [np.max(sorted_iou2d_IoU[:n]) for n in x_points]
-print('IoU2D score of best 3dIoU',IoU2D[idx_scores_iou2d[0]])
+idx_scores_dim = np.argsort(dim_scores)
+sorted_dim_IoU = [IoU3D[i] for i in idx_scores_dim]
+dim_ious = [np.max(sorted_dim_IoU[:n]) for n in x_points]
+print('IoU3D of best dim score',sorted_dim_IoU[0])
 
 # Plotting
 plt.figure()
-plt.plot(x_points, iou2d_ious, marker='o', linestyle='-',c='green') 
+plt.plot(x_points, dim_ious, marker='o', linestyle='-',c='green') 
 plt.grid(True)
 plt.xscale('log')
 plt.xlabel('Number of Proposals')
