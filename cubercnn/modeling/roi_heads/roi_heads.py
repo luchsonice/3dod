@@ -240,14 +240,20 @@ class ROIHeads_Boxer(StandardROIHeads):
         
             # mask for each proposal
             # NOTE: at the the moment the this assumes a batch size of 1, since the test loader has it hardcoded
-            for img, instance in zip(images_raw.tensor, proposals): # over all images in batch
-                mask_per_image = np.zeros((len(instance), images_raw.tensor.shape[2], images_raw.tensor.shape[3]))
+
+            masks = []
+            for img, instance in zip(images_raw.tensor, pred_instances): # over all images in batch
+                mask_per_image = torch.zeros((len(instance), 1, images_raw.tensor.shape[2], images_raw.tensor.shape[3]))
                 img = convert_image_to_rgb(img.permute(1, 2, 0), 'BGR')
 
                 segmentor.set_image(img)
-                for i, box in enumerate(instance.proposal_boxes): # over all predicted boxes in image
-                    # TODO: maybe modify SAM to accept tensors?? 
-                    mask_per_image[i], _, _ = segmentor.predict(box=box.cpu().numpy(), multimask_output=False)
+                transformed_boxes = segmentor.transform.apply_boxes_torch(instance.pred_boxes.tensor, images_raw.tensor.shape[2:])
+                mask_per_image, _, _ = segmentor.predict_torch(
+                    point_coords=None,
+                    point_labels=None,
+                    boxes=transformed_boxes,
+                    multimask_output=False,)
+                masks.append(mask_per_image)
 
             if self.loss_w_3d > 0:
                 pred_instances = self._forward_cube(images, images_raw, mask_per_image, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio)
@@ -430,6 +436,14 @@ class ROIHeads_Boxer(StandardROIHeads):
         pred_heights = pred_src_boxes[:, 3] - pred_src_boxes[:, 1]
         pred_src_x = (pred_src_boxes[:, 2] + pred_src_boxes[:, 0]) * 0.5
         pred_src_y = (pred_src_boxes[:, 3] + pred_src_boxes[:, 1]) * 0.5
+
+        if self.dims_priors_enabled:
+            # gather prior dimensions
+            # prior_dims = self.priors_dims_per_cat.detach().repeat([n, 1, 1, 1])[fg_inds, box_classes]
+            prior_dims = self.priors_dims_per_cat.detach()
+            prior_dims = prior_dims[:, box_classes, :, :].squeeze(0)
+            prior_dims_mean = prior_dims[:, 0, :]
+            prior_dims_std = prior_dims[:, 1, :]
         
         # forward predictions
         # implement all actual 3D cube prediction in the CubeHead_vanilla class
@@ -443,9 +457,11 @@ class ROIHeads_Boxer(StandardROIHeads):
         cube_pose = torch.zeros(n, 3, 3)
         cube_z = torch.zeros(n)
         pred_cube_meshes = []
+        mask_per_image = mask_per_image[0] # this should be looped over
         for i, proposal in enumerate(proposal_boxes_scaled[0]): ## NOTE:this works assuming batch_size=1
             reference_box = Box(proposal.cpu())
-            pred_cubes = propose(reference_box, depth_maps.tensor.cpu(), Ks_scaled_per_box[i].cpu(), images.tensor.shape[2:], number_of_proposals=number_of_proposals)
+            priors = [prior_dims_mean[i].cpu(), prior_dims_std[i].cpu()]
+            pred_cubes = propose(reference_box, depth_maps.tensor.cpu(), priors, images.tensor.shape[2:], number_of_proposals=number_of_proposals)
 
             segment_scores = [score_segmentation(pred_cubes[j].get_bube_corners(Ks_scaled_per_box[i].cpu()), mask_per_image[0]) for j in range(number_of_proposals)]
             highest_score = np.argmax(segment_scores)
@@ -465,7 +481,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         cube_z = cube_z.to(cube_features.device)
 
         # ## for debugging
-        meshes_text = ['highest segment']
+        meshes_text = ['highest segment'] * n
 
         fig, ax = plt.subplots()
         prop_img = images_raw.tensor[0].permute(1, 2, 0).cpu().numpy().copy()
@@ -485,13 +501,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         cube_dims_norm = cube_dims
         
         if self.dims_priors_enabled:
-
-            # gather prior dimensions
-            # prior_dims = self.priors_dims_per_cat.detach().repeat([n, 1, 1, 1])[fg_inds, box_classes]
-            prior_dims = self.priors_dims_per_cat.detach()
-            prior_dims = prior_dims[:, box_classes, :, :].squeeze(0)
-            prior_dims_mean = prior_dims[:, 0, :]
-            prior_dims_std = prior_dims[:, 1, :]
 
             if self.dims_priors_func == 'sigmoid':
                 prior_dims_min = (prior_dims_mean - 3*prior_dims_std).clip(0.0)
