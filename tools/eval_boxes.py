@@ -51,8 +51,7 @@ def init_segmentation(device='cpu'):
     # this is the smallest model
     sam_checkpoint = "segment-anything/sam_vit_b_01ec64.pth"
     model_type = "vit_b"
-    device = device
-
+    print('SAM device:', device)
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
 
@@ -60,7 +59,7 @@ def init_segmentation(device='cpu'):
     return predictor
 
 
-def inference_on_dataset_custom(model, data_loader, segmentor):
+def inference_on_dataset_custom(model, data_loader, segmentor, output_recall_scores:bool):
     """
     Run model on the data_loader. 
     Also benchmark the inference speed of `model.__call__` accurately.
@@ -94,7 +93,7 @@ def inference_on_dataset_custom(model, data_loader, segmentor):
         for idx, inputs in track(enumerate(data_loader), description="Inference", total=total):
             # model should be modified in cubercnn.modeling.roi_heads.cube_head.py class CubeHead_Vanilla forward function"
 
-            outputs = model(inputs, segmentor)
+            outputs = model(inputs, segmentor, output_recall_scores)
             for input, output in zip(inputs, outputs):
 
                 prediction = {
@@ -110,8 +109,6 @@ def inference_on_dataset_custom(model, data_loader, segmentor):
 
                 # store in overall predictions
                 inference_json.append(prediction)
-            if idx > 2:
-                break
 
     return inference_json
 
@@ -151,10 +148,49 @@ def do_test(cfg, model, iteration='final', storage=None):
         '''
         Distributed Cube R-CNN inference
         '''
+        dataset_paths = [os.path.join('datasets', 'Omni3D', name + '.json') for name in cfg.DATASETS.TEST]
+        datasets = data.Omni3D(dataset_paths, filter_settings=filter_settings)
+
+        # determine the meta data given the datasets used. 
+        data.register_and_store_model_metadata(datasets, cfg.OUTPUT_DIR, filter_settings)
+
+        thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
+        dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
+        
+        infos = datasets.dataset['info']
+
+        if type(infos) == dict:
+            infos = [datasets.dataset['info']]
+
+        dataset_id_to_unknown_cats = {}
+        possible_categories = set(i for i in range(cfg.MODEL.ROI_HEADS.NUM_CLASSES + 1))
+        
+        dataset_id_to_src = {}
+
+        for info in infos:
+            dataset_id = info['id']
+            known_category_training_ids = set()
+
+            if not dataset_id in dataset_id_to_src:
+                dataset_id_to_src[dataset_id] = info['source']
+
+            for id in info['known_category_ids']:
+                if id in dataset_id_to_contiguous_id:
+                    known_category_training_ids.add(dataset_id_to_contiguous_id[id])
+            
+            # determine and store the unknown categories.
+            unknown_categories = possible_categories - known_category_training_ids
+            dataset_id_to_unknown_cats[dataset_id] = unknown_categories
+
+
         # we need the dataset mapper to get 
-        data_mapper = DatasetMapper3D(cfg, is_train=False)
+        data_mapper = DatasetMapper3D(cfg, is_train=False, mode='eval_with_gt')
+        data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
+
         data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=1)
-        results_json = inference_on_dataset_custom(model, data_loader, segmentor)
+        if cfg.PLOT.RECALL_SCORES: output_recall_scores = True
+        else: output_recall_scores = False
+        results_json = inference_on_dataset_custom(model, data_loader, segmentor, output_recall_scores)
 
         '''
         Individual dataset evaluation
@@ -255,6 +291,8 @@ def main(args):
 
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
+    args.opts.append('PLOT.RECALL_SCORES')
+    args.opts.append(True)
     print("Command Line Args:", args)
 
     main(args)

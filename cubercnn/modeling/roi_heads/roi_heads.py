@@ -186,14 +186,14 @@ class ROIHeads_Boxer(StandardROIHeads):
             'scale_roi_boxes': cfg.MODEL.ROI_CUBE_HEAD.SCALE_ROI_BOXES,
         }
 
-    def forward(self, images, images_raw, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, targets=None):
+    def forward(self, images, images_raw, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, output_recall_scores, targets=None):
 
         im_dims = [image.shape[1:] for image in images]
 
         if self.training:
             proposals = self.label_and_sample_proposals(proposals, targets)
         
-        del targets
+        # del targets
 
         if self.training:
 
@@ -256,7 +256,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 masks.append(mask_per_image)
 
             if self.loss_w_3d > 0:
-                pred_instances = self._forward_cube(images, images_raw, mask_per_image, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio)
+                pred_instances = self._forward_cube(images, images_raw, mask_per_image, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets)
             return pred_instances, {}
     
 
@@ -337,7 +337,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         return proposal_boxes_scaled
     
-    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, features, instances, Ks, im_current_dims, im_scales_ratio):
+    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, features, instances, Ks, im_current_dims, im_scales_ratio, output_recall_scores, targets):
         
         features = [features[f] for f in self.in_features]
 
@@ -363,6 +363,15 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             assert len(gt_poses) == len(gt_boxes3D) == len(box_classes)
         
+        elif output_recall_scores:
+            proposals = instances
+            pred_boxes = [x.pred_boxes for x in instances]
+            proposal_boxes = pred_boxes
+            box_classes = torch.cat([x.pred_classes for x in instances])
+            gt_box_classes = (torch.cat([p.gt_classes for p in targets], dim=0) if len(targets) else torch.empty(0))
+            gt_boxes3D = torch.cat([p.gt_boxes3D for p in targets], dim=0,)
+            gt_boxes = torch.cat([p.gt_boxes for p in targets], dim=0,) if len(targets) > 1 else targets[0].gt_boxes
+            gt_poses = torch.cat([p.gt_poses for p in targets], dim=0,)
         # eval on all instances
         else:
             proposals = instances
@@ -451,29 +460,31 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         # ###### this functionality should prob be implemented in the self.cube_head.forward() ######
 
-        # x_points = 1000 # [1, 10, 100, 1000]#, 10000, 100000]
-        number_of_proposals = 1000
+        if output_recall_scores:
+            x_points = [1, 10, 100, 1000, 10000] #, 100000]
+        x_points = [1000]
         cube_dims = torch.zeros(n, 3)
         cube_pose = torch.zeros(n, 3, 3)
         cube_z = torch.zeros(n)
         pred_cube_meshes = []
         mask_per_image = mask_per_image[0] # this should be looped over
-        for i, proposal in enumerate(proposal_boxes_scaled[0]): ## NOTE:this works assuming batch_size=1
-            reference_box = Box(proposal.cpu())
-            priors = [prior_dims_mean[i].cpu(), prior_dims_std[i].cpu()]
-            pred_cubes = propose(reference_box, depth_maps.tensor.cpu(), priors, images.tensor.shape[2:], number_of_proposals=number_of_proposals)
+        for number_of_proposals in x_points:
+            for i, proposal in enumerate(proposal_boxes_scaled[0]): ## NOTE:this works assuming batch_size=1
+                reference_box = Box(proposal.cpu())
+                priors = [prior_dims_mean[i].cpu(), prior_dims_std[i].cpu()]
+                pred_cubes = propose(reference_box, depth_maps.tensor.cpu(), priors, images.tensor.shape[2:], number_of_proposals=number_of_proposals)
 
-            segment_scores = [score_segmentation(pred_cubes[j].get_bube_corners(Ks_scaled_per_box[i].cpu()), mask_per_image[0]) for j in range(number_of_proposals)]
-            highest_score = np.argmax(segment_scores)
+                segment_scores = [score_segmentation(pred_cubes[j].get_bube_corners(Ks_scaled_per_box[i].cpu()), mask_per_image[0]) for j in range(number_of_proposals)]
+                highest_score = np.argmax(segment_scores)
 
-            pred_cube = pred_cubes[highest_score]
+                pred_cube = pred_cubes[highest_score]
 
-            # (n_boxes, the thing arrays)
-            cube_dims[i] = pred_cube.dimensions
-            cube_pose[i] = pred_cube.rotation
-            cube_z[i] = pred_cube.center[2]
+                # (n_boxes, the thing arrays)
+                cube_dims[i] = pred_cube.dimensions
+                cube_pose[i] = pred_cube.rotation
+                cube_z[i] = pred_cube.center[2]
 
-            pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
+                pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
         # ################
         
         cube_dims = cube_dims.to(cube_features.device)

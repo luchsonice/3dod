@@ -1,5 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates
 import copy
+import logging
+from detectron2.config.config import configurable
 import torch
 import numpy as np
 from detectron2.structures import BoxMode, Keypoints
@@ -13,9 +15,93 @@ from detectron2.structures import (
     BoxMode,
     Instances,
 )
+
+from typing import List, Optional, Union
+
 from PIL import Image
 
 class DatasetMapper3D(DatasetMapper):
+
+    @configurable
+    def __init__(
+        self,
+        is_train: bool,
+        mode:str,
+        *,
+        augmentations: List[Union[T.Augmentation, T.Transform]],
+        image_format: str,
+        use_instance_mask: bool = False,
+        use_keypoint: bool = False,
+        instance_mask_format: str = "polygon",
+        keypoint_hflip_indices: Optional[np.ndarray] = None,
+        precomputed_proposal_topk: Optional[int] = None,
+        recompute_boxes: bool = False,
+    ):
+        """
+        NOTE: this interface is experimental.
+
+        Args:
+            is_train: whether it's used in training or inference
+            augmentations: a list of augmentations or deterministic transforms to apply
+            image_format: an image format supported by :func:`detection_utils.read_image`.
+            use_instance_mask: whether to process instance segmentation annotations, if available
+            use_keypoint: whether to process keypoint annotations if available
+            instance_mask_format: one of "polygon" or "bitmask". Process instance segmentation
+                masks into this format.
+            keypoint_hflip_indices: see :func:`detection_utils.create_keypoint_hflip_indices`
+            precomputed_proposal_topk: if given, will load pre-computed
+                proposals from dataset_dict and keep the top k proposals for each image.
+            recompute_boxes: whether to overwrite bounding box annotations
+                by computing tight bounding boxes from instance mask annotations.
+        """
+        if recompute_boxes:
+            assert use_instance_mask, "recompute_boxes requires instance masks"
+        # fmt: off
+        self.is_train               = is_train
+        self.augmentations          = T.AugmentationList(augmentations)
+        self.image_format           = image_format
+        self.use_instance_mask      = use_instance_mask
+        self.instance_mask_format   = instance_mask_format
+        self.use_keypoint           = use_keypoint
+        self.keypoint_hflip_indices = keypoint_hflip_indices
+        self.proposal_topk          = precomputed_proposal_topk
+        self.recompute_boxes        = recompute_boxes
+        # fmt: on
+        logger = logging.getLogger(__name__)
+        mode_out = "training" if is_train else "inference"
+        logger.info(f"[DatasetMapper] Augmentations used in {mode_out}: {augmentations}")
+        self.mode = mode
+
+    @classmethod
+    def from_config(cls, cfg, is_train: bool = True, mode='eval_with_gt'):
+        augs = detection_utils.build_augmentation(cfg, is_train)
+        if cfg.INPUT.CROP.ENABLED and is_train:
+            augs.insert(0, T.RandomCrop(cfg.INPUT.CROP.TYPE, cfg.INPUT.CROP.SIZE))
+            recompute_boxes = cfg.MODEL.MASK_ON
+        else:
+            recompute_boxes = False
+
+        ret = {
+            "is_train": is_train,
+            "mode": mode,
+            "augmentations": augs,
+            "image_format": cfg.INPUT.FORMAT,
+            "use_instance_mask": cfg.MODEL.MASK_ON,
+            "instance_mask_format": cfg.INPUT.MASK_FORMAT,
+            "use_keypoint": cfg.MODEL.KEYPOINT_ON,
+            "recompute_boxes": recompute_boxes,
+        }
+
+        if cfg.MODEL.KEYPOINT_ON:
+            ret["keypoint_hflip_indices"] = detection_utils.create_keypoint_hflip_indices(cfg.DATASETS.TRAIN)
+
+        if cfg.MODEL.LOAD_PROPOSALS:
+            ret["precomputed_proposal_topk"] = (
+                cfg.DATASETS.PRECOMPUTED_PROPOSAL_TOPK_TRAIN
+                if is_train
+                else cfg.DATASETS.PRECOMPUTED_PROPOSAL_TOPK_TEST
+            )
+        return ret
 
     def __call__(self, dataset_dict):
         
@@ -38,9 +124,10 @@ class DatasetMapper3D(DatasetMapper):
         # Therefore it's important to use torch.Tensor.
         dataset_dict["image"] = torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1)))
 
-        # no need for additoinal processing at inference
-        if not self.is_train:
-            return dataset_dict
+        # no need for additional processing at inference
+        if not self.mode == 'eval_with_gt':
+            if not self.is_train:
+                return dataset_dict
 
         if "annotations" in dataset_dict:
 

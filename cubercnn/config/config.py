@@ -155,8 +155,13 @@ def get_cfg_defaults(cfg):
     # Ex. 1.5 makes width and height 50% larger. 
     cfg.MODEL.ROI_CUBE_HEAD.SCALE_ROI_BOXES = 0.0
 
+    # weight path specifically for pretraining (no checkpointables will be loaded)
+    cfg.MODEL.WEIGHTS_PRETRAIN = ''
+
+    # ## start of our things
     cfg.MODEL.ROI_CUBE_HEAD.TEST = 'bas'
     cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_PRECOMPUTED = False
 
-    # weight path specifically for pretraining (no checkpointables will be loaded)
-    cfg.MODEL.WEIGHTS_PRETRAIN = ''
+    cfg.PLOT = CN(new_allowed=True)
+    cfg.PLOT.OUTPUT_DIR = ''
+    cfg.PLOT.RECALL_SCORES = False
