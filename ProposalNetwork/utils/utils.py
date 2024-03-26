@@ -61,9 +61,9 @@ def make_cube(x_range, y_range, z_range, w_prior, h_prior, l_prior):
     xyz = torch.tensor([x, y, z])
 
     # whl
-    w = np.log(sample_normal_greater_than(w_prior[0],w_prior[1],0.1)/w_prior[0] + 1)
-    h = np.log(sample_normal_greater_than(h_prior[0],h_prior[1],0.1)/h_prior[0] + 1)
-    l = np.log(sample_normal_greater_than(l_prior[0],l_prior[1],0.05)/l_prior[0] + 1)
+    w = sample_normal_greater_than(w_prior[0],w_prior[1],0.1)
+    h = sample_normal_greater_than(h_prior[0],h_prior[1],0.1)
+    l = sample_normal_greater_than(l_prior[0],l_prior[1],0.05)
     whl = torch.tensor([w, h, l])
 
     # R

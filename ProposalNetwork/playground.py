@@ -87,7 +87,6 @@ gt_R = gt_instances[image].gt_poses[gt_obj]
 gt_cube_ = Cube(torch.cat([gt____whlxyz[6:],gt____whlxyz[3:6]]),gt_R)
 gt_cube = gt_cube_.get_cube()
 gt_z = gt_cube_.center[2]
-print('gt depth',gt_z)
 
 
 # image
@@ -135,17 +134,17 @@ proposed_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_pro
 
 # OB IoU3D
 IoU3D = iou_3d(gt_cube_,pred_cubes)
-print(np.mean(IoU3D))
+print('3DIoU mean',np.mean(IoU3D))
 max_values3D = [np.max(IoU3D[:n]) for n in x_points]
 idx_scores3D = [np.argmax(IoU3D[:n]) for n in x_points]
 max_scores3D = [IoU3D[i] for i in idx_scores3D]
 idx_highest_iou3D = idx_scores3D[-1]
-print('highest possible IoU', np.max(IoU3D))
+print('highest possible IoU', max_values3D[-1])
 
 
 # OB IoU2D
 IoU2D = score_iou(gt_box, proposed_box)
-idx_scores_iou2d = np.argsort(IoU2D)
+idx_scores_iou2d = np.argsort(IoU2D)[::-1]
 sorted_iou2d_IoU = [IoU3D[i] for i in idx_scores_iou2d]
 iou2d_ious = [np.max(sorted_iou2d_IoU[:n]) for n in x_points]
 print('IoU3D of best IoU2D score',sorted_iou2d_IoU[0])
@@ -183,7 +182,7 @@ else:
 
 seg_mask = masks[0]
 segment_scores = [score_segmentation(pred_cubes[i].get_bube_corners(K_scaled),seg_mask) for i in range(number_of_proposals)]
-idx_scores_segment = np.argsort(segment_scores)
+idx_scores_segment = np.argsort(segment_scores)[::-1]
 sorted_segment_IoU = [IoU3D[i] for i in idx_scores_segment]
 segment_ious = [np.max(sorted_segment_IoU[:n]) for n in x_points]
 print('IoU3D of best segment score',sorted_segment_IoU[0])
@@ -204,7 +203,7 @@ plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO_segment.png'),dpi=30
 # OB Dimensions
 dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
 dim_scores = score_dimensions(category, dimensions)
-idx_scores_dim = np.argsort(dim_scores)
+idx_scores_dim = np.argsort(dim_scores)[::-1]
 sorted_dim_IoU = [IoU3D[i] for i in idx_scores_dim]
 dim_ious = [np.max(sorted_dim_IoU[:n]) for n in x_points]
 print('IoU3D of best dim score',sorted_dim_IoU[0])
@@ -218,6 +217,14 @@ plt.xlabel('Number of Proposals')
 plt.ylabel('3D IoU')
 plt.title('IoU vs Number of Proposals')
 plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO_dim.png'),dpi=300, bbox_inches='tight')
+
+
+plt.figure()
+plt.scatter(np.array(segment_scores)*np.array(IoU2D)*np.array(dim_scores),IoU3D)
+plt.xlabel('score')
+plt.ylabel('3DIoU')
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'test.png'),dpi=300, bbox_inches='tight')
+
 
 
 

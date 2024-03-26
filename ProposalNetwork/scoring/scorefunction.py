@@ -38,9 +38,7 @@ def score_dimensions(category, dimensions):
         # if category == -1: # no object in proposal
         #category_name = Metadatacatalog.thing_classes[category] # for printing and checking that correct
         [prior_mean, prior_std] = priors['priors_dims_per_cat'][category]
-
-        # Convert dimensions to meters
-        dimension = np.exp(dimensions[i]) * prior_mean
+        dimension = dimensions[i]
         dimensions_scores = np.exp(-1/2 * ((dimension - prior_mean)/prior_std)**2)
         score.append(np.mean(dimensions_scores))
 
