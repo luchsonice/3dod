@@ -78,6 +78,7 @@ with open('ProposalNetwork/proposals/network_out.pkl', 'rb') as f:
 
 image = 1
 gt_obj = 1
+
 # Necessary Ground Truths
 # 2D
 gt_box = Box(gt_instances[image].gt_boxes[gt_obj].tensor.squeeze())
@@ -87,9 +88,6 @@ gt_R = gt_instances[image].gt_poses[gt_obj]
 gt_cube_ = Cube(torch.cat([gt____whlxyz[6:],gt____whlxyz[3:6]]),gt_R)
 gt_cube = gt_cube_.get_cube()
 gt_z = gt_cube_.center[2]
-
-print(util.mat2euler(gt_R))
-
 
 # image
 input_format = 'BGR'
@@ -150,17 +148,6 @@ sorted_iou2d_IoU = [IoU3D[i] for i in idx_scores_iou2d]
 iou2d_ious = [np.max(sorted_iou2d_IoU[:n]) for n in x_points]
 print('IoU3D of best IoU2D score',sorted_iou2d_IoU[0])
 
-# Plotting
-plt.figure()
-plt.plot(x_points, iou2d_ious, marker='o', linestyle='-',c='orange') 
-plt.grid(True)
-plt.xscale('log')
-plt.xlabel('Number of Proposals')
-plt.ylabel('3D IoU')
-plt.title('IoU vs Number of Proposals')
-plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO_iou2d.png'),dpi=300, bbox_inches='tight')
-
-
 
 # Segment Score
 if os.path.exists('/work3/s194369/3dod/ProposalNetwork/mask'+str(image)+'.pkl'):
@@ -188,18 +175,6 @@ sorted_segment_IoU = [IoU3D[i] for i in idx_scores_segment]
 segment_ious = [np.max(sorted_segment_IoU[:n]) for n in x_points]
 print('IoU3D of best segment score',sorted_segment_IoU[0])
 
-# Plotting
-plt.figure()
-plt.plot(x_points, segment_ious, marker='o', linestyle='-',c='purple') 
-plt.grid(True)
-plt.xscale('log')
-plt.xlabel('Number of Proposals')
-plt.ylabel('3D IoU')
-plt.title('IoU vs Number of Proposals')
-plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO_segment.png'),dpi=300, bbox_inches='tight')
-
-
-
 
 # OB Dimensions
 dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
@@ -211,13 +186,16 @@ print('IoU3D of best dim score',sorted_dim_IoU[0])
 
 # Plotting
 plt.figure()
-plt.plot(x_points, dim_ious, marker='o', linestyle='-',c='green') 
+plt.plot(x_points, dim_ious, marker='o', linestyle='-',c='green',label='dim') 
+plt.plot(x_points, segment_ious, marker='o', linestyle='-',c='purple',label='segment')
+plt.plot(x_points, iou2d_ious, marker='o', linestyle='-',c='orange',label='2d IoU') 
 plt.grid(True)
 plt.xscale('log')
 plt.xlabel('Number of Proposals')
 plt.ylabel('3D IoU')
 plt.title('IoU vs Number of Proposals')
-plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO_dim.png'),dpi=300, bbox_inches='tight')
+plt.legend()
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO.png'),dpi=300, bbox_inches='tight')
 
 
 plt.figure()
