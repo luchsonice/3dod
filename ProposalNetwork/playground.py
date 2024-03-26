@@ -88,6 +88,8 @@ gt_cube_ = Cube(torch.cat([gt____whlxyz[6:],gt____whlxyz[3:6]]),gt_R)
 gt_cube = gt_cube_.get_cube()
 gt_z = gt_cube_.center[2]
 
+print(util.mat2euler(gt_R))
+
 
 # image
 input_format = 'BGR'
@@ -134,7 +136,6 @@ proposed_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_pro
 
 # OB IoU3D
 IoU3D = iou_3d(gt_cube_,pred_cubes)
-print('3DIoU mean',np.mean(IoU3D))
 max_values3D = [np.max(IoU3D[:n]) for n in x_points]
 idx_scores3D = [np.argmax(IoU3D[:n]) for n in x_points]
 max_scores3D = [IoU3D[i] for i in idx_scores3D]
@@ -234,8 +235,6 @@ plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'test.png'),dpi=300, bbo
 
 
 
-
-
 # Plot
 # Get 2 proposal boxes
 box_size = min(len(proposals[image].proposal_boxes), 1)
@@ -274,13 +273,17 @@ im_concat = im_concat[..., ::-1]
 util.imwrite(im_concat, os.path.join('ProposalNetwork/output/AMOB', 'vis_result.jpg'))
 
 
-# Take box with highest iou
+# Take box with highest segment
 pred_meshes = [pred_cubes[idx_scores_segment[0]].get_cube().__getitem__(0).detach()]
 
 # Add 3D GT
 meshes_text = ['highest segment']
 meshes_text.append('gt cube')
 pred_meshes.append(gt_cube.__getitem__(0).detach())
+
+img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, K_scaled.cpu().numpy(), pred_meshes,text=meshes_text, blend_weight=0.5, blend_weight_overlay=0.85,scale = img.shape[0])
+im_concat = np.concatenate((img_3DPR, img_novel), axis=1)
+vis_img_3d = img_3DPR.astype(np.uint8)
 
 fig = plt.figure()
 ax = fig.add_subplot(111)

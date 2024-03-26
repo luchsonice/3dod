@@ -44,8 +44,10 @@ def score_dimensions(category, dimensions):
 
     return score
 
-def score_function(weights, gt_box, proposal_box):
+def score_function(gt_box, proposal_box, bube_corners, segmentation_mask, category, dimensions):
     score = 1.0
     score *= score_iou(gt_box, proposal_box)
+    score *= score_segmentation(bube_corners, segmentation_mask)
+    score *= score_dimensions(category, dimensions)
 
     return score
