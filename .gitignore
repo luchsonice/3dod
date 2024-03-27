@@ -11,6 +11,7 @@ wandb/
 hpc_logs/
 depth/checkpoints/
 ProposalNetwork/proposals/network_out.pkl
+.vscode/settings.json
 
 # filetypes
 *.pyc

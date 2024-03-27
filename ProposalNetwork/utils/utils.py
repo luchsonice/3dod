@@ -46,18 +46,13 @@ def sample_normal_greater_than(mean, std, threshold):
         sample = np.random.normal(mean, std)
     return sample
 
-def make_cube(x_range, y_range, z_range, w_prior, h_prior, l_prior):
+def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
     '''
     need xyz, whl, and pose (R)
     '''
     # xyz
     x = (x_range[0]-x_range[1]) * torch.rand(1) + x_range[1]
     y = (y_range[0]-y_range[1]) * torch.rand(1) + y_range[1]
-
-    device = 'cpu'
-    if type(z_range[0]) == torch.Tensor:
-        device = z_range[0].device
-    z = (z_range[0]-z_range[1]) * torch.rand(1, device=device) + z_range[1] # Make this grid like? hmmm
     xyz = torch.tensor([x, y, z])
 
     # whl
@@ -71,7 +66,11 @@ def make_cube(x_range, y_range, z_range, w_prior, h_prior, l_prior):
     #ry = np.random.rand(1) * np.pi - np.pi/2 # pi/2 i hver retning
     #rz = np.random.normal(0, 0.26) # normal dist mean=0 std=0.26
     #rotation_matrix = util.euler2mat([rx,ry,rz])
-    rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6))
+    #rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6)) # Use this when learnable
+    rx = np.random.rand(1) * np.pi - np.pi/2
+    ry = np.random.rand(1) * np.pi - np.pi/2
+    rz = np.random.rand(1) * np.pi - np.pi/2
+    rotation_matrix = util.euler2mat([rx,ry,rz])
     
 
     return xyz, whl, rotation_matrix
@@ -175,3 +174,33 @@ def mask_iou(segmentation_mask, bube_mask):
     iou = intersection_area / union_area
 
     return iou
+
+def is_gt_included(gt_cube,x_range,y_range,z_range, w_prior, h_prior, l_prior):
+    # Define how far away dimensions need to be to be counted as unachievable
+    stds_away = 3
+    # Center
+    if not (x_range[0] < gt_cube.center[0] < x_range[1]):
+        return False
+    elif not (y_range[0] < gt_cube.center[1] < y_range[1]):
+        return False
+    # Depth
+    elif not (z_range[0] < gt_cube.center[2] < z_range[1]):
+        return False
+    # Dimensions
+    elif not (gt_cube.dimensions[0] < w_prior[0]-stds_away*w_prior[1]):
+        return False
+    elif not (gt_cube.dimensions[0] > w_prior[0]+stds_away*w_prior[1]):
+        return False
+    elif not (gt_cube.dimensions[1] < h_prior[0]-stds_away*h_prior[1]):
+        return False
+    elif not (gt_cube.dimensions[1] > h_prior[0]+stds_away*h_prior[1]):
+        return False
+    elif not (gt_cube.dimensions[2] < l_prior[0]-stds_away*l_prior[1]):
+        return False
+    elif not (gt_cube.dimensions[2] > l_prior[0]+stds_away*l_prior[1]):
+        return False
+    else:
+        return True
+
+    # rotation nothing yet
+
