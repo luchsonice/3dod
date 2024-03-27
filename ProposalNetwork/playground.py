@@ -73,8 +73,8 @@ plt.savefig(os.path.join('/work3/s194369/3dod/ProposalNetwork/output/trash', 'te
 
 
 # Get image and scale intrinsics
-with open('ProposalNetwork/proposals/network_out.pkl', 'rb') as f:
-        batched_inputs, images, features, proposals, Ks, gt_instances, im_scales_ratio, instances = pickle.load(f)
+with open('ProposalNetwork/proposals/network_out2.pkl', 'rb') as f:
+        batched_inputs, images, proposals, Ks, gt_instances, im_scales_ratio, instances = pickle.load(f)
 
 image = 1
 gt_obj = 1
@@ -134,6 +134,7 @@ proposed_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_pro
 
 # OB IoU3D
 IoU3D = iou_3d(gt_cube_,pred_cubes)
+print('Percentage of cubes with no intersection:',int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100))
 max_values3D = [np.max(IoU3D[:n]) for n in x_points]
 idx_scores3D = [np.argmax(IoU3D[:n]) for n in x_points]
 max_scores3D = [IoU3D[i] for i in idx_scores3D]
@@ -197,14 +198,21 @@ plt.title('IoU vs Number of Proposals')
 plt.legend()
 plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO.png'),dpi=300, bbox_inches='tight')
 
-
+combined_score = np.array(segment_scores)*np.array(IoU2D)*np.array(dim_scores)
 plt.figure()
-plt.scatter(np.array(segment_scores)*np.array(IoU2D)*np.array(dim_scores),IoU3D)
+plt.hexbin(combined_score, IoU3D, gridsize=10)
+plt.axis([combined_score.min(), combined_score.max(), IoU3D.min(), IoU3D.max()])
 plt.xlabel('score')
 plt.ylabel('3DIoU')
-plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'test.png'),dpi=300, bbox_inches='tight')
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'combined_scores.png'),dpi=300, bbox_inches='tight')
 
-
+fig, ax = plt.subplots()
+ax.scatter(combined_score,IoU3D, alpha=0.3)
+heatmap, xedges, yedges = np.histogram2d(combined_score,IoU3D, bins=10)
+extent = [xedges[0], xedges[-1]+0.05, yedges[0], yedges[-1]+0.05]
+cax = ax.imshow(heatmap.T, extent=extent, origin='lower')
+cbar = fig.colorbar(cax)
+fig.savefig(os.path.join('ProposalNetwork/output/AMOB', 'combined_scores.png'),dpi=300, bbox_inches='tight')
 
 
 
@@ -241,7 +249,6 @@ img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, K_scaled.cpu().numpy(), p
 im_concat = np.concatenate((img_3DPR, img_novel), axis=1)
 vis_img_3d = img_3DPR.astype(np.uint8)
 ax.imshow(vis_img_3d)
-#ax.plot(torch.cat((pred_box.get_all_corners()[:,0],pred_box.get_all_corners()[0,0].reshape(1))),torch.cat((pred_box.get_all_corners()[:,1],pred_box.get_all_corners()[0,1].reshape(1))),color='b')
 ax.plot(torch.cat((gt_box.get_all_corners()[:,0],gt_box.get_all_corners()[0,0].reshape(1))),torch.cat((gt_box.get_all_corners()[:,1],gt_box.get_all_corners()[0,1].reshape(1))),color='purple')
 show_mask(masks,ax)
 plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'box_with_highest_iou.png'),dpi=300, bbox_inches='tight')
@@ -266,7 +273,6 @@ vis_img_3d = img_3DPR.astype(np.uint8)
 fig = plt.figure()
 ax = fig.add_subplot(111)
 ax.imshow(vis_img_3d)
-#ax.plot(torch.cat((pred_box.get_all_corners()[:,0],pred_box.get_all_corners()[0,0].reshape(1))),torch.cat((pred_box.get_all_corners()[:,1],pred_box.get_all_corners()[0,1].reshape(1))),color='b')
 ax.plot(torch.cat((gt_box.get_all_corners()[:,0],gt_box.get_all_corners()[0,0].reshape(1))),torch.cat((gt_box.get_all_corners()[:,1],gt_box.get_all_corners()[0,1].reshape(1))),color='purple')
 show_mask(masks,ax)
 plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'box_with_highest_segment.png'),dpi=300, bbox_inches='tight')

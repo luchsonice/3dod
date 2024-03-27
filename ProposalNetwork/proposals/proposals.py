@@ -33,7 +33,8 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1)
     x_range = pixel_to_normalised_space([reference_box.x1,reference_box.x2],[im_shape[0],im_shape[0]])[0]
     y_range = pixel_to_normalised_space([reference_box.y1,reference_box.y2],[im_shape[1],im_shape[1]])[0]
     z_range = [depth_image.min(), depth_image.max()]
-
+    z_grid = np.linspace(z_range[0],z_range[1],number_of_proposals)
+    
     width = x_range[1]-x_range[0]
     height = y_range[1]-y_range[0]
 
@@ -47,9 +48,10 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1)
     l_prior = torch.tensor([priors[0][2], priors[1][2]])
 
     list_of_cubes = []
-    for _ in range(number_of_proposals):
+    
+    for i in range(number_of_proposals):
         # Predict cube
-        pred_xyz, pred_whl, pred_pose = make_cube(x_range,y_range,z_range,w_prior,h_prior,l_prior)
+        pred_xyz, pred_whl, pred_pose = make_cube(x_range,y_range,z_grid[i],w_prior,h_prior,l_prior)
         pred_cube = Cube(torch.cat((pred_xyz, pred_whl), dim=0),pred_pose)
         list_of_cubes.append(pred_cube)
 

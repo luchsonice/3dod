@@ -46,18 +46,13 @@ def sample_normal_greater_than(mean, std, threshold):
         sample = np.random.normal(mean, std)
     return sample
 
-def make_cube(x_range, y_range, z_range, w_prior, h_prior, l_prior):
+def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
     '''
     need xyz, whl, and pose (R)
     '''
     # xyz
     x = (x_range[0]-x_range[1]) * torch.rand(1) + x_range[1]
     y = (y_range[0]-y_range[1]) * torch.rand(1) + y_range[1]
-
-    device = 'cpu'
-    if type(z_range[0]) == torch.Tensor:
-        device = z_range[0].device
-    z = (z_range[0]-z_range[1]) * torch.rand(1, device=device) + z_range[1] # Make this grid like? hmmm
     xyz = torch.tensor([x, y, z])
 
     # whl
@@ -72,6 +67,10 @@ def make_cube(x_range, y_range, z_range, w_prior, h_prior, l_prior):
     #rz = np.random.normal(0, 0.26) # normal dist mean=0 std=0.26
     #rotation_matrix = util.euler2mat([rx,ry,rz])
     rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6))
+    #rx = np.random.rand(1) * np.pi/2 - np.pi/4
+    #ry = np.random.rand(1) * np.pi/2 - np.pi/4
+    #rz = np.random.rand(1) * np.pi/2 - np.pi/4
+    #rotation_matrix = util.euler2mat([rx,ry,rz])
     
 
     return xyz, whl, rotation_matrix
