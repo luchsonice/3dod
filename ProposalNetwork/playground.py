@@ -76,8 +76,8 @@ plt.savefig(os.path.join('/work3/s194369/3dod/ProposalNetwork/output/trash', 'te
 with open('ProposalNetwork/proposals/network_out2.pkl', 'rb') as f:
         batched_inputs, images, proposals, Ks, gt_instances, im_scales_ratio, instances = pickle.load(f)
 
-image = 0
-gt_obj = 0
+image = 1
+gt_obj = 1
 
 # Necessary Ground Truths
 # 2D
@@ -129,7 +129,7 @@ with open('filetransfer/priors.pkl', 'rb') as f:
 category = gt_instances[image].gt_classes[gt_obj]
 priors_propose = priors['priors_dims_per_cat'][category]
 
-pred_cubes = propose(reference_box, depth_patch, priors_propose, img.shape[:2], gt_cube_, number_of_proposals=number_of_proposals)
+pred_cubes = propose(reference_box, depth_patch, priors_propose, img.shape[:2], number_of_proposals=number_of_proposals, gt_cube=gt_cube_)
 proposed_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_proposals)]
 
 # OB IoU3D

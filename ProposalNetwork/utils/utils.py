@@ -175,7 +175,9 @@ def mask_iou(segmentation_mask, bube_mask):
 
     return iou
 
-def is_gt_included(gt_cube,x_range,y_range,z_range):
+def is_gt_included(gt_cube,x_range,y_range,z_range, w_prior, h_prior, l_prior):
+    # Define how far away dimensions need to be to be counted as unachievable
+    stds_away = 3
     # Center
     if not (x_range[0] < gt_cube.center[0] < x_range[1]):
         return False
@@ -184,9 +186,21 @@ def is_gt_included(gt_cube,x_range,y_range,z_range):
     # Depth
     elif not (z_range[0] < gt_cube.center[2] < z_range[1]):
         return False
+    # Dimensions
+    elif not (gt_cube.dimensions[0] < w_prior[0]-stds_away*w_prior[1]):
+        return False
+    elif not (gt_cube.dimensions[0] > w_prior[0]+stds_away*w_prior[1]):
+        return False
+    elif not (gt_cube.dimensions[1] < h_prior[0]-stds_away*h_prior[1]):
+        return False
+    elif not (gt_cube.dimensions[1] > h_prior[0]+stds_away*h_prior[1]):
+        return False
+    elif not (gt_cube.dimensions[2] < l_prior[0]-stds_away*l_prior[1]):
+        return False
+    elif not (gt_cube.dimensions[2] > l_prior[0]+stds_away*l_prior[1]):
+        return False
     else:
         return True
-    # Dimensions - TODO count very unlikely as not included? i.e. prob of getting gt is 0.1% and less
 
     # rotation nothing yet
 

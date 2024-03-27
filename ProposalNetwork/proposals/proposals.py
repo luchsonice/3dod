@@ -23,7 +23,7 @@ def propose_random(reference_box, depth_image, K_scaled, im_shape, number_of_pro
     
     return list_of_cubes
 
-def propose(reference_box, depth_image, priors, im_shape, gt_cube, number_of_proposals=1):
+def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1, gt_cube=None):
     '''
     Proposes a cube. The ranges are largely random, except for that the center needs to be inside the reference box.
     Also, objects have a length, width and height according to priors.
@@ -48,7 +48,7 @@ def propose(reference_box, depth_image, priors, im_shape, gt_cube, number_of_pro
     l_prior = torch.tensor([priors[0][2], priors[1][2]])
 
     # Check whether it is possible to find gt
-    if not is_gt_included(gt_cube,x_range_px, y_range_px, z_range):
+    if not (gt_cube == None) and not is_gt_included(gt_cube,x_range_px, y_range_px, z_range, w_prior, h_prior, l_prior):
         print('GT cannot be found!')
 
     list_of_cubes = []
