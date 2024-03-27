@@ -66,11 +66,11 @@ def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
     #ry = np.random.rand(1) * np.pi - np.pi/2 # pi/2 i hver retning
     #rz = np.random.normal(0, 0.26) # normal dist mean=0 std=0.26
     #rotation_matrix = util.euler2mat([rx,ry,rz])
-    rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6))
-    #rx = np.random.rand(1) * np.pi/2 - np.pi/4
-    #ry = np.random.rand(1) * np.pi/2 - np.pi/4
-    #rz = np.random.rand(1) * np.pi/2 - np.pi/4
-    #rotation_matrix = util.euler2mat([rx,ry,rz])
+    #rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6)) # Use this when learnable
+    rx = np.random.rand(1) * np.pi - np.pi/2
+    ry = np.random.rand(1) * np.pi - np.pi/2
+    rz = np.random.rand(1) * np.pi - np.pi/2
+    rotation_matrix = util.euler2mat([rx,ry,rz])
     
 
     return xyz, whl, rotation_matrix
@@ -174,3 +174,19 @@ def mask_iou(segmentation_mask, bube_mask):
     iou = intersection_area / union_area
 
     return iou
+
+def is_gt_included(gt_cube,x_range,y_range,z_range):
+    # Center
+    if not (x_range[0] < gt_cube.center[0] < x_range[1]):
+        return False
+    elif not (y_range[0] < gt_cube.center[1] < y_range[1]):
+        return False
+    # Depth
+    elif not (z_range[0] < gt_cube.center[2] < z_range[1]):
+        return False
+    else:
+        return True
+    # Dimensions - TODO count very unlikely as not included? i.e. prob of getting gt is 0.1% and less
+
+    # rotation nothing yet
+

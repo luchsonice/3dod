@@ -1,7 +1,7 @@
 from ProposalNetwork.proposals.proposals import propose_random, propose
 
 from ProposalNetwork.utils.spaces import Box, Cube
-from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_space
+from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_space, normalised_space_to_pixel
 from ProposalNetwork.utils.utils import compute_rotation_matrix_from_ortho6d, make_cube, iou_2d, iou_3d, custom_mapping
 
 from ProposalNetwork.scoring.scorefunction import score_segmentation, score_dimensions, score_iou
@@ -76,8 +76,8 @@ plt.savefig(os.path.join('/work3/s194369/3dod/ProposalNetwork/output/trash', 'te
 with open('ProposalNetwork/proposals/network_out2.pkl', 'rb') as f:
         batched_inputs, images, proposals, Ks, gt_instances, im_scales_ratio, instances = pickle.load(f)
 
-image = 1
-gt_obj = 1
+image = 0
+gt_obj = 0
 
 # Necessary Ground Truths
 # 2D
@@ -129,7 +129,7 @@ with open('filetransfer/priors.pkl', 'rb') as f:
 category = gt_instances[image].gt_classes[gt_obj]
 priors_propose = priors['priors_dims_per_cat'][category]
 
-pred_cubes = propose(reference_box, depth_patch, priors_propose, img.shape[:2],number_of_proposals=number_of_proposals)
+pred_cubes = propose(reference_box, depth_patch, priors_propose, img.shape[:2], gt_cube_, number_of_proposals=number_of_proposals)
 proposed_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_proposals)]
 
 # OB IoU3D
@@ -250,7 +250,7 @@ im_concat = np.concatenate((img_3DPR, img_novel), axis=1)
 vis_img_3d = img_3DPR.astype(np.uint8)
 ax.imshow(vis_img_3d)
 ax.plot(torch.cat((gt_box.get_all_corners()[:,0],gt_box.get_all_corners()[0,0].reshape(1))),torch.cat((gt_box.get_all_corners()[:,1],gt_box.get_all_corners()[0,1].reshape(1))),color='purple')
-show_mask(masks,ax)
+ax.scatter(gt____whlxyz[0],gt____whlxyz[1],color='r')
 plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'box_with_highest_iou.png'),dpi=300, bbox_inches='tight')
 
 # convert from BGR to RGB
