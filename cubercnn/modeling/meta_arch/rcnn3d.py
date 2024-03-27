@@ -265,13 +265,20 @@ class BoxNet(RCNN3D):
             "pixel_std": cfg.MODEL.PIXEL_STD,
         }
 
-    def preprocess_image(self, batched_inputs: List[Dict[str, torch.Tensor]], normalise=True, img_type="image"):
+    def preprocess_image(self, batched_inputs: List[Dict[str, torch.Tensor]], normalise=True, img_type="image", NoOp=False):
         """
         Normalize, pad and batch the input images.
         """
         images = [self._move_to_current_device(x[img_type]) for x in batched_inputs]
         if normalise:
             images = [(x - self.pixel_mean) / self.pixel_std for x in images]
+        else:
+            if img_type == "image":
+                # convert from BGR to RGB
+                images = [x[[2,1,0],:,:] for x in images]
+            if NoOp:
+                images = ImageList.from_tensors(images,0,)
+                return images
         images = ImageList.from_tensors(
             images,
             self.backbone.size_divisibility,
@@ -328,7 +335,7 @@ class BoxNet(RCNN3D):
         # must apply the same preprocessing to both the image, the depth map, and the mask
         # except don't normalise the input for the segmentation method
         images = self.preprocess_image(batched_inputs)
-        images_raw = self.preprocess_image(batched_inputs, normalise=False)
+        images_raw = self.preprocess_image(batched_inputs, img_type='image', normalise=False, NoOp=True)
         depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False)
 
 
@@ -346,7 +353,7 @@ class BoxNet(RCNN3D):
 
         features = self.backbone(images.tensor)
         # normal inference
-        proposals, _ = self.proposal_generator(images, features, gt_instances, output_recall_scores)
+        proposals, _ = self.proposal_generator(images, features, gt_instances)
            
         # use the mask and the 2D box to predict the 3D box
         results, _ = self.roi_heads(images, images_raw, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, output_recall_scores, gt_instances)

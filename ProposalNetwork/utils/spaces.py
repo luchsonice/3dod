@@ -62,8 +62,7 @@ class Box:
         return torch.tensor([ul, ur, br, bl])
     
     def __repr__(self) -> str:
-        def __repr__(self) -> str:
-            return f'Box({self.x1:.1f}, {self.y1:.1f}, {self.x2:.1f}, {self.y2:.1f})'
+        return f'Box({self.x1:.1f}, {self.y1:.1f}, {self.x2:.1f}, {self.y2:.1f})'
 
 
 class Cube:

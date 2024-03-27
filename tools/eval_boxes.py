@@ -4,6 +4,7 @@ import itertools
 import logging
 import os
 from detectron2.evaluation.evaluator import inference_context
+from matplotlib import pyplot as plt
 import numpy as np
 from segment_anything import sam_model_registry, SamPredictor
 import torch
@@ -59,7 +60,7 @@ def init_segmentation(device='cpu'):
     return predictor
 
 
-def inference_on_dataset_custom(model, data_loader, segmentor, output_recall_scores:bool):
+def inference_on_dataset_custom(model, data_loader, segmentor, output_recall_scores:bool=False):
     """
     Run model on the data_loader. 
     Also benchmark the inference speed of `model.__call__` accurately.
@@ -93,7 +94,7 @@ def inference_on_dataset_custom(model, data_loader, segmentor, output_recall_sco
         for idx, inputs in track(enumerate(data_loader), description="Inference", total=total):
             # model should be modified in cubercnn.modeling.roi_heads.cube_head.py class CubeHead_Vanilla forward function"
 
-            outputs = model(inputs, segmentor, output_recall_scores)
+            outputs = model(inputs, segmentor, output_recall_scores=False)
             for input, output in zip(inputs, outputs):
 
                 prediction = {
@@ -112,8 +113,41 @@ def inference_on_dataset_custom(model, data_loader, segmentor, output_recall_sco
 
     return inference_json
 
-def mean_average_best_overlap(model, data_loader):
-    pass
+def mean_average_best_overlap(model, data_loader, segmentor, output_recall_scores:bool):
+        
+    logger.info("Start inference on {} batches".format(len(data_loader)))
+
+    total = len(data_loader)  # inference data loader must have a fixed length
+
+    with ExitStack() as stack:
+        if isinstance(model, nn.Module):
+            stack.enter_context(inference_context(model))
+        stack.enter_context(torch.no_grad())
+
+        outputs = []
+
+        for idx, inputs in track(enumerate(data_loader), description="Making Mean average best overlap plots", total=total):
+            # model should be modified in cubercnn.modeling.roi_heads.cube_head.py class CubeHead_Vanilla forward function"
+
+            output = model(inputs, segmentor, output_recall_scores)
+            outputs.append(output)
+
+        # mean over all the outputs
+        x_points = outputs[0][0]
+        segment_ious = outputs[:,1].mean(axis=0)
+
+        plt.figure()
+        plt.plot(x_points, segment_ious, marker='o', linestyle='-',c='purple') 
+        plt.grid(True)
+        plt.xscale('log')
+        plt.xlabel('Number of Proposals')
+        plt.ylabel('3D IoU')
+        plt.title('IoU vs Number of Proposals')
+        f_name = os.path.join('ProposalNetwork/output/MABO', 'MABO_segment.png')
+        plt.savefig(f_name, dpi=300, bbox_inches='tight')
+        print('saved to ', f_name)
+
+
 
 
 def do_test(cfg, model, iteration='final', storage=None):
@@ -190,7 +224,8 @@ def do_test(cfg, model, iteration='final', storage=None):
         data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=1)
         if cfg.PLOT.RECALL_SCORES: output_recall_scores = True
         else: output_recall_scores = False
-        results_json = inference_on_dataset_custom(model, data_loader, segmentor, output_recall_scores)
+        mean_average_best_overlap_scores = mean_average_best_overlap(model, data_loader, segmentor, output_recall_scores)
+        results_json = inference_on_dataset_custom(model, data_loader, segmentor, output_recall_scores=False)
 
         '''
         Individual dataset evaluation
@@ -234,7 +269,7 @@ def setup(args):
     cfg.merge_from_list(args.opts)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     cfg.MODEL.DEVICE = device
-    cfg.SEED = 12 
+    cfg.SEED = 13
     cfg.freeze()
     default_setup(cfg, args)
 
