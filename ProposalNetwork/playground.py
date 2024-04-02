@@ -2,9 +2,9 @@ from ProposalNetwork.proposals.proposals import propose_random, propose
 
 from ProposalNetwork.utils.spaces import Box, Cube
 from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_space, normalised_space_to_pixel
-from ProposalNetwork.utils.utils import compute_rotation_matrix_from_ortho6d, make_cube, iou_2d, iou_3d, custom_mapping
+from ProposalNetwork.utils.utils import compute_rotation_matrix_from_ortho6d, make_cube, iou_2d, iou_3d, normalize_vector
 
-from ProposalNetwork.scoring.scorefunction import score_segmentation, score_dimensions, score_iou
+from ProposalNetwork.scoring.scorefunction import score_segmentation, score_dimensions, score_iou, score_angles
 
 from ProposalNetwork.segment import show_mask
 
@@ -185,11 +185,20 @@ sorted_dim_IoU = [IoU3D[i] for i in idx_scores_dim]
 dim_ious = [np.max(sorted_dim_IoU[:n]) for n in x_points]
 print('IoU3D of best dim score',sorted_dim_IoU[0])
 
+# Angles
+angles = [np.array(util.mat2euler(pred_cubes[i].rotation)) for i in range(len(pred_cubes))]
+angle_scores = score_angles(util.mat2euler(gt_R),angles)
+idx_scores_angles = np.argsort(angle_scores)[::-1]
+sorted_angles_IoU = [IoU3D[i] for i in idx_scores_angles]
+angle_ious = [np.max(sorted_angles_IoU[:n]) for n in x_points]
+print('IoU3D of best angle score',sorted_angles_IoU[0])
+
 # Plotting
 plt.figure()
 plt.plot(x_points, dim_ious, marker='o', linestyle='-',c='green',label='dim') 
 plt.plot(x_points, segment_ious, marker='o', linestyle='-',c='purple',label='segment')
 plt.plot(x_points, iou2d_ious, marker='o', linestyle='-',c='orange',label='2d IoU') 
+plt.plot(x_points, angle_ious, marker='o', linestyle='-',c='darkslategrey',label='angles') 
 plt.grid(True)
 plt.xscale('log')
 plt.xlabel('Number of Proposals')
@@ -198,7 +207,7 @@ plt.title('IoU vs Number of Proposals')
 plt.legend()
 plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'BO.png'),dpi=300, bbox_inches='tight')
 
-combined_score = np.array(segment_scores)*np.array(IoU2D)*np.array(dim_scores)
+combined_score = np.array(segment_scores)*np.array(IoU2D)*np.array(dim_scores)*np.array(angle_scores)
 plt.figure()
 plt.hexbin(combined_score, IoU3D, gridsize=10)
 plt.axis([combined_score.min(), combined_score.max(), IoU3D.min(), IoU3D.max()])

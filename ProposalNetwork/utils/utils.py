@@ -62,17 +62,12 @@ def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
     whl = torch.tensor([w, h, l])
 
     # R
-    #rx = np.random.normal(0, 0.26) # normal dist mean=0 std=0.26
-    #ry = np.random.rand(1) * np.pi - np.pi/2 # pi/2 i hver retning
-    #rz = np.random.normal(0, 0.26) # normal dist mean=0 std=0.26
-    #rotation_matrix = util.euler2mat([rx,ry,rz])
     #rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6)) # Use this when learnable
     rx = np.random.rand(1) * np.pi - np.pi/2
     ry = np.random.rand(1) * np.pi - np.pi/2
     rz = np.random.rand(1) * np.pi - np.pi/2
     rotation_matrix = util.euler2mat([rx,ry,rz])
     
-
     return xyz, whl, rotation_matrix
 
 def is_box_included_in_other_box(reference_box, proposed_box):
@@ -123,7 +118,6 @@ def iou_3d(gt_cube, proposal_cubes):
     gt_corners = torch.stack([gt_cube.get_all_corners()])
     proposal_corners = torch.stack([cube.get_all_corners() for cube in proposal_cubes])
 
-
     # TODO check if corners in correct order; Should be
     vol, iou = box3d_overlap(gt_corners,proposal_corners)
     iou = np.array(iou[0])
@@ -132,10 +126,10 @@ def iou_3d(gt_cube, proposal_cubes):
 
 def custom_mapping(x,beta=1.7):
     '''
-    maps the IoA curve to be S shaped instead of linear
+    maps the input curve to be S shaped instead of linear
     
     Args:
-        beta: number > 1, higher beta is more aggressive
+    beta: number > 1, higher beta is more aggressive
     x: list of floats betweeen and including 0 and 1
     beta: number > 1 higher beta is more aggressive
     '''
@@ -169,8 +163,7 @@ def mask_iou(segmentation_mask, bube_mask):
     # Count pixels in union mask
     union_area = np.sum(union_mask)
 
-
-    # Compute IoA
+    # Compute IoU
     iou = intersection_area / union_area
 
     return iou
@@ -180,24 +173,33 @@ def is_gt_included(gt_cube,x_range,y_range,z_range, w_prior, h_prior, l_prior):
     stds_away = 3
     # Center
     if not (x_range[0] < gt_cube.center[0] < x_range[1]):
+        print('Because of x')
         return False
     elif not (y_range[0] < gt_cube.center[1] < y_range[1]):
+        print('Because of y')
         return False
     # Depth
     elif not (z_range[0] < gt_cube.center[2] < z_range[1]):
+        print('Because of z')
         return False
     # Dimensions
-    elif not (gt_cube.dimensions[0] < w_prior[0]-stds_away*w_prior[1]):
+    elif (gt_cube.dimensions[0] < w_prior[0]-stds_away*w_prior[1]):
+        print('Because of w-')
         return False
-    elif not (gt_cube.dimensions[0] > w_prior[0]+stds_away*w_prior[1]):
+    elif (gt_cube.dimensions[0] > w_prior[0]+stds_away*w_prior[1]):
+        print('Because of w+')
         return False
-    elif not (gt_cube.dimensions[1] < h_prior[0]-stds_away*h_prior[1]):
+    elif (gt_cube.dimensions[1] < h_prior[0]-stds_away*h_prior[1]):
+        print('Because of h-')
         return False
-    elif not (gt_cube.dimensions[1] > h_prior[0]+stds_away*h_prior[1]):
+    elif (gt_cube.dimensions[1] > h_prior[0]+stds_away*h_prior[1]):
+        print('Because of h+')
         return False
-    elif not (gt_cube.dimensions[2] < l_prior[0]-stds_away*l_prior[1]):
+    elif (gt_cube.dimensions[2] < l_prior[0]-stds_away*l_prior[1]):
+        print('Because of l-')
         return False
-    elif not (gt_cube.dimensions[2] > l_prior[0]+stds_away*l_prior[1]):
+    elif (gt_cube.dimensions[2] > l_prior[0]+stds_away*l_prior[1]):
+        print('Because of l+')
         return False
     else:
         return True

@@ -2,12 +2,12 @@ import torch
 import numpy as np
 import cv2
 import pickle
+from scipy.stats import pearsonr 
 
-from ProposalNetwork.utils.utils import iou_2d, iou_3d, custom_mapping, mask_iou
+from ProposalNetwork.utils.utils import iou_2d, iou_3d, custom_mapping, mask_iou, normalize_vector
 
 def score_iou(gt_box, proposal_box):
     IoU = iou_2d(gt_box,proposal_box)
-    #IoU = custom_mapping(IoU)
     return IoU
 
 def score_segmentation(bube_corners, segmentation_mask):
@@ -35,7 +35,6 @@ def score_dimensions(category, dimensions):
 
     score = []
     for i in range(len(dimensions)):
-        # if category == -1: # no object in proposal
         #category_name = Metadatacatalog.thing_classes[category] # for printing and checking that correct
         [prior_mean, prior_std] = priors['priors_dims_per_cat'][category]
         dimension = dimensions[i]
@@ -44,6 +43,15 @@ def score_dimensions(category, dimensions):
 
     return score
 
+def score_angles(gt_angles, pred_angles):
+    gt_nv = normalize_vector(torch.tensor(gt_angles))
+    correlation = []
+    for i in range(len(pred_angles)):
+        pred_nv = normalize_vector(torch.tensor(pred_angles[i]))
+        correlation.append(abs(pearsonr(gt_nv,pred_nv)[0]))
+
+    return correlation
+
 def score_function(gt_box, proposal_box, bube_corners, segmentation_mask, category, dimensions):
     score = 1.0
     score *= score_iou(gt_box, proposal_box)
@@ -51,3 +59,5 @@ def score_function(gt_box, proposal_box, bube_corners, segmentation_mask, catego
     score *= score_dimensions(category, dimensions)
 
     return score
+
+#print(score_angles([0.6,3.1,2], [[0.6,3.1,2],[np.pi+0.6,np.pi+3.1,np.pi+2],[0.5,-3.1,2]]))
