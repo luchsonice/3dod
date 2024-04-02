@@ -48,7 +48,7 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1,
     l_prior = torch.tensor([priors[0][2], priors[1][2]])
 
     # Check whether it is possible to find gt
-    if not (gt_cube == None) and not is_gt_included(gt_cube,x_range_px, y_range_px, z_range, w_prior, h_prior, l_prior):
+    if not (gt_cube == None) and not is_gt_included(gt_cube,x_range, y_range, z_range, w_prior, h_prior, l_prior):
         print('GT cannot be found!')
 
     list_of_cubes = []

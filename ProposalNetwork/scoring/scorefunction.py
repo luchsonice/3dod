@@ -2,12 +2,12 @@ import torch
 import numpy as np
 import cv2
 import pickle
+from scipy.stats import pearsonr 
 
-from ProposalNetwork.utils.utils import iou_2d, iou_3d, custom_mapping, mask_iou
+from ProposalNetwork.utils.utils import iou_2d, iou_3d, custom_mapping, mask_iou, normalize_vector
 
 def score_iou(gt_box, proposal_box):
     IoU = iou_2d(gt_box,proposal_box)
-    #IoU = custom_mapping(IoU)
     return IoU
 
 def score_segmentation(bube_corners, segmentation_mask):
@@ -35,7 +35,6 @@ def score_dimensions(category, dimensions):
 
     score = []
     for i in range(len(dimensions)):
-        # if category == -1: # no object in proposal
         #category_name = Metadatacatalog.thing_classes[category] # for printing and checking that correct
         [prior_mean, prior_std] = priors['priors_dims_per_cat'][category]
         dimension = dimensions[i]
@@ -43,6 +42,32 @@ def score_dimensions(category, dimensions):
         score.append(np.mean(dimensions_scores))
 
     return score
+
+def euler_to_unit_vector(eulers):
+    """
+    Convert Euler angles to a unit vector.
+    """
+    yaw, pitch, roll = eulers
+    
+    # Calculate the components of the unit vector
+    x = np.cos(yaw) * np.cos(pitch)
+    y = np.sin(yaw) * np.cos(pitch)
+    z = np.sin(pitch)
+    
+    # Normalize the vector
+    length = np.sqrt(x**2 + y**2 + z**2)
+    unit_vector = np.array([x, y, z]) / length
+    
+    return unit_vector
+
+def score_angles(gt_angles, pred_angles):
+    gt_nv = euler_to_unit_vector(gt_angles)
+    correlation = []
+    for i in range(len(pred_angles)):
+        pred_nv = euler_to_unit_vector(pred_angles[i])
+        correlation.append(abs(pearsonr(gt_nv,pred_nv)[0]))
+
+    return correlation
 
 def score_function(gt_box, proposal_box, bube_corners, segmentation_mask, category, dimensions):
     score = 1.0
