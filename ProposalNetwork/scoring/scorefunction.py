@@ -43,11 +43,28 @@ def score_dimensions(category, dimensions):
 
     return score
 
+def euler_to_unit_vector(eulers):
+    """
+    Convert Euler angles to a unit vector.
+    """
+    yaw, pitch, roll = eulers
+    
+    # Calculate the components of the unit vector
+    x = np.cos(yaw) * np.cos(pitch)
+    y = np.sin(yaw) * np.cos(pitch)
+    z = np.sin(pitch)
+    
+    # Normalize the vector
+    length = np.sqrt(x**2 + y**2 + z**2)
+    unit_vector = np.array([x, y, z]) / length
+    
+    return unit_vector
+
 def score_angles(gt_angles, pred_angles):
-    gt_nv = normalize_vector(torch.tensor(gt_angles))
+    gt_nv = euler_to_unit_vector(gt_angles)
     correlation = []
     for i in range(len(pred_angles)):
-        pred_nv = normalize_vector(torch.tensor(pred_angles[i]))
+        pred_nv = euler_to_unit_vector(pred_angles[i])
         correlation.append(abs(pearsonr(gt_nv,pred_nv)[0]))
 
     return correlation
@@ -59,5 +76,3 @@ def score_function(gt_box, proposal_box, bube_corners, segmentation_mask, catego
     score *= score_dimensions(category, dimensions)
 
     return score
-
-#print(score_angles([0.6,3.1,2], [[0.6,3.1,2],[np.pi+0.6,np.pi+3.1,np.pi+2],[0.5,-3.1,2]]))
