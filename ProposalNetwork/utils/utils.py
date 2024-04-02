@@ -66,7 +66,7 @@ def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
     rx = np.random.rand(1) * np.pi - np.pi/2
     ry = np.random.rand(1) * np.pi - np.pi/2
     rz = np.random.rand(1) * np.pi - np.pi/2
-    rotation_matrix = util.euler2mat([rx,ry,rz])
+    rotation_matrix = torch.from_numpy(util.euler2mat([rx,ry,rz]))
     
     return xyz, whl, rotation_matrix
 
@@ -116,11 +116,11 @@ def iou_3d(gt_cube, proposal_cubes):
     - iou: Intersection over Union (IoU) value.
     """
     gt_corners = torch.stack([gt_cube.get_all_corners()])
-    proposal_corners = torch.stack([cube.get_all_corners() for cube in proposal_cubes])
+    proposal_corners = torch.stack([cube.get_all_corners() for cube in proposal_cubes]).to(gt_corners.device)
 
     # TODO check if corners in correct order; Should be
     vol, iou = box3d_overlap(gt_corners,proposal_corners)
-    iou = np.array(iou[0])
+    iou = iou[0]
 
     return iou
 
