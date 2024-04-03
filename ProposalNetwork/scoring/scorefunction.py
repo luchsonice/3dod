@@ -35,13 +35,10 @@ def score_dimensions(category, dimensions):
     dimensions : List of Lists
     P(dim|priors)
     '''
-    with open('filetransfer/priors.pkl', 'rb') as f:
-        priors, Metadatacatalog = pickle.load(f)
-
     score = []
     for i in range(len(dimensions)):
         #category_name = Metadatacatalog.thing_classes[category] # for printing and checking that correct
-        [prior_mean, prior_std] = priors['priors_dims_per_cat'][category]
+        [prior_mean, prior_std] = category
         dimension = dimensions[i]
         dimensions_scores = np.exp(-1/2 * ((dimension - prior_mean)/prior_std)**2)
         score.append(np.mean(dimensions_scores))
