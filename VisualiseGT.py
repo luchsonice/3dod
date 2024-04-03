@@ -436,19 +436,28 @@ def vol_over_cat(dataset):
     means = np.array(list(cats_mean.values()))
     errors = np.array(list(cats_error.values()))
 
-    print(keys)
-    print(means)
-    print(errors)
+    # Calculate Z-scores for 5th and 95th percentiles
+    from scipy.stats import norm
+    z_lower = norm.ppf(0.05)
+    z_upper = norm.ppf(0.95)
+    bounds = []
+    for mean, std in zip(means, errors):
+        # Calculate the lower and upper bounds of the interval
+        lower_bound = mean + z_lower * std
+        upper_bound = mean + z_upper * std
 
+        bounds.append((max(0,lower_bound), upper_bound))
 
     plt.figure(figsize=(14,5))
-    plt.errorbar(keys, means, yerr=errors, fmt='o', color='black', ecolor='gray', elinewidth=3, capsize=0)
-    plt.xticks(rotation=60, size=9)
+    for i, (mean, (lower_bound, upper_bound)) in enumerate(zip(means, bounds)):
+        plt.vlines(x=i, ymin=lower_bound, ymax=upper_bound, color='gray', linewidth=2)
+        plt.plot([i], [mean], marker='o', color='black')
+
+    plt.xticks(np.arange(len(keys)), keys, rotation=60, size=9)
     plt.xlabel('Category')
     plt.ylabel('Volume')
-
     plt.title('Category Distribution')
-    plt.savefig(os.path.join(output_dir, 'volume_distribution.png'),dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(output_dir, 'volume_distribution.png'), dpi=300, bbox_inches='tight')
     plt.close()
 
     return True
@@ -457,5 +466,6 @@ if __name__ == '__main__':
     # _ = category_distribution('SUNRGBD')
     # AP_vs_no_of_classes('SUNRGBD')
     # spatial_statistics('SUNRGBD')
-    AP3D_vs_AP2D('SUNRGBD')
+    # AP3D_vs_AP2D('SUNRGBD')
     # init_dataloader()
+    vol_over_cat('SUNRGBD')

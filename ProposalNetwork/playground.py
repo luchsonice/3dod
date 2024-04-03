@@ -88,6 +88,7 @@ gt_R = gt_instances[image].gt_poses[gt_obj]
 gt_cube_ = Cube(torch.cat([gt____whlxyz[6:],gt____whlxyz[3:6]]),gt_R)
 gt_cube = gt_cube_.get_cube()
 gt_z = gt_cube_.center[2]
+#print('GT',gt____whlxyz,util.mat2euler(gt_R))
 
 # image
 input_format = 'BGR'
@@ -121,7 +122,7 @@ depth_patch = depth_image[int(reference_box.x1):int(reference_box.x2),int(refere
 
 
 # Get Proposals
-x_points = [1, 10, 100, 1000, 10000]#, 100000]
+x_points = [1, 10, 100, 1000, 10000]#, 100000, 1000000]
 number_of_proposals = x_points[-1]
 
 with open('filetransfer/priors.pkl', 'rb') as f:
