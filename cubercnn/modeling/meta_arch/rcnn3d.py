@@ -356,10 +356,12 @@ class BoxNet(RCNN3D):
         proposals, _ = self.proposal_generator(images, features, gt_instances)
            
         # use the mask and the 2D box to predict the 3D box
-        results, _ = self.roi_heads(images, images_raw, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, output_recall_scores, gt_instances)
+        results = self.roi_heads(images, images_raw, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, output_recall_scores, gt_instances)
         
         # postprocess the images to be the same shape as the original
-        if do_postprocess:
+        if output_recall_scores:
+            return results
+        elif do_postprocess:
             assert not torch.jit.is_scripting(), "Scripting is not supported for postprocess."
             return GeneralizedRCNN._postprocess(results, batched_inputs, images.image_sizes)
         else:

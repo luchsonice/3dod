@@ -132,3 +132,17 @@ class Cube:
     
     def __repr__(self) -> str:
         return f'Cube({self.center}, {self.dimensions}, {self.rotation})'
+    
+    def to_device(self, device):
+        '''
+        Move all tensors of the instantiated class to the specified device.
+
+        Args:
+            device: The device to move the tensors to (e.g., 'cuda', 'cpu').
+        '''
+        self.tensor = self.tensor.to(device)
+        self.center = self.center.to(device)
+        self.dimensions = self.dimensions.to(device)
+        self.rotation = self.rotation.to(device)
+        self.cube = self.cube.to(device)
+        return self

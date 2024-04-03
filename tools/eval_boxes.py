@@ -4,6 +4,7 @@ import itertools
 import logging
 import os
 from detectron2.evaluation.evaluator import inference_context
+from detectron2.utils.visualizer import Visualizer
 from matplotlib import pyplot as plt
 import numpy as np
 from segment_anything import sam_model_registry, SamPredictor
@@ -127,25 +128,56 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         outputs = []
 
         for idx, inputs in track(enumerate(data_loader), description="Making Mean average best overlap plots", total=total):
-            # model should be modified in cubercnn.modeling.roi_heads.cube_head.py class CubeHead_Vanilla forward function"
-
+            if idx >2: break
             output = model(inputs, segmentor, output_recall_scores)
             outputs.append(output)
 
         # mean over all the outputs
-        x_points = outputs[0][0]
-        segment_ious = outputs[:,1].mean(axis=0)
-
-        plt.figure()
-        plt.plot(x_points, segment_ious, marker='o', linestyle='-',c='purple') 
+        Iou3D = np.array([x[1] for x in outputs])
+        Iou2D = np.array([x[2] for x in outputs])
+        Iou3D = Iou3D.mean(axis=0)
+        Iou2D = Iou2D.mean(axis=0)
+        
+        plt.figure(figsize=(8,5))
+        plt.plot(Iou3D, marker='o', linestyle='-',c='purple') 
         plt.grid(True)
         plt.xscale('log')
         plt.xlabel('Number of Proposals')
         plt.ylabel('3D IoU')
-        plt.title('IoU vs Number of Proposals')
+        plt.title('Mean Average Best Overlap vs Number of Proposals')
         f_name = os.path.join('ProposalNetwork/output/MABO', 'MABO_segment.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         print('saved to ', f_name)
+
+
+        # ## for debugging
+        p_info = outputs[0][0]
+        pred_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[i] for i in p_info.box_classes[:len(p_info.gt_boxes3D)]]
+        fig, (ax, ax1) = plt.subplots(2,1, figsize=(14, 10))
+        input = next(iter(data_loader))[0]
+        images_raw = input['image']
+        K = input['K']
+        prop_img = images_raw.permute(1,2,0).cpu().numpy().copy()
+        img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, K[0].cpu().numpy(), p_info.pred_cube_meshes,text=pred_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0])
+        vis_img_3d = img_3DPR.astype(np.uint8)
+        ax.set_title('Predicted')
+        ax.imshow(np.concatenate((vis_img_3d, img_novel), axis=1))
+        box_size = p_info.gt_boxes3D.shape[0]
+        v_pred = Visualizer(prop_img, None)
+        v_pred = v_pred.overlay_instances(
+            boxes=p_info.gt_boxes[0:box_size].tensor.cpu().numpy()
+        )
+        # prop_img = v_pred.get_image()
+        gt_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[i] for i in p_info.gt_box_classes]
+        img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, K[0].cpu().numpy(), p_info.gt_cube_meshes,text=gt_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0])
+        vis_img_3d = img_3DPR.astype(np.uint8)
+        im_concat = np.concatenate((vis_img_3d, img_novel), axis=1)
+        # for mask in mask_per_image:
+        #     show_mask(mask[0].cpu().numpy(), ax1, random_color=True)
+        ax1.set_title('GT')
+        ax1.imshow(im_concat)
+        plt.show()
+        ##### end debugging
 
 
 

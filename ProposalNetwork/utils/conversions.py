@@ -20,7 +20,7 @@ def cube_to_box(cube,K):
     min_y = torch.min(bube_corners[:,1])
     max_y = torch.max(bube_corners[:,1])
     
-    return Box(torch.tensor([min_x, min_y, max_x, max_y]))
+    return Box(torch.tensor([min_x, min_y, max_x, max_y], device=cube.tensor.device))
 
 def Boxes_to_list_of_Box(Boxes):
     '''

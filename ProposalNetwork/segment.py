@@ -55,12 +55,13 @@ input_point = np.array([[pred_box[0]+(pred_box[2]-pred_box[0])/2, pred_box[1]+(p
 img = batched_inputs[0]['image']
 image = convert_image_to_rgb(img.permute(1, 2, 0), 'BGR')    
 
+predictor.set_image(image)
+"""
 plt.figure()
 plt.imshow(image)
 plt.axis('on')
 plt.show()
 
-predictor.set_image(image)
 
 # set a point
 # input_point = np.array([[500, 375]])
@@ -87,20 +88,19 @@ for i, (mask, score) in enumerate(zip(masks, scores)):
     plt.title(f"Mask {i+1}, Score: {score:.3f}", fontsize=18)
     plt.axis('off')
     plt.show()  
-
+"""
 # Specifying a specific object with a box
 # The model can also take a box as input, provided in xyxy format.
+pred_boxes = proposals[0].proposal_boxes[:2].tensor.numpy()
+mask_per_image = np.zeros((len(pred_boxes), image.shape[0], image.shape[1]))
+for i, box in enumerate(pred_boxes):
+    mask_per_image[i], _, _ = predictor.predict(box=box, multimask_output=False)
 
-input_box = pred_box # np.array([425, 600, 700, 875])
-masks, _, _ = predictor.predict(
-    point_coords=None,
-    point_labels=None,
-    box=input_box[None, :],
-    multimask_output=False,
-)
+
 plt.figure()
 plt.imshow(image)
-show_mask(masks[0], plt.gca())
-show_box(input_box, plt.gca())
+show_mask(mask_per_image[0] + mask_per_image[1], plt.gca())
+show_box(pred_boxes[0], plt.gca())
+show_box(pred_boxes[1], plt.gca())
 plt.axis('off')
 plt.show()
