@@ -1,8 +1,8 @@
 import torch
-from ProposalNetwork.utils.spaces import Box, Cube
-from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_space, normalised_space_to_pixel
+from ProposalNetwork.utils.spaces import Box
 import numpy as np
 from cubercnn import util
+import matplotlib.pyplot as plt
 
 from detectron2.structures import pairwise_iou
 from pytorch3d.ops import box3d_overlap

@@ -28,6 +28,7 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1,
     Proposes a cube. The ranges are largely random, except for that the center needs to be inside the reference box.
     Also, objects have a length, width and height according to priors.
 
+    im_shape = [x,y]
     priors = [prior_mean, prior_std] 2x3
     '''
     # Removing the outer 25% on each side of range for center point

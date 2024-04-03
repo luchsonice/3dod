@@ -75,8 +75,8 @@ plt.savefig(os.path.join('ProposalNetwork/output/trash', 'test.png'),dpi=300, bb
 with open('ProposalNetwork/proposals/network_out2.pkl', 'rb') as f:
         batched_inputs, images, proposals, Ks, gt_instances, im_scales_ratio, instances = pickle.load(f)
 
-image = 1
-gt_obj = 1
+image = 0
+gt_obj = 0
 
 # Necessary Ground Truths
 # 2D
