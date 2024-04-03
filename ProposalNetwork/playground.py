@@ -122,15 +122,14 @@ depth_patch = depth_image[int(reference_box.x1):int(reference_box.x2),int(refere
 
 
 # Get Proposals
-x_points = [1, 10, 100, 1000, 10000]#, 100000, 1000000]
+x_points = [1, 10, 100, 1000, 10000]#, 100000]
 number_of_proposals = x_points[-1]
 
 with open('filetransfer/priors.pkl', 'rb') as f:
         priors, Metadatacatalog = pickle.load(f)
 category = gt_instances[image].gt_classes[gt_obj]
 priors_propose = priors['priors_dims_per_cat'][category]
-
-pred_cubes = propose(reference_box, depth_patch, priors_propose, img.shape[:2], number_of_proposals=number_of_proposals, gt_cube=gt_cube_)
+pred_cubes = propose(reference_box, depth_patch, priors_propose, img.shape[:2][::-1], number_of_proposals=number_of_proposals, gt_cube=gt_cube_)
 proposed_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_proposals)]
 
 # OB IoU3D
@@ -141,7 +140,6 @@ idx_scores3D = [np.argmax(IoU3D[:n]) for n in x_points]
 max_scores3D = [IoU3D[i] for i in idx_scores3D]
 idx_highest_iou3D = idx_scores3D[-1]
 print('highest possible IoU', max_values3D[-1])
-
 
 # OB IoU2D
 IoU2D = score_iou(gt_box, proposed_box)
@@ -216,6 +214,7 @@ plt.xlabel('score')
 plt.ylabel('3DIoU')
 plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'combined_scores.png'),dpi=300, bbox_inches='tight')
 
+""" Makes only sense when better results
 fig, ax = plt.subplots()
 ax.scatter(combined_score,IoU3D, alpha=0.3)
 heatmap, xedges, yedges = np.histogram2d(combined_score,IoU3D, bins=10)
@@ -223,6 +222,9 @@ extent = [xedges[0], xedges[-1]+0.05, yedges[0], yedges[-1]+0.05]
 cax = ax.imshow(heatmap.T, extent=extent, origin='lower')
 cbar = fig.colorbar(cax)
 fig.savefig(os.path.join('ProposalNetwork/output/AMOB', 'combined_scores.png'),dpi=300, bbox_inches='tight')
+"""
+
+
 
 
 
@@ -276,8 +278,7 @@ meshes_text = ['highest segment']
 meshes_text.append('gt cube')
 pred_meshes.append(gt_cube.__getitem__(0).detach())
 
-img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, K_scaled.cpu().numpy(), pred_meshes,text=meshes_text, blend_weight=0.5, blend_weight_overlay=0.85,scale = img.shape[0])
-im_concat = np.concatenate((img_3DPR, img_novel), axis=1)
+img_3DPR, _, _ = vis.draw_scene_view(prop_img, K_scaled.cpu().numpy(), pred_meshes,text=meshes_text, blend_weight=0.5, blend_weight_overlay=0.85,scale = img.shape[0])
 vis_img_3d = img_3DPR.astype(np.uint8)
 
 fig = plt.figure()
@@ -286,3 +287,33 @@ ax.imshow(vis_img_3d)
 ax.plot(torch.cat((gt_box.get_all_corners()[:,0],gt_box.get_all_corners()[0,0].reshape(1))),torch.cat((gt_box.get_all_corners()[:,1],gt_box.get_all_corners()[0,1].reshape(1))),color='purple')
 show_mask(masks,ax)
 plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'box_with_highest_segment.png'),dpi=300, bbox_inches='tight')
+
+
+
+# tmp
+for i in range(len(IoU3D)):
+     if IoU3D[i] == 0.0:
+          idx = i
+          break
+
+pred_meshes = [pred_cubes[idx].get_cube().__getitem__(0).detach()]
+meshes_text = ['box with 0 3diou']
+meshes_text.append('gt cube')
+pred_meshes.append(gt_cube.__getitem__(0).detach())
+
+fig = plt.figure()
+ax = fig.add_subplot(111)
+prop_img = v_pred.get_image()
+img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, K_scaled.cpu().numpy(), pred_meshes,text=meshes_text, blend_weight=0.5, blend_weight_overlay=0.85,scale = img.shape[0])
+im_concat = np.concatenate((img_3DPR, img_novel), axis=1)
+im_concat = im_concat[..., ::-1]
+util.imwrite(im_concat, os.path.join('ProposalNetwork/output/AMOB', 'tmp.jpg'))
+
+center = normalised_space_to_pixel(np.array(pred_cubes[idx].center)[:2],img.shape[:2][::-1])
+fig = plt.figure()
+ax = fig.add_subplot(111)
+vis_img_3d = img_3DPR.astype(np.uint8)
+ax.imshow(vis_img_3d)
+ax.scatter([135.45,135.45,259.76,259.76],[121.6,236.29,121.6,236.29],color='b')
+ax.scatter(center[0],center[1],color='r')
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'tmp2.png'),dpi=300, bbox_inches='tight')
