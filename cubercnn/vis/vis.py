@@ -261,9 +261,6 @@ def draw_scene_view(im, K, meshes, text=None, scale=1000, R=None, T=None, zoom_f
         meshes_scene = join_meshes_as_scene(meshes)
         if torch.cuda.is_available():
             meshes_scene = meshes_scene.cuda()
-        else:
-            print('Drawing on cpu, (might be slow)')
-            
         device = meshes_scene.device
         meshes_scene.textures = meshes_scene.textures.to(device)
 
