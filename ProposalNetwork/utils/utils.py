@@ -206,3 +206,19 @@ def is_gt_included(gt_cube,x_range,y_range,z_range, w_prior, h_prior, l_prior):
 
     # rotation nothing yet
 
+def euler_to_unit_vector(eulers):
+    """
+    Convert Euler angles to a unit vector.
+    """
+    yaw, pitch, roll = eulers
+    
+    # Calculate the components of the unit vector
+    x = np.cos(yaw) * np.cos(pitch)
+    y = np.sin(yaw) * np.cos(pitch)
+    z = np.sin(pitch)
+    
+    # Normalize the vector
+    length = np.sqrt(x**2 + y**2 + z**2)
+    unit_vector = np.array([x, y, z]) / length
+    
+    return unit_vector

@@ -4,25 +4,30 @@ import cv2
 import pickle
 from scipy.stats import pearsonr 
 
-from ProposalNetwork.utils.utils import iou_2d, iou_3d, custom_mapping, mask_iou, normalize_vector
+from ProposalNetwork.utils.utils import iou_2d, mask_iou, euler_to_unit_vector
 
 def score_iou(gt_box, proposal_box):
     IoU = iou_2d(gt_box,proposal_box)
     return IoU
 
-def score_segmentation(bube_corners, segmentation_mask):
+def score_segmentation(segmentation_mask, bube_corners):
     '''
-    IoA between segmentation and bube.
+    segmentation_mask   : Mask
+    bube_corners        : List of Lists
     '''
-    bube_mask = np.zeros(segmentation_mask.shape, dtype='uint8')
 
-    # Remove "inner" points (2) and put others in correct order 
-    # Calculate the convex hull of the points which also orders points correctly
-    polygon_points = cv2.convexHull(np.array(bube_corners))
-    polygon_points = np.array([polygon_points],dtype=np.int32)
-    cv2.fillPoly(bube_mask, polygon_points, 1)
+    scores = []
+    for i in range(len(bube_corners)):
+        bube_mask = np.zeros(segmentation_mask.shape, dtype='uint8')
 
-    return mask_iou(segmentation_mask, bube_mask)
+        # Remove "inner" points (2) and put others in correct order 
+        # Calculate the convex hull of the points which also orders points correctly
+        polygon_points = cv2.convexHull(np.array(bube_corners[i]))
+        polygon_points = np.array([polygon_points],dtype=np.int32)
+        cv2.fillPoly(bube_mask, polygon_points, 1)
+        scores.append(mask_iou(segmentation_mask, bube_mask))
+
+    return scores
 
 def score_dimensions(category, dimensions):
     '''
@@ -42,23 +47,6 @@ def score_dimensions(category, dimensions):
         score.append(np.mean(dimensions_scores))
 
     return score
-
-def euler_to_unit_vector(eulers):
-    """
-    Convert Euler angles to a unit vector.
-    """
-    yaw, pitch, roll = eulers
-    
-    # Calculate the components of the unit vector
-    x = np.cos(yaw) * np.cos(pitch)
-    y = np.sin(yaw) * np.cos(pitch)
-    z = np.sin(pitch)
-    
-    # Normalize the vector
-    length = np.sqrt(x**2 + y**2 + z**2)
-    unit_vector = np.array([x, y, z]) / length
-    
-    return unit_vector
 
 def score_angles(gt_angles, pred_angles):
     gt_nv = euler_to_unit_vector(gt_angles)

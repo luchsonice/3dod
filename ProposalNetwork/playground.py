@@ -134,7 +134,7 @@ pred_cubes = propose(reference_box, depth_patch, priors_propose, img.shape[:2], 
 proposed_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_proposals)]
 
 # OB IoU3D
-IoU3D = iou_3d(gt_cube_,pred_cubes)
+IoU3D = np.array(iou_3d(gt_cube_,pred_cubes))
 print('Percentage of cubes with no intersection:',int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100))
 max_values3D = [np.max(IoU3D[:n]) for n in x_points]
 idx_scores3D = [np.argmax(IoU3D[:n]) for n in x_points]
@@ -171,12 +171,12 @@ else:
         pickle.dump(masks, f)
 
 seg_mask = masks[0]
-segment_scores = [score_segmentation(pred_cubes[i].get_bube_corners(K_scaled),seg_mask) for i in range(number_of_proposals)]
+bube_corners = [pred_cubes[i].get_bube_corners(K_scaled) for i in range(number_of_proposals)]
+segment_scores = score_segmentation(seg_mask, bube_corners)
 idx_scores_segment = np.argsort(segment_scores)[::-1]
 sorted_segment_IoU = [IoU3D[i] for i in idx_scores_segment]
 segment_ious = [np.max(sorted_segment_IoU[:n]) for n in x_points]
 print('IoU3D of best segment score',sorted_segment_IoU[0])
-
 
 # OB Dimensions
 dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
