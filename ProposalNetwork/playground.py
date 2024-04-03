@@ -6,7 +6,7 @@ from ProposalNetwork.utils.utils import compute_rotation_matrix_from_ortho6d, ma
 
 from ProposalNetwork.scoring.scorefunction import score_segmentation, score_dimensions, score_iou, score_angles
 
-from ProposalNetwork.segment import show_mask
+from ProposalNetwork.utils.utils import show_mask
 
 import matplotlib.pyplot as plt
 import torch
@@ -37,7 +37,6 @@ def init_segmentation():
     predictor = SamPredictor(sam)
     return predictor
 
-predictor = init_segmentation()
 
 #torch.manual_seed(1)
 '''
@@ -67,7 +66,7 @@ ax.scatter(-0.4,-0.5,color='b')
 for i in range(8):
     ax.text(bube_corners[i,0], bube_corners[i,1], '(%d)' % i, ha='right')
 ax.plot(torch.cat((box.get_all_corners()[:,0],box.get_all_corners()[0,0].reshape(1))),torch.cat((box.get_all_corners()[:,1],box.get_all_corners()[0,1].reshape(1))),color='b')
-plt.savefig(os.path.join('/work3/s194369/3dod/ProposalNetwork/output/trash', 'test.png'),dpi=300, bbox_inches='tight')
+plt.savefig(os.path.join('ProposalNetwork/output/trash', 'test.png'),dpi=300, bbox_inches='tight')
 #exit()
 '''
 
@@ -152,11 +151,12 @@ print('IoU3D of best IoU2D score',sorted_iou2d_IoU[0])
 
 
 # Segment Score
-if os.path.exists('/work3/s194369/3dod/ProposalNetwork/mask'+str(image)+'.pkl'):
+if os.path.exists('ProposalNetwork/mask'+str(image)+'.pkl'):
       # load
-     with open('/work3/s194369/3dod/ProposalNetwork/mask'+str(image)+'.pkl', 'rb') as f:
+     with open('ProposalNetwork/mask'+str(image)+'.pkl', 'rb') as f:
         masks = pickle.load(f)
 else:
+    predictor = init_segmentation()
     predictor.set_image(img)
     input_box = np.array([reference_box.x1,reference_box.y1,reference_box.x2,reference_box.y2])
 
@@ -167,7 +167,7 @@ else:
         multimask_output=False,
     )
     # dump
-    with open('/work3/s194369/3dod/ProposalNetwork/mask'+str(image)+'.pkl', 'wb') as f:
+    with open('ProposalNetwork/mask'+str(image)+'.pkl', 'wb') as f:
         pickle.dump(masks, f)
 
 seg_mask = masks[0]
@@ -180,7 +180,7 @@ print('IoU3D of best segment score',sorted_segment_IoU[0])
 
 # OB Dimensions
 dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
-dim_scores = score_dimensions(category, dimensions)
+dim_scores = score_dimensions(priors_propose, dimensions)
 idx_scores_dim = np.argsort(dim_scores)[::-1]
 sorted_dim_IoU = [IoU3D[i] for i in idx_scores_dim]
 dim_ious = [np.max(sorted_dim_IoU[:n]) for n in x_points]
