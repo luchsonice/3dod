@@ -64,6 +64,20 @@ class Box:
     def __repr__(self) -> str:
         return f'Box({self.x1:.1f}, {self.y1:.1f}, {self.x2:.1f}, {self.y2:.1f})'
 
+    def to_device(self, device):
+        '''
+        Move all tensors of the instantiated class to the specified device.
+
+        Args:
+            device: The device to move the tensors to (e.g., 'cuda', 'cpu').
+        '''
+        self.box = self.box.to(device)
+        self.center = self.center.to(device)
+        self.width = self.width.to(device)
+        self.height = self.height.to(device)
+        self.area = self.area.to(device)
+        self.x1 = self.x1.to(device); self.x2 = self.x2.to(device); self.y1 = self.y1.to(device); self.y2 = self.y2.to(device)
+        return self
 
 class Cube:
     '''

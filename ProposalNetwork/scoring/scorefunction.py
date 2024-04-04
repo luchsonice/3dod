@@ -36,9 +36,9 @@ def score_dimensions(category, dimensions):
     P(dim|priors)
     '''
     score = []
+    [prior_mean, prior_std] = category
     for i in range(len(dimensions)):
         #category_name = Metadatacatalog.thing_classes[category] # for printing and checking that correct
-        [prior_mean, prior_std] = category
         dimension = dimensions[i]
         dimensions_scores = np.exp(-1/2 * ((dimension - prior_mean)/prior_std)**2)
         score.append(np.mean(dimensions_scores))
