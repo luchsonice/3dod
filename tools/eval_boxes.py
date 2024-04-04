@@ -3,6 +3,8 @@ from contextlib import ExitStack
 import itertools
 import logging
 import os
+import pickle
+from detectron2.data.detection_utils import convert_image_to_rgb
 from detectron2.evaluation.evaluator import inference_context
 from detectron2.utils.visualizer import Visualizer
 from matplotlib import pyplot as plt
@@ -23,6 +25,7 @@ import wandb
 import torch.nn as nn
 from rich.progress import track
 
+from ProposalNetwork.utils.utils import show_mask, show_mask2
 from cubercnn.data.dataset_mapper import DatasetMapper3D
 from cubercnn.evaluation.omni3d_evaluation import instances_to_coco_json
 
@@ -42,8 +45,6 @@ from cubercnn import util, vis, data
 # even though this import is unused, it initializes the backbone registry
 from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
 
-
-MAX_TRAINING_ATTEMPTS = 10
 
 def init_segmentation(device='cpu'):
     # 1) first cd into the segment_anything and pip install -e .
@@ -125,7 +126,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         outputs = []
 
         for idx, inputs in track(enumerate(data_loader), description="Making Mean average best overlap plots", total=total):
-            # if idx >2: break # #TODO DEBUG:
+            # if idx >5: break # #TODO DEBUG:
             output = model(inputs, segmentor, output_recall_scores)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_angle, score_combined
             outputs.append(output)
@@ -165,32 +166,42 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         d_iter = iter(data_loader)
         for i , _ in enumerate(outputs):
             p_info = outputs[i][0]
-            pred_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[i] for i in p_info.box_classes[:len(p_info.gt_boxes3D)]]
+            pred_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[i] for i in p_info.gt_box_classes[:len(p_info.gt_boxes3D)]]
+            box_size = p_info.gt_boxes3D.shape[0]
+            colors = [np.concatenate([np.random.random(3), np.array([0.6])], axis=0) for _ in range(box_size)]
             fig, (ax, ax1) = plt.subplots(2,1, figsize=(14, 10))
             input = next(d_iter)[0]
             images_raw = input['image']
             K = np.array(input['K'])
-            prop_img = images_raw.cpu().numpy().copy()
+            
+            prop_img = convert_image_to_rgb(images_raw.permute(1,2,0).cpu().numpy(), 'BGR').copy()
             img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, K, p_info.pred_cube_meshes,text=pred_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0])
             vis_img_3d = img_3DPR.astype(np.uint8)
+            vis_img_3d = show_mask2(p_info.mask_per_image.cpu().numpy(), vis_img_3d, random_color=colors)
             ax.set_title('Predicted')
+            # expand_img_novel to have alpha channel
+            img_novel = np.concatenate((img_novel, np.ones_like(img_novel[:,:,0:1])*255), axis=-1)/255
             ax.imshow(np.concatenate((vis_img_3d, img_novel), axis=1))
-            box_size = p_info.gt_boxes3D.shape[0]
             v_pred = Visualizer(prop_img, None)
             v_pred = v_pred.overlay_instances(
                 boxes=p_info.gt_boxes[0][0:box_size].tensor.cpu().numpy()
+                , assigned_colors=colors
             )
-            # prop_img = v_pred.get_image()
+            prop_img = v_pred.get_image()
             gt_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[i] for i in p_info.gt_box_classes]
             img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, K, p_info.gt_cube_meshes,text=gt_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0])
             vis_img_3d = img_3DPR.astype(np.uint8)
             im_concat = np.concatenate((vis_img_3d, img_novel), axis=1)
-            # for mask in mask_per_image:
-            #     show_mask(mask[0].cpu().numpy(), ax1, random_color=True)
             ax1.set_title('GT')
             ax1.imshow(im_concat)
             f_name = os.path.join('ProposalNetwork/output/MABO', f'vis_{i}.png')
             plt.savefig(f_name, dpi=300, bbox_inches='tight')
+            a=2
+
+            with open(f'ProposalNetwork/output/MABO/out_{i}.pkl', 'wb') as f:
+                out = images_raw.permute(1,2,0).cpu().numpy(), K, p_info.mask_per_image.cpu().numpy(), p_info.gt_boxes3D, p_info.gt_boxes[0], pred_box_classes_names
+                # im, K, mask, gt_boxes3D, gt_boxes, pred_box_classes_names
+                pickle.dump(out, f)
 
 
 

@@ -233,6 +233,34 @@ def show_mask(mask, ax, random_color=False):
     h, w = mask.shape[-2:]
     mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
     ax.imshow(mask_image)
+
+def show_mask2(masks:np.array, im:np.array, random_color=False):
+    """
+    Display the masks on top of the image.
+
+    Args:
+        masks (np.array): Array of masks with shape (h, w, 4).
+        im (np.array): Image with shape (h, w, 3).
+        random_color (bool, optional): Whether to use random colors for the masks. Defaults to False.
+
+    Returns:
+        np.array: Image with masks displayed on top.
+    """
+    im_expanded = np.concatenate((im, np.ones((im.shape[0],im.shape[1],1))*255), axis=-1)/255
+
+    mask_image = np.zeros((im.shape[0],im.shape[1],4))
+    for i, mask in enumerate(masks):
+        if isinstance(random_color, list):
+            color = random_color[i]
+        else:
+            color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
+        h, w = mask.shape[-2:]
+        mask_sub = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+        mask_image = mask_image + mask_sub
+    mask_binary = (mask_image > 0).astype(bool)
+    im_out = im_expanded * ~mask_binary + (0.5* mask_image + 0.5 * (im_expanded * mask_binary))
+    im_out = im_out.clip(0,1)
+    return im_out
     
 def show_points(coords, labels, ax, marker_size=375):
     pos_points = coords[labels==1]
