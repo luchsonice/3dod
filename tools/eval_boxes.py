@@ -130,7 +130,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
             if i > 3:
                 break
             output = model(inputs, segmentor, output_recall_scores)
-            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_angle, score_combined
+            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, stat_empty_boxes
             outputs.append(output)
 
         # mean over all the outputs
@@ -138,13 +138,14 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         Iou2D           = np.array([x[2] for x in outputs])
         score_seg       = np.array([x[3] for x in outputs])
         score_dim       = np.array([x[4] for x in outputs])
-        score_angle     = np.array([x[5] for x in outputs])
-        score_combined  = np.array([x[6] for x in outputs])
+        score_combined  = np.array([x[5] for x in outputs])
+        stat_empty_boxes  = np.array([x[6] for x in outputs])
+        print('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
+
         Iou3D = Iou3D.mean(axis=0)
         Iou2D = Iou2D.mean(axis=0)
         score_seg = score_seg.mean(axis=0)
         score_dim = score_dim.mean(axis=0)
-        score_angle = score_angle.mean(axis=0)
         score_combined = score_combined.mean(axis=0)
                 
         plt.figure(figsize=(8,5))
@@ -152,7 +153,6 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.plot(score_dim, linestyle='-',c='green',label='dim') 
         plt.plot(score_seg, linestyle='-',c='purple',label='segment')
         plt.plot(Iou2D, linestyle='-',c='orange',label='2d IoU') 
-        plt.plot(score_angle, linestyle='-',c='blue',label='angles') 
         plt.grid(True)
         plt.xscale('log')
         plt.xlabel('Number of Proposals')
