@@ -516,7 +516,8 @@ class ROIHeads_Boxer(StandardROIHeads):
             reference_box = Box(gt_2d)
             reference_box = reference_box.to_device('cpu')
             priors = [prior_dims_mean[i].cpu().numpy(), prior_dims_std[i].cpu().numpy()]
-            pred_cubes = propose(reference_box, depth_maps.tensor.cpu(), priors, im_shape, number_of_proposals=number_of_proposals)
+            depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.y1):int(reference_box.y2),int(reference_box.x1):int(reference_box.x2)]
+            pred_cubes = propose(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals)
             # ## end cpu region
 
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
@@ -524,6 +525,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
             pred_boxes = [cube_to_box(pred_cube, Ks_scaled_per_box) for pred_cube in pred_cubes]
             # iou
+            print('z',gt_cube.center[2],np.mean([i.center[2].numpy() for i in pred_cubes]))
             IoU3D = iou_3d(gt_cube, pred_cubes).cpu().numpy()
             pred_cubes = [pred_cube.to_device('cpu') for pred_cube in pred_cubes]
             bube_corners = [pred_cubes[j].get_bube_corners(Ks_scaled_per_box.cpu()) for j in range(number_of_proposals)]
@@ -547,7 +549,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
             gt_cube_meshes.append(gt_cube.get_cube().__getitem__(0).detach())
         # ################
-        
+
         score_IoU2D    = np.mean(score_IoU2D, axis=0)
         score_seg      = np.mean(score_seg, axis=0)
         score_dim      = np.mean(score_dim, axis=0)
