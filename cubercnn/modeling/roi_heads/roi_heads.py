@@ -273,19 +273,37 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             # mask for each proposal
             # NOTE: at the the moment the this assumes a batch size of 1, since the test loader has it hardcoded
-            masks = []
-            for img, instance in zip(images_raw.tensor, pred_instances): # over all images in batch
-                mask_per_image = torch.zeros((len(instance), 1, images_raw.tensor.shape[2], images_raw.tensor.shape[3]))
-                img = np.array(img.permute(1, 2, 0).cpu())
+            if output_recall_scores:
+                masks = []
+                for img, instance in zip(images_raw.tensor, targets): # over all images in batch
+                    mask_per_image = torch.zeros((len(instance), 1, images_raw.tensor.shape[2], images_raw.tensor.shape[3]))
+                    img = np.array(img.permute(1, 2, 0).cpu())
 
-                segmentor.set_image(img)
-                transformed_boxes = segmentor.transform.apply_boxes_torch(instance.pred_boxes.tensor, images_raw.tensor.shape[2:])
-                mask_per_image, _, _ = segmentor.predict_torch(
-                    point_coords=None,
-                    point_labels=None,
-                    boxes=transformed_boxes,
-                    multimask_output=False,)
-                masks.append(mask_per_image)
+                    # shrink boxes width and heigth by x %
+                    # x = 0.05
+                    # boxes = instance.gt_boxes.tensor
+                    # boxes[:, 0] += x * (boxes[:, 2] - boxes[:, 0])
+                    # boxes[:, 1] += x * (boxes[:, 3] - boxes[:, 1])
+                    # boxes[:, 2] -= x * (boxes[:, 2] - boxes[:, 0])
+                    # boxes[:, 3] -= x * (boxes[:, 3] - boxes[:, 1])           
+
+                    segmentor.set_image(img)
+                    transformed_boxes = segmentor.transform.apply_boxes_torch(instance.gt_boxes.tensor, images_raw.tensor.shape[2:])
+                    mask_per_image, _, _ = segmentor.predict_torch(
+                        point_coords=None, point_labels=None, boxes=transformed_boxes, multimask_output=False,)
+                    masks.append(mask_per_image)
+            else:
+                masks = []
+                for img, instance in zip(images_raw.tensor, pred_instances): # over all images in batch
+                    mask_per_image = torch.zeros((len(instance), 1, images_raw.tensor.shape[2], images_raw.tensor.shape[3]))
+                    img = np.array(img.permute(1, 2, 0).cpu())
+
+                    segmentor.set_image(img)
+                    transformed_boxes = segmentor.transform.apply_boxes_torch(instance.pred_boxes.tensor, images_raw.tensor.shape[2:])
+                    mask_per_image, _, _ = segmentor.predict_torch(
+                        point_coords=None, point_labels=None, boxes=transformed_boxes, multimask_output=False,)
+                    masks.append(mask_per_image)
+                
 
             if self.loss_w_3d > 0:
                 pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets)
@@ -390,6 +408,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             gt_boxes: List
             gt_box_classes: List
             box_classes: List
+            mask_per_image: List
 
         features = [features[f] for f in self.in_features]
 
@@ -487,7 +506,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             # gather prior dimensions
             # prior_dims = self.priors_dims_per_cat.detach().repeat([n, 1, 1, 1])[fg_inds, box_classes]
             prior_dims = self.priors_dims_per_cat.detach()
-            prior_dims = prior_dims[:, box_classes, :, :].squeeze(0)
+            prior_dims = prior_dims[:, gt_box_classes, :, :].squeeze(0)
             prior_dims_mean = prior_dims[:, 0, :]
             prior_dims_std = prior_dims[:, 1, :]
         
@@ -497,14 +516,10 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         # ###### this functionality should prob be implemented in the self.cube_head.forward() ######
 
-        x_points = [1000]
-        if output_recall_scores:
-            x_points = [1, 10, 100, 500] #, 1000, 10000] #, 100000]
-
+        number_of_proposals = 500
         pred_cube_meshes = []
         mask_per_image = mask_per_image[0] # this should be looped over
         pred_boxes = pred_boxes[0] # this should be looped over
-        number_of_proposals = x_points[-1]
         gt_cube_meshes = []
         im_shape = images_raw.tensor.shape[2:][::-1] # im shape should be (x,y)
         n_gt = len(gt_boxes3D)
@@ -514,10 +529,13 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_angle    = np.zeros((n_gt, number_of_proposals))
         score_combined = np.zeros((n_gt, number_of_proposals))
         # it is important that the zip is exhaustedd at the shortest length
-        for i, (instance_i, gt_3d, gt_pose) in enumerate(zip(pred_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
+        print('len(gt_boxes3D):', len(gt_boxes3D), 'len(gt_boxes):', len(gt_boxes))
+        for i, (instance_i, gt_2d, gt_3d, gt_pose) in enumerate(zip(pred_boxes, gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
+
             # ## cpu region
-            # TODO the instance_i might not correspond to the correct gt_3d, gt_pose
-            reference_box = Box(instance_i)
+            # NOTE: the instance_i (the predicted 2D box) might not correspond to the correct gt_3d, gt_pose
+            # so therefore we use the GT 2D box to propose 3D boxes for now
+            reference_box = Box(gt_2d)
             reference_box = reference_box.to_device('cpu')
             priors = [prior_dims_mean[i].cpu().numpy(), prior_dims_std[i].cpu().numpy()]
             pred_cubes = propose(reference_box, depth_maps.tensor.cpu(), priors, im_shape, number_of_proposals=number_of_proposals)
@@ -558,7 +576,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_angle    = np.mean(score_angle, axis=0)
         score_combined = np.mean(score_combined, axis=0)
 
-        p_info = Plotinfo(pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes_scaled, gt_box_classes, box_classes)
+        p_info = Plotinfo(pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes_scaled, gt_box_classes, box_classes, mask_per_image)
 
         if self.training:
             return pred_cube_meshes, None
