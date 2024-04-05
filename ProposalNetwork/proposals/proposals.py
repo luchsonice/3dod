@@ -39,7 +39,7 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1,
     y_range = pixel_to_normalised_space(y_range_px,[im_shape[1],im_shape[1]])[0]
 
     # Depth grid
-    z_range = [depth_image.min(), depth_image.max()]
+    z_range = [torch.min(depth_image), torch.max(depth_image)]
     z_grid = np.linspace(z_range[0],z_range[1],number_of_proposals)
 
     

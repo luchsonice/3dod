@@ -516,8 +516,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             reference_box = Box(gt_2d)
             reference_box = reference_box.to_device('cpu')
             priors = [prior_dims_mean[i].cpu().numpy(), prior_dims_std[i].cpu().numpy()]
-            depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.x1):int(reference_box.x2),int(reference_box.y1):int(reference_box.y2)]
-            print(depth_patch)
+            depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.y1):int(reference_box.y2),int(reference_box.x1):int(reference_box.x2)]
             pred_cubes = propose(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals)
             # ## end cpu region
 
