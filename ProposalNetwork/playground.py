@@ -89,8 +89,7 @@ gt_z = gt_cube_.center[2]
 # image
 input_format = 'BGR'
 img = batched_inputs[image]['image']
-print(batched_inputs[image]['image_id'])
-exit()
+
 img = convert_image_to_rgb(img.permute(1, 2, 0), input_format)
 input = batched_inputs[image]
 
