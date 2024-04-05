@@ -66,6 +66,15 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": []
+        },
+        {
+            "name": "BoxNet",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/eval_boxes.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth"]
         }
     ]
 }
