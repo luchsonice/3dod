@@ -50,7 +50,7 @@
             "args": ["--eval-only", "--config-file", "configs/Base_Omni3D.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth"]
         },
         {
-            "name": "BoxNet",
+            "name": "BoxNet with GT",
             "type": "python",
             "request": "launch",
             "program": "tools/eval_boxes.py",
@@ -68,7 +68,7 @@
             "args": []
         },
         {
-            "name": "BoxNet",
+            "name": "BoxNet with prediction",
             "type": "python",
             "request": "launch",
             "program": "tools/eval_boxes.py",
