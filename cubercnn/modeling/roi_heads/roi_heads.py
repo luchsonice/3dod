@@ -516,7 +516,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         # ###### this functionality should prob be implemented in the self.cube_head.forward() ######
 
-        number_of_proposals = 10000
+        number_of_proposals = 500
         pred_cube_meshes = []
         mask_per_image = mask_per_image[0] # this should be looped over
         pred_boxes = pred_boxes[0] # this should be looped over
@@ -531,10 +531,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         # it is important that the zip is exhaustedd at the shortest length
         print('len(gt_boxes3D):', len(gt_boxes3D), 'len(gt_boxes):', len(gt_boxes))
         for i, (instance_i, gt_2d, gt_3d, gt_pose) in enumerate(zip(pred_boxes, gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
-            if i == 0:
-                continue
-            if i > 1:
-                break
+
             # ## cpu region
             # NOTE: the instance_i (the predicted 2D box) might not correspond to the correct gt_3d, gt_pose
             # so therefore we use the GT 2D box to propose 3D boxes for now

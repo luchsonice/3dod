@@ -125,19 +125,21 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
 
         outputs = []
 
-        for idx, inputs in track(enumerate(data_loader), description="Making Mean average best overlap plots", total=total):
-            # if idx >5: break # #TODO DEBUG:
+        for i, inputs in track(enumerate(data_loader), description="Making Mean average best overlap plots", total=total):
+            # if i >5: break # #TODO DEBUG:
+            if i > 3:
+                break
             output = model(inputs, segmentor, output_recall_scores)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_angle, score_combined
             outputs.append(output)
 
         # mean over all the outputs
-        Iou3D = np.array([x[1] for x in outputs])
-        Iou2D = np.array([x[2] for x in outputs])
-        score_seg = np.array([x[3] for x in outputs])
-        score_dim = np.array([x[4] for x in outputs])
-        score_angle = np.array([x[5] for x in outputs])
-        score_combined = np.array([x[6] for x in outputs])
+        Iou3D           = np.array([x[1] for x in outputs])
+        Iou2D           = np.array([x[2] for x in outputs])
+        score_seg       = np.array([x[3] for x in outputs])
+        score_dim       = np.array([x[4] for x in outputs])
+        score_angle     = np.array([x[5] for x in outputs])
+        score_combined  = np.array([x[6] for x in outputs])
         Iou3D = Iou3D.mean(axis=0)
         Iou2D = Iou2D.mean(axis=0)
         score_seg = score_seg.mean(axis=0)
@@ -150,7 +152,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.plot(score_dim, linestyle='-',c='green',label='dim') 
         plt.plot(score_seg, linestyle='-',c='purple',label='segment')
         plt.plot(Iou2D, linestyle='-',c='orange',label='2d IoU') 
-        plt.plot(score_angle, linestyle='-',c='darkslategrey',label='angles') 
+        plt.plot(score_angle, linestyle='-',c='blue',label='angles') 
         plt.grid(True)
         plt.xscale('log')
         plt.xlabel('Number of Proposals')
@@ -194,11 +196,11 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
             im_concat = np.concatenate((vis_img_3d, img_novel), axis=1)
             ax1.set_title('GT')
             ax1.imshow(im_concat)
-            f_name = os.path.join('ProposalNetwork/output/MABO', f'vis_{i}.png')
+            f_name = os.path.join('ProposalNetwork/output/MABO/vis/', f'vis_{i}.png')
             plt.savefig(f_name, dpi=300, bbox_inches='tight')
             a=2
 
-            with open(f'ProposalNetwork/output/MABO/out_{i}.pkl', 'wb') as f:
+            with open(f'ProposalNetwork/output/MABO/vis/out_{i}.pkl', 'wb') as f:
                 out = images_raw.permute(1,2,0).cpu().numpy(), K, p_info.mask_per_image.cpu().numpy(), p_info.gt_boxes3D, p_info.gt_boxes[0], pred_box_classes_names
                 # im, K, mask, gt_boxes3D, gt_boxes, pred_box_classes_names
                 pickle.dump(out, f)
@@ -360,7 +362,8 @@ def main(args):
 
     priors = None
 
-    category_path = os.path.join(util.file_parts(args.opts[1])[0], 'category_meta.json')
+    category_path = 'output/Baseline_sgd/category_meta.json'
+    # category_path = os.path.join(util.file_parts(args.opts[1])[0], 'category_meta.json')
     
     # store locally if needed
     if category_path.startswith(util.CubeRCNNHandler.PREFIX):
@@ -379,8 +382,8 @@ def main(args):
     model = build_model(cfg, priors=priors)
 
     # skip straight to eval mode
-    DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
-        cfg.MODEL.WEIGHTS, resume=True)
+    # DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
+    #     cfg.MODEL.WEIGHTS, resume=False)
     return do_test(cfg, model)
 
 
