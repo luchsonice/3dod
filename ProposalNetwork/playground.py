@@ -20,6 +20,11 @@ from detectron2.utils.visualizer import Visualizer
 
 from segment_anything import sam_model_registry, SamPredictor
 
+from math import atan2, cos, sin, sqrt, pi
+from skimage.transform import resize
+import cv2
+from sklearn.decomposition import PCA
+
 def init_segmentation():
     # 1) first cd into the segment_anything and pip install -e .
     # to get the model stary in the root foler folder and run the download_model.sh 
@@ -37,46 +42,37 @@ def init_segmentation():
     predictor = SamPredictor(sam)
     return predictor
 
+def drawAxis(img, p_, q_, color, scale):
+  p = list(p_)
+  q = list(q_)
+ 
+  ## [visualization1]
+  angle = atan2(p[1] - q[1], p[0] - q[0]) # angle in radians
+  hypotenuse = sqrt((p[1] - q[1]) * (p[1] - q[1]) + (p[0] - q[0]) * (p[0] - q[0]))
+ 
+  # Here we lengthen the arrow by a factor of scale
+  q[0] = p[0] - scale * hypotenuse * cos(angle)
+  q[1] = p[1] - scale * hypotenuse * sin(angle)
+  cv2.line(img, (int(p[0]), int(p[1])), (int(q[0]), int(q[1])), color, 3, cv2.LINE_AA)
+ 
+  # create the arrow hooks
+  p[0] = q[0] + 9 * cos(angle + pi / 4)
+  p[1] = q[1] + 9 * sin(angle + pi / 4)
+  cv2.line(img, (int(p[0]), int(p[1])), (int(q[0]), int(q[1])), color, 3, cv2.LINE_AA)
+ 
+  p[0] = q[0] + 9 * cos(angle - pi / 4)
+  p[1] = q[1] + 9 * sin(angle - pi / 4)
+  cv2.line(img, (int(p[0]), int(p[1])), (int(q[0]), int(q[1])), color, 3, cv2.LINE_AA)
+  ## [visualization1]
 
 #torch.manual_seed(1)
-'''
-R = compute_rotation_matrix_from_ortho6d(torch.rand(6)*np.pi)
-cube = Cube(torch.tensor([-0.4,-0.5,1,1,1.5,0.5]),R)
-print('cube',cube.get_all_corners())
-
-box = cube_to_box(cube,torch.eye(3))
-print('box',box.get_all_corners())
-
-bube_corners = cube.get_bube_corners(torch.tensor([[570.3422,   0.0000, 310.0000],
-                                                   [  0.0000, 570.3422, 225.0000],
-                                                   [  0.0000,   0.0000,   1.0000]]))
-
-# Plot bube on 2D plane
-fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.plot(torch.cat((bube_corners[:4,0],bube_corners[0,0].reshape(1))),torch.cat((bube_corners[:4,1],bube_corners[0,1].reshape(1))),color='r',linewidth=3)
-ax.plot(torch.cat((bube_corners[4:,0],bube_corners[4,0].reshape(1))),torch.cat((bube_corners[4:,1],bube_corners[4,1].reshape(1))),color='r')
-for i in range(4):
-    ax.plot(torch.cat((bube_corners[i,0].reshape(1),bube_corners[4+i,0].reshape(1))),torch.cat((bube_corners[i,1].reshape(1),bube_corners[4+i,1].reshape(1))),color='r')
-ax.scatter(-1,-1,color='b')
-ax.scatter(-1,1,color='b')
-ax.scatter(1,-1,color='b')
-ax.scatter(1,1,color='b')
-ax.scatter(-0.4,-0.5,color='b')
-for i in range(8):
-    ax.text(bube_corners[i,0], bube_corners[i,1], '(%d)' % i, ha='right')
-ax.plot(torch.cat((box.get_all_corners()[:,0],box.get_all_corners()[0,0].reshape(1))),torch.cat((box.get_all_corners()[:,1],box.get_all_corners()[0,1].reshape(1))),color='b')
-plt.savefig(os.path.join('ProposalNetwork/output/trash', 'test.png'),dpi=300, bbox_inches='tight')
-#exit()
-'''
-
 
 # Get image and scale intrinsics
 with open('ProposalNetwork/proposals/network_out2.pkl', 'rb') as f:
         batched_inputs, images, proposals, Ks, gt_instances, im_scales_ratio, instances = pickle.load(f)
 
-image = 0
-gt_obj = 0
+image = 1
+gt_obj = 1
 
 # Necessary Ground Truths
 # 2D
@@ -88,10 +84,13 @@ gt_cube_ = Cube(torch.cat([gt____whlxyz[6:],gt____whlxyz[3:6]]),gt_R)
 gt_cube = gt_cube_.get_cube()
 gt_z = gt_cube_.center[2]
 #print('GT',gt____whlxyz,util.mat2euler(gt_R))
+#print(gt_R - util.euler2mat(util.mat2euler(gt_R)))
 
 # image
 input_format = 'BGR'
 img = batched_inputs[image]['image']
+print(batched_inputs[image]['image_id'])
+exit()
 img = convert_image_to_rgb(img.permute(1, 2, 0), input_format)
 input = batched_inputs[image]
 
@@ -104,24 +103,13 @@ reference_box = Box(proposals[image].proposal_boxes[0].tensor[0])
 
 # Get depth info
 depth_image = np.load(f"datasets/depth_maps/{batched_inputs[image]['image_id']}.npz")['depth']
-from skimage.transform import resize
 depth_image = resize(depth_image,(img.shape[0],img.shape[1]))
 depth_patch = depth_image[int(reference_box.x1):int(reference_box.x2),int(reference_box.y1):int(reference_box.y2)]
 
-
-
-
-
-
-
-
-
-
-
-
+####################################################################################################################################################################################################################################################################################
 
 # Get Proposals
-x_points = [1, 10, 100, 1000, 10000]#, 100000]
+x_points = [1]#, 10, 100]#, 1000, 10000]#, 100000]
 number_of_proposals = x_points[-1]
 
 with open('filetransfer/priors.pkl', 'rb') as f:
@@ -134,11 +122,9 @@ proposed_box = [cube_to_box(pred_cubes[i],K_scaled) for i in range(number_of_pro
 # OB IoU3D
 IoU3D = np.array(iou_3d(gt_cube_,pred_cubes))
 print('Percentage of cubes with no intersection:',int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100))
-max_values3D = [np.max(IoU3D[:n]) for n in x_points]
-idx_scores3D = [np.argmax(IoU3D[:n]) for n in x_points]
-max_scores3D = [IoU3D[i] for i in idx_scores3D]
-idx_highest_iou3D = idx_scores3D[-1]
-print('highest possible IoU', max_values3D[-1])
+idx_scores_iou3d = np.argsort(IoU3D)[::-1]
+sorted_iou3d_IoU = [IoU3D[i] for i in idx_scores_iou3d]
+print('Highest possible IoU3D score',sorted_iou3d_IoU[0])
 
 # OB IoU2D
 IoU2D = score_iou(gt_box, proposed_box)
@@ -192,6 +178,86 @@ sorted_angles_IoU = [IoU3D[i] for i in idx_scores_angles]
 angle_ious = [np.max(sorted_angles_IoU[:n]) for n in x_points]
 print('IoU3D of best angle score',sorted_angles_IoU[0])
 
+# 2D Contour
+seg_mask_uint8 = np.array(seg_mask).astype(np.uint8) * 255
+ret, thresh = cv2.threshold(seg_mask_uint8, 0.5, 1, 0)
+contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+contour_x = []
+contour_y = []
+for i in range(len(contours)):
+     for j in range(len(contours[i])):
+          contour_x.append(contours[i][j][0][0])
+          contour_y.append(contours[i][j][0][1])
+
+# 3rd dimension
+contour_z = np.zeros(len(contour_x))
+for i in range(len(contour_x)):
+     contour_z[i] = depth_image[contour_x[i],contour_y[i]]
+
+min_val = np.min(contour_x)
+max_val = np.max(contour_x)
+scaled_contour_x = (contour_x - min_val) / (max_val - min_val)
+
+min_val = np.min(contour_y)
+max_val = np.max(contour_y)
+scaled_contour_y = (contour_y - min_val) / (max_val - min_val)
+
+min_val = np.min(contour_z)
+max_val = np.max(contour_z)
+scaled_contour_z = (contour_z - min_val) / (max_val - min_val)
+
+contours3D = np.array([scaled_contour_x, scaled_contour_y, scaled_contour_z]).T
+
+# PCA
+pca = PCA(n_components=3)
+pca.fit(contours3D)
+orientations = pca.components_
+
+def gram_schmidt(vectors):
+    basis = []
+    for vector in vectors:
+        new_vector = vector - sum(np.dot(vector, b) * b for b in basis)
+        if np.linalg.norm(new_vector) > 1e-10:
+            basis.append(new_vector / np.linalg.norm(new_vector))
+
+    return np.array(basis)
+
+basis = gram_schmidt(orientations)
+euler_angles = np.arctan2(basis[2, 1], basis[2, 2]), np.arcsin(-basis[2, 0]), np.arctan2(basis[1, 0], basis[0, 0])
+print(basis.T)
+print('found angles',np.array(euler_angles) % (pi / 2))
+print('gt angles',util.mat2euler(gt_R) % (pi / 2))
+
+def vectors_from_rotation_matrix(rotation_matrix):
+    # Extract vectors from rotation matrix
+    v1 = rotation_matrix[:, 0]
+    v2 = rotation_matrix[:, 1]
+    v3 = rotation_matrix[:, 2]
+
+    return np.array([v1, v2, v3])
+
+#orientations = vectors_from_rotation_matrix(np.array(gt_R)) #gt rotation
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+points_2d_homogeneous = np.dot(K_scaled, orientations.T).T
+
+# Convert homogeneous coordinates to Cartesian coordinates
+points_2d = points_2d_homogeneous[:, :2] / points_2d_homogeneous[:, 2:]
+
+
 # Plotting
 plt.figure()
 plt.plot(x_points, dim_ious, marker='o', linestyle='-',c='green',label='dim') 
@@ -223,14 +289,7 @@ cax = ax.imshow(heatmap.T, extent=extent, origin='lower')
 cbar = fig.colorbar(cax)
 fig.savefig(os.path.join('ProposalNetwork/output/AMOB', 'combined_scores.png'),dpi=300, bbox_inches='tight')
 """
-
-
-
-
-
-
-
-
+####################################################################################################################################################################################################################################################################################
 
 
 # Plot
@@ -241,16 +300,11 @@ v_pred = v_pred.overlay_instances(
     boxes=proposals[image].proposal_boxes[0:box_size].tensor.cpu().numpy()
 )
 
-
-#pred_meshes = []
-#for i in idx_scores[1:]:
-#    cube = pred_cubes[i].get_cube()
-#    pred_meshes.append(cube.__getitem__(0).detach())
 # Take box with highest iou
-pred_meshes = [pred_cubes[idx_highest_iou3D].get_cube().__getitem__(0).detach()]
-
+pred_meshes = [pred_cubes[idx_scores_iou3d[0]].get_cube().__getitem__(0).detach()]
+#print(pred_cubes[idx_scores_iou3d[0]].__repr__)
 # Add 3D GT
-meshes_text = ['' for _ in range(len(pred_meshes))]
+meshes_text = ['proposal cube' for _ in range(len(pred_meshes))]
 meshes_text.append('gt cube')
 pred_meshes.append(gt_cube.__getitem__(0).detach())
 
@@ -264,6 +318,30 @@ ax.imshow(vis_img_3d)
 ax.plot(torch.cat((gt_box.get_all_corners()[:,0],gt_box.get_all_corners()[0,0].reshape(1))),torch.cat((gt_box.get_all_corners()[:,1],gt_box.get_all_corners()[0,1].reshape(1))),color='purple')
 ax.scatter(gt____whlxyz[0],gt____whlxyz[1],color='r')
 plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'box_with_highest_iou.png'),dpi=300, bbox_inches='tight')
+
+distances = np.linalg.norm(points_2d, axis=1)
+
+# Normalize points by dividing each coordinate by its distance from the origin
+points_2d = points_2d / np.max(distances)
+#points_2d = points_2d / distances[:, np.newaxis]
+
+# Contour Plot
+cntr = np.array(gt____whlxyz[:2])
+p1 = (cntr[0] + points_2d[0][0], cntr[1] + points_2d[0][1])
+p2 = (cntr[0] + points_2d[1][0], cntr[1] + points_2d[1][1])
+p3 = (cntr[0] + points_2d[2][0], cntr[1] + points_2d[2][1])
+
+fig = plt.figure()
+ax = fig.add_subplot(111)
+drawAxis(prop_img, cntr, p1, (255, 255, 0), 150)
+drawAxis(prop_img, cntr, p2, (0, 0, 255), 150)
+drawAxis(prop_img, cntr, p3, (0, 255, 255), 150)
+ax.imshow(prop_img)
+show_mask(seg_mask,ax)
+#ax.scatter(contour_x, contour_y, c='r', s=1)
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'contour.png'),dpi=300, bbox_inches='tight')
+####################################################################################################################################################################################################################################################################################
+
 
 # convert from BGR to RGB
 im_concat = im_concat[..., ::-1]
@@ -295,6 +373,8 @@ for i in range(len(IoU3D)):
      if IoU3D[i] == 0.0:
           idx = i
           break
+     else:
+          idx = -1
 
 pred_meshes = [pred_cubes[idx].get_cube().__getitem__(0).detach()]
 meshes_text = ['box with 0 3diou']
