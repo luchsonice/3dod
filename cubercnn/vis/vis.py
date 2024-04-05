@@ -207,7 +207,7 @@ def imshow(im, fig_num=None):
     plt.show()
 
 
-def draw_scene_view(im, K, meshes, text=None, scale=1000, R=None, T=None, zoom_factor=1.0, mode='front_and_novel', blend_weight=0.80, blend_weight_overlay=1.0, ground_bounds=None, canvas=None, zplane=0.05):
+def draw_scene_view(im, K, meshes, text=None, scale=1000, R=None, T=None, zoom_factor=1.0, mode='front_and_novel', blend_weight=0.80, blend_weight_overlay=1.0, ground_bounds=None, canvas=None, zplane=0.05, colors=None):
     """
     Draws a scene from multiple different modes. 
     Args:
@@ -292,8 +292,10 @@ def draw_scene_view(im, K, meshes, text=None, scale=1000, R=None, T=None, zoom_f
 
                 verts3D = mesh.verts_padded()[0].cpu().numpy()
                 verts2D = (K @ verts3D.T) / verts3D[:, -1]
-
-                color = [min(255, c*255*1.25) for c in mesh.textures.verts_features_padded()[0,0].tolist()]
+                if colors is not None:
+                    color = colors[mesh_idx][:-1] * 255
+                else:
+                    color = [min(255, c*255*1.25) for c in mesh.textures.verts_features_padded()[0,0].tolist()]
 
                 draw_3d_box_from_verts(
                     im_drawn_rgb, K, verts3D, color=color, 
@@ -515,8 +517,11 @@ def draw_scene_view(im, K, meshes, text=None, scale=1000, R=None, T=None, zoom_f
 
                 verts3D = mesh.verts_padded()[0].cpu().numpy()
                 verts2D = (K_novelview @ verts3D.T) / verts3D[:, -1]
-
-                color = [min(255, c*255*1.25) for c in mesh.textures.verts_features_padded()[0,0].tolist()]
+                
+                if colors is not None:
+                    color = colors[mesh_idx][:-1] * 255
+                else:
+                    color = [min(255, c*255*1.25) for c in mesh.textures.verts_features_padded()[0,0].tolist()]
 
                 draw_3d_box_from_verts(
                     im_novel_view, K_novelview, verts3D, color=color, 
