@@ -205,7 +205,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         im_dims = [image.shape[1:] for image in images]
 
-        if self.training or output_recall_scores:
+        if self.training:
             proposals = self.label_and_sample_proposals(proposals, targets, output_recall_scores)
         
         # del targets
@@ -224,56 +224,57 @@ class ROIHeads_Boxer(StandardROIHeads):
             # when oracle is available, by pass the box forward.
             # simulate the predicted instances by creating a new 
             # instance for each passed in image.
-            if isinstance(proposals, list) and ~np.any([isinstance(p, Instances) for p in proposals]):
-                pred_instances = []
-                for proposal, im_dim in zip(proposals, im_dims):
+            # if isinstance(proposals, list) and ~np.any([isinstance(p, Instances) for p in proposals]):
+            #     pred_instances = []
+            #     for proposal, im_dim in zip(proposals, im_dims):
                     
-                    pred_instances_i = Instances(im_dim)
-                    pred_instances_i.pred_boxes = Boxes(proposal['gt_bbox2D'])
-                    pred_instances_i.pred_classes =  proposal['gt_classes']
-                    pred_instances_i.scores = torch.ones_like(proposal['gt_classes']).float()
-                    pred_instances.append(pred_instances_i)
-            else:
-                pred_instances = self._forward_box(features, proposals, output_recall_scores)
+            #         pred_instances_i = Instances(im_dim)
+            #         pred_instances_i.pred_boxes = Boxes(proposal['gt_bbox2D'])
+            #         pred_instances_i.pred_classes =  proposal['gt_classes']
+            #         pred_instances_i.scores = torch.ones_like(proposal['gt_classes']).float()
+            #         pred_instances.append(pred_instances_i)
+            # else:
+            #     pred_instances = self._forward_box(features, proposals, output_recall_scores)
             
             # we only want proposals with a logit > 0, maybe this corresponds to points with a score > 0.5???
             # as a logit of 0 indicates that the odds of the event occurring are equal to the odds of the event not occurring
             # https://deepai.org/machine-learning-glossary-and-terms/logit
             # iterate over proposals until one with a objectness_logits < 0 is found and take the ones preceeding it
             # we can utilise the fact that the objectness_logits are sorted
-            for instance in pred_instances:
-                for i, score in enumerate(instance.scores):
-                    if score < 0.2: # TODO: is is correct to only select those with a score > threshold?
-                        pred_boxes = instance.pred_boxes[:i]
-                        scores = instance.scores[:i]
-                        scores_full = instance.scores_full[:i]
-                        pred_classes = instance.pred_classes[:i]
+            # for instance in pred_instances:
+            #     for i, score in enumerate(instance.scores):
+            #         if score < 0.2: # TODO: is is correct to only select those with a score > threshold?
+            #             pred_boxes = instance.pred_boxes[:i]
+            #             scores = instance.scores[:i]
+            #             scores_full = instance.scores_full[:i]
+            #             pred_classes = instance.pred_classes[:i]
 
-                        instance.remove('pred_boxes'); instance.remove('scores'); instance.remove('scores_full'); instance.remove('pred_classes')
-                        instance.pred_boxes = pred_boxes; instance.scores = scores; instance.scores_full = scores_full; instance.pred_classes = pred_classes
-                        break
+            #             instance.remove('pred_boxes'); instance.remove('scores'); instance.remove('scores_full'); instance.remove('pred_classes')
+            #             instance.pred_boxes = pred_boxes; instance.scores = scores; instance.scores_full = scores_full; instance.pred_classes = pred_classes
+            #             break
         
-            ## NMS
-            max_vis_prop = min(len(pred_instances[0]), len(targets[0]))
-            for instances_i in pred_instances:
+            # ## NMS
+            # max_vis_prop = min(len(pred_instances[0]), len(targets[0]))
+            # for instances_i in pred_instances:
 
-                # perform a simple NMS, which is not cls dependent. 
-                keep = batched_nms(
-                    instances_i.pred_boxes.tensor, 
-                    instances_i.scores, 
-                    torch.zeros(len(instances_i.scores), dtype=torch.long, device=instances_i.scores.device), 
-                    0.9)
+            #     # perform a simple NMS, which is not cls dependent. 
+            #     keep = batched_nms(
+            #         instances_i.pred_boxes.tensor, 
+            #         instances_i.scores, 
+            #         torch.zeros(len(instances_i.scores), dtype=torch.long, device=instances_i.scores.device), 
+            #         0.9)
                 
-                keep = keep[:max_vis_prop]
+            #     keep = keep[:max_vis_prop]
 
-                pred_boxes = instances_i.pred_boxes[keep]
-                pred_scores = instances_i.scores[keep]
-                pred_classes = instances_i.pred_classes[keep]
+            #     pred_boxes = instances_i.pred_boxes[keep]
+            #     pred_scores = instances_i.scores[keep]
+            #     pred_classes = instances_i.pred_classes[keep]
 
 
             # mask for each proposal
             # NOTE: at the the moment the this assumes a batch size of 1, since the test loader has it hardcoded
             if output_recall_scores:
+                pred_instances = None
                 masks = []
                 for img, instance in zip(images_raw.tensor, targets): # over all images in batch
                     mask_per_image = torch.zeros((len(instance), 1, images_raw.tensor.shape[2], images_raw.tensor.shape[3]))
@@ -402,15 +403,16 @@ class ROIHeads_Boxer(StandardROIHeads):
         
         @dataclass
         class Plotinfo:
+            '''simple dataclass to store plot information access as Plotinfo.x
+            fields: pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image'''
             pred_cube_meshes: List
             gt_cube_meshes: List
             gt_boxes3D: List
             gt_boxes: List
             gt_box_classes: List
-            box_classes: List
             mask_per_image: List
 
-        features = [features[f] for f in self.in_features]
+        # features = [features[f] for f in self.in_features]
 
         # training on foreground
         if self.training:
@@ -435,9 +437,9 @@ class ROIHeads_Boxer(StandardROIHeads):
             assert len(gt_poses) == len(gt_boxes3D) == len(box_classes)
         
         elif output_recall_scores:
-            pred_boxes = [x.pred_boxes for x in instances]
-            proposal_boxes = pred_boxes
-            box_classes = torch.cat([x.pred_classes for x in instances])
+            # pred_boxes = [x.pred_boxes for x in instances]
+            # proposal_boxes = pred_boxes
+            # box_classes = torch.cat([x.pred_classes for x in instances])
             gt_box_classes = (torch.cat([p.gt_classes for p in targets], dim=0) if len(targets) else torch.empty(0))
             gt_boxes3D = torch.cat([p.gt_boxes3D for p in targets], dim=0,)
             gt_boxes = torch.cat([p.gt_boxes for p in targets], dim=0,) if len(targets) > 1 else targets[0].gt_boxes
@@ -450,57 +452,33 @@ class ROIHeads_Boxer(StandardROIHeads):
             box_classes = torch.cat([x.pred_classes for x in instances])
 
         # the boxes don't actually get scaled currently for some reason
-        proposal_boxes_scaled = self.scale_proposals(proposal_boxes)
-        gt_boxes_scaled = self.scale_proposals([targets[0].gt_boxes])
+        # proposal_boxes_scaled = self.scale_proposals(proposal_boxes)
+        # gt_boxes_scaled = self.scale_proposals([targets[0].gt_boxes])
 
         # forward features
         # we might want to look into how to use the cube_features in the future.
-        cube_features = self.cube_pooler(features, proposal_boxes_scaled).flatten(1)
+        # cube_features = self.cube_pooler(features, proposal_boxes_scaled).flatten(1)
 
-        n = cube_features.shape[0]
+        # n = cube_features.shape[0]
+        n = len(gt_boxes)
         
         # nothing to do..
         if n == 0:
             return instances if not self.training else (instances, {})
+        
+        num_boxes_per_image = [len(i) for i in gt_boxes]
 
-        num_boxes_per_image = [len(i) for i in proposal_boxes]
+        # num_boxes_per_image = [len(i) for i in proposal_boxes]
 
         # scale the intrinsics according to the ratio the image has been scaled. 
         # this means the projections at the current scale are in sync.
-        Ks_scaled_per_box = torch.cat([
-            (Ks[i]/im_scales_ratio[i]).unsqueeze(0).repeat([num, 1, 1]) 
-            for (i, num) in enumerate(num_boxes_per_image)
-        ]).to(cube_features.device)
-        Ks_scaled_per_box[:, -1, -1] = 1
+        # Ks_scaled_per_box = torch.cat([
+        #     (Ks[i]/im_scales_ratio[i]).unsqueeze(0).repeat([num, 1, 1]) 
+        #     for (i, num) in enumerate(num_boxes_per_image)
+        # ]).to(gt_boxes3D.device)
+        # Ks_scaled_per_box[:, -1, -1] = 1
 
-        focal_lengths_per_box = torch.cat([
-            (Ks[i][1, 1]).unsqueeze(0).repeat([num]) 
-            for (i, num) in enumerate(num_boxes_per_image)
-        ]).to(cube_features.device)
-
-        im_ratios_per_box = torch.cat([
-            torch.FloatTensor([im_scales_ratio[i]]).repeat(num) 
-            for (i, num) in enumerate(num_boxes_per_image)
-        ]).to(cube_features.device)
-
-        # scaling factor for Network resolution -> Original
-        im_scales_per_box = torch.cat([
-            torch.FloatTensor([im_current_dims[i][0]]).repeat(num) 
-            for (i, num) in enumerate(num_boxes_per_image)
-        ]).to(cube_features.device)
-
-        im_scales_original_per_box = im_scales_per_box * im_ratios_per_box
-
-        if self.virtual_depth:
-                
-            virtual_to_real = util.compute_virtual_scale_from_focal_spaces(
-                focal_lengths_per_box, im_scales_original_per_box, 
-                self.virtual_focal, im_scales_per_box
-            )
-            real_to_virtual = 1 / virtual_to_real
-
-        else:
-            real_to_virtual = virtual_to_real = 1.0
+        Ks_scaled_per_box = Ks[0]
 
         if self.dims_priors_enabled:
             # gather prior dimensions
@@ -519,7 +497,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         number_of_proposals = 500
         pred_cube_meshes = []
         mask_per_image = mask_per_image[0] # this should be looped over
-        pred_boxes = pred_boxes[0] # this should be looped over
+        # pred_boxes = pred_boxes[0] # this should be looped over
         gt_cube_meshes = []
         im_shape = images_raw.tensor.shape[2:][::-1] # im shape should be (x,y)
         n_gt = len(gt_boxes3D)
@@ -529,8 +507,8 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_angle    = np.zeros((n_gt, number_of_proposals))
         score_combined = np.zeros((n_gt, number_of_proposals))
         # it is important that the zip is exhaustedd at the shortest length
-        print('len(gt_boxes3D):', len(gt_boxes3D), 'len(gt_boxes):', len(gt_boxes))
-        for i, (instance_i, gt_2d, gt_3d, gt_pose) in enumerate(zip(pred_boxes, gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
+        assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
+        for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
 
             # ## cpu region
             # NOTE: the instance_i (the predicted 2D box) might not correspond to the correct gt_3d, gt_pose
@@ -543,16 +521,16 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
             # transfer pred_cubes to device
-            pred_cubes = [pred_cube.to_device(cube_features.device) for pred_cube in pred_cubes]
-            pred_boxes = [cube_to_box(pred_cube, Ks_scaled_per_box[i]) for pred_cube in pred_cubes]
+            pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
+            pred_boxes = [cube_to_box(pred_cube, Ks_scaled_per_box) for pred_cube in pred_cubes]
             # iou
             IoU3D = iou_3d(gt_cube, pred_cubes).cpu().numpy()
             pred_cubes = [pred_cube.to_device('cpu') for pred_cube in pred_cubes]
-            bube_corners = [pred_cubes[j].get_bube_corners(Ks_scaled_per_box[i].cpu()) for j in range(number_of_proposals)]
+            bube_corners = [pred_cubes[j].get_bube_corners(Ks_scaled_per_box.cpu()) for j in range(number_of_proposals)]
             dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
             angles = [np.array(util.mat2euler(pred_cubes[i].rotation)) for i in range(len(pred_cubes))]
             # scoring
-            IoU2D_scores = score_iou(cube_to_box(gt_cube, Ks_scaled_per_box[i]), pred_boxes)
+            IoU2D_scores = score_iou(cube_to_box(gt_cube, Ks_scaled_per_box), pred_boxes)
             segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), bube_corners)
             dim_scores = score_dimensions(priors, dimensions)
             angle_scores = score_angles(util.mat2euler(gt_pose.to('cpu')), angles)
@@ -576,7 +554,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_angle    = np.mean(score_angle, axis=0)
         score_combined = np.mean(score_combined, axis=0)
 
-        p_info = Plotinfo(pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes_scaled, gt_box_classes, box_classes, mask_per_image)
+        p_info = Plotinfo(pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image)
 
         if self.training:
             return pred_cube_meshes, None
@@ -1039,24 +1017,24 @@ class ROIHeads3D(StandardROIHeads):
         Ks_scaled_per_box = torch.cat([
             (Ks[i]/im_scales_ratio[i]).unsqueeze(0).repeat([num, 1, 1]) 
             for (i, num) in enumerate(num_boxes_per_image)
-        ]).to(cube_features.device)
+        ]).to(gt_boxes3D)
         Ks_scaled_per_box[:, -1, -1] = 1
 
         focal_lengths_per_box = torch.cat([
             (Ks[i][1, 1]).unsqueeze(0).repeat([num]) 
             for (i, num) in enumerate(num_boxes_per_image)
-        ]).to(cube_features.device)
+        ]).to(gt_boxes3D)
 
         im_ratios_per_box = torch.cat([
             torch.FloatTensor([im_scales_ratio[i]]).repeat(num) 
             for (i, num) in enumerate(num_boxes_per_image)
-        ]).to(cube_features.device)
+        ]).to(gt_boxes3D)
 
         # scaling factor for Network resolution -> Original
         im_scales_per_box = torch.cat([
             torch.FloatTensor([im_current_dims[i][0]]).repeat(num) 
             for (i, num) in enumerate(num_boxes_per_image)
-        ]).to(cube_features.device)
+        ]).to(gt_boxes3D)
 
         im_scales_original_per_box = im_scales_per_box * im_ratios_per_box
 
