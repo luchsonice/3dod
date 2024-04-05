@@ -23,13 +23,40 @@
             "args": ["--config-file", "configs/Base_Omni3D.yaml", "OUTPUT_DIR", "output/omni3d_example_run"]
         },
         {
-            "name": "eval",
+            "name": "resume train",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/train_net.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--config-file", "configs/Base_Omni3D.yaml", "--resume", "OUTPUT_DIR", "output/Baseline_sgd"]
+        },
+        {
+            "name": "eval, train_net pretrained",
             "type": "python",
             "request": "launch",
             "program": "tools/train_net.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": ["--eval-only", "--config-file", "cubercnn://omni3d/cubercnn_DLA34_FPN.yaml", "MODEL.WEIGHTS", "cubercnn://omni3d/cubercnn_DLA34_FPN.pth"]
+        },
+        {
+            "name": "eval, train_net locally trained",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/train_net.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--eval-only", "--config-file", "configs/Base_Omni3D.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth"]
+        },
+        {
+            "name": "BoxNet with GT",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/eval_boxes.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml"]
         },
         {
             "name": "Python: Current File",
@@ -41,7 +68,7 @@
             "args": []
         },
         {
-            "name": "BoxNet",
+            "name": "BoxNet with prediction",
             "type": "python",
             "request": "launch",
             "program": "tools/eval_boxes.py",

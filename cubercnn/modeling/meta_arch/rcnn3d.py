@@ -351,10 +351,10 @@ class BoxNet(RCNN3D):
         else:
             gt_instances = None
 
-        features = self.backbone(images.tensor)
+        # features = self.backbone(images.tensor)
         # normal inference
-        proposals, _ = self.proposal_generator(images, features, gt_instances)
-           
+        # proposals, _ = self.proposal_generator(images, features, gt_instances)
+        features, proposals = None, None
         # use the mask and the 2D box to predict the 3D box
         results = self.roi_heads(images, images_raw, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, output_recall_scores, gt_instances)
         
