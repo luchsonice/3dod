@@ -182,8 +182,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
                 boxes=p_info.gt_boxes[0][0:box_size].tensor.cpu().numpy()
                 , assigned_colors=colors
             )
-            prop_img = v_pred.get_image()
-            img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, K, p_info.pred_cube_meshes,text=pred_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
+            prop_img2 = v_pred.get_image()
+            img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img2, K, p_info.pred_cube_meshes,text=pred_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
             vis_img_3d = img_3DPR.astype(np.uint8)
             vis_img_3d = show_mask2(p_info.mask_per_image.cpu().numpy(), vis_img_3d, random_color=colors)
             ax.set_title('Predicted')
@@ -201,10 +201,10 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
             plt.savefig(f_name, dpi=300, bbox_inches='tight')
             a=2
 
-            with open(f'ProposalNetwork/output/MABO/vis/out_{i}.pkl', 'wb') as f:
-                out = images_raw.permute(1,2,0).cpu().numpy(), K, p_info.mask_per_image.cpu().numpy(), p_info.gt_boxes3D, p_info.gt_boxes[0], pred_box_classes_names
-                # im, K, mask, gt_boxes3D, gt_boxes, pred_box_classes_names
-                pickle.dump(out, f)
+            # with open(f'ProposalNetwork/output/MABO/vis/out_{i}.pkl', 'wb') as f:
+            #     out = images_raw.permute(1,2,0).cpu().numpy(), K, p_info.mask_per_image.cpu().numpy(), p_info.gt_boxes3D, p_info.gt_boxes[0], pred_box_classes_names
+            #     # im, K, mask, gt_boxes3D, gt_boxes, pred_box_classes_names
+            #     pickle.dump(out, f)
 
 
 

@@ -292,8 +292,9 @@ def draw_scene_view(im, K, meshes, text=None, scale=1000, R=None, T=None, zoom_f
 
                 verts3D = mesh.verts_padded()[0].cpu().numpy()
                 verts2D = (K @ verts3D.T) / verts3D[:, -1]
+
                 if colors is not None:
-                    color = colors[mesh_idx][:-1] * 255
+                    color = np.minimum(colors[mesh_idx][:-1] * 255 * 1.25, np.ones_like(colors[mesh_idx][:-1])*255)
                 else:
                     color = [min(255, c*255*1.25) for c in mesh.textures.verts_features_padded()[0,0].tolist()]
 
@@ -519,7 +520,7 @@ def draw_scene_view(im, K, meshes, text=None, scale=1000, R=None, T=None, zoom_f
                 verts2D = (K_novelview @ verts3D.T) / verts3D[:, -1]
                 
                 if colors is not None:
-                    color = colors[mesh_idx][:-1] * 255
+                    color = np.minimum(colors[mesh_idx][:-1] * 255 * 1.25, np.ones_like(colors[mesh_idx][:-1])*255) # colors[mesh_idx][:-1] * 255 * 1.25
                 else:
                     color = [min(255, c*255*1.25) for c in mesh.textures.verts_features_padded()[0,0].tolist()]
 
