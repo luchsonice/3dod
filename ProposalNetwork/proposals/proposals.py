@@ -39,7 +39,11 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1,
     y_range = pixel_to_normalised_space(y_range_px,[im_shape[1],im_shape[1]])[0]
 
     # Depth grid
-    z_range = [torch.min(depth_image), torch.max(depth_image)]
+    #z_range = [torch.min(depth_image), torch.max(depth_image)]
+    flattened_depth_image = depth_image.flatten()
+    percentile_lower = torch.kthvalue(flattened_depth_image, int(0.15 * flattened_depth_image.numel())).values.item()
+    percentile_higher = torch.kthvalue(flattened_depth_image, int(0.85 * flattened_depth_image.numel())).values.item()
+    z_range = [percentile_lower,percentile_higher]
     z_grid = np.linspace(z_range[0],z_range[1],number_of_proposals)
 
     

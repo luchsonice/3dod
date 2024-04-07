@@ -494,13 +494,13 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         # ###### this functionality should prob be implemented in the self.cube_head.forward() ######
 
-        number_of_proposals = 500
+        number_of_proposals = 1000
         pred_cube_meshes = []
         mask_per_image = mask_per_image[0] # this should be looped over
-        # pred_boxes = pred_boxes[0] # this should be looped over
         gt_cube_meshes = []
         im_shape = images_raw.tensor.shape[2:][::-1] # im shape should be (x,y)
         n_gt = len(gt_boxes3D)
+        sum_percentage_empty_boxes = 0
         score_IoU2D    = np.zeros((n_gt, number_of_proposals))
         score_seg      = np.zeros((n_gt, number_of_proposals))
         score_dim      = np.zeros((n_gt, number_of_proposals))
@@ -525,23 +525,21 @@ class ROIHeads_Boxer(StandardROIHeads):
             pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
             pred_boxes = [cube_to_box(pred_cube, Ks_scaled_per_box) for pred_cube in pred_cubes]
             # iou
-            print('z',gt_cube.center[2],np.mean([i.center[2].numpy() for i in pred_cubes]))
             IoU3D = iou_3d(gt_cube, pred_cubes).cpu().numpy()
+            sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
             pred_cubes = [pred_cube.to_device('cpu') for pred_cube in pred_cubes]
             bube_corners = [pred_cubes[j].get_bube_corners(Ks_scaled_per_box.cpu()) for j in range(number_of_proposals)]
             dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
-            angles = [np.array(util.mat2euler(pred_cubes[i].rotation)) for i in range(len(pred_cubes))]
+            
             # scoring
             IoU2D_scores = score_iou(cube_to_box(gt_cube, Ks_scaled_per_box), pred_boxes)
             segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), bube_corners)
             dim_scores = score_dimensions(priors, dimensions)
-            angle_scores = score_angles(util.mat2euler(gt_pose.to('cpu')), angles)
-            combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)*np.array(angle_scores)
+            combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
             
             score_IoU2D[i,:] = accumulate_scores(IoU2D_scores, IoU3D)
             score_seg[i,:] = accumulate_scores(segment_scores, IoU3D)
             score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
-            score_angle[i,:] = accumulate_scores(angle_scores, IoU3D)
             score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
 
             highest_score = np.argmax(IoU2D_scores)
@@ -549,12 +547,13 @@ class ROIHeads_Boxer(StandardROIHeads):
             pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
             gt_cube_meshes.append(gt_cube.get_cube().__getitem__(0).detach())
         # ################
-
+        
         score_IoU2D    = np.mean(score_IoU2D, axis=0)
         score_seg      = np.mean(score_seg, axis=0)
         score_dim      = np.mean(score_dim, axis=0)
-        score_angle    = np.mean(score_angle, axis=0)
         score_combined = np.mean(score_combined, axis=0)
+
+        stat_empty_boxes = sum_percentage_empty_boxes/n_gt
 
         p_info = Plotinfo(pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image)
 
@@ -562,7 +561,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             return pred_cube_meshes, None
         else:
             if output_recall_scores:
-                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_angle, score_combined
+                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, stat_empty_boxes
             return pred_cube_meshes
 
     def _sample_proposals(
