@@ -511,6 +511,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         gt_cube_meshes = []
         im_shape = images_raw.tensor.shape[2:][::-1] # im shape should be (x,y)
         n_gt = len(gt_boxes3D)
+        print(n_gt)
         sum_percentage_empty_boxes = 0
         score_IoU2D    = np.zeros((n_gt, number_of_proposals))
         score_seg      = np.zeros((n_gt, number_of_proposals))
@@ -520,18 +521,18 @@ class ROIHeads_Boxer(StandardROIHeads):
         # it is important that the zip is exhaustedd at the shortest length
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
         for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
-
             # ## cpu region
             # NOTE: the instance_i (the predicted 2D box) might not correspond to the correct gt_3d, gt_pose
             # so therefore we use the GT 2D box to propose 3D boxes for now
             reference_box = Box(gt_2d)
             reference_box = reference_box.to_device('cpu')
             priors = [prior_dims_mean[i].cpu().numpy(), prior_dims_std[i].cpu().numpy()]
-            depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.y1):int(reference_box.y2),int(reference_box.x1):int(reference_box.x2)]            
-            pred_cubes = propose(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals)
+            depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.y1):int(reference_box.y2),int(reference_box.x1):int(reference_box.x2)]
             # ## end cpu region
-
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
+            pred_cubes = propose(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
+
+
             # transfer pred_cubes to device
             pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
             pred_boxes = [cube_to_box(pred_cube, Ks_scaled_per_box) for pred_cube in pred_cubes]
