@@ -308,10 +308,11 @@ def do_test(cfg, model, iteration='final', storage=None):
             logger.info(log_str)
 
         
-    '''
-    Summarize each Omni3D Evaluation metric
-    '''  
-    eval_helper.summarize_all()
+    if cfg.PLOT.EVAL != 'MABO':
+        '''
+        Summarize each Omni3D Evaluation metric
+        '''  
+        eval_helper.summarize_all()
 
 
 def setup(args):
