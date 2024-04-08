@@ -127,8 +127,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
 
         for i, inputs in track(enumerate(data_loader), description="Making Mean average best overlap plots", total=total):
             # if i >5: break # #TODO DEBUG:
-            if i > 1:
-                break
+            #if i > 1:
+            #    break
             output = model(inputs, segmentor, output_recall_scores)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, stat_empty_boxes
             outputs.append(output)
