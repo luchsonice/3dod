@@ -289,7 +289,10 @@ class BoxNet(RCNN3D):
     def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor, output_recall_scores=False):
         
         if not self.training:
-            return self.inference(batched_inputs, segmentor=segmentor, output_recall_scores=output_recall_scores)
+            if output_recall_scores:
+                return self.inference(batched_inputs, segmentor=segmentor, output_recall_scores=output_recall_scores)
+            else:
+                return self.prediction(batched_inputs, segmentor=segmentor, output_recall_scores=output_recall_scores)
 
         images = self.preprocess_image(batched_inputs)
 
@@ -338,7 +341,6 @@ class BoxNet(RCNN3D):
         images_raw = self.preprocess_image(batched_inputs, img_type='image', normalise=False, NoOp=True)
         depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False)
 
-
         # scaling factor for the sample relative to its original scale
         # e.g., how much has the image been upsampled by? or downsampled?
         im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
@@ -357,11 +359,39 @@ class BoxNet(RCNN3D):
         features, proposals = None, None
         # use the mask and the 2D box to predict the 3D box
         results = self.roi_heads(images, images_raw, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, output_recall_scores, gt_instances)
+        return results
+        
+    def prediction(self,
+        batched_inputs: List[Dict[str, torch.Tensor]],
+        detected_instances: Optional[List[Instances]] = None, do_postprocess: bool = True, segmentor=None, output_recall_scores=False):
+        assert not self.training
+
+        # must apply the same preprocessing to both the image, the depth map, and the mask
+        # except don't normalise the input for the segmentation method
+        images = self.preprocess_image(batched_inputs)
+        images_raw = self.preprocess_image(batched_inputs, img_type='image', normalise=False, NoOp=True)
+        depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False)
+
+        # scaling factor for the sample relative to its original scale
+        # e.g., how much has the image been upsampled by? or downsampled?
+        im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
+        
+        # The unmodified intrinsics for the image
+        Ks = [torch.FloatTensor(info['K']) for info in batched_inputs]
+
+        if "instances" in batched_inputs[0]:
+            gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
+        else:
+            gt_instances = None
+
+        features = self.backbone(images.tensor)
+        # normal inference
+        proposals, _ = self.proposal_generator(images, features, gt_instances)
+        # use the mask and the 2D box to predict the 3D box
+        results = self.roi_heads(images, images_raw, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, output_recall_scores, gt_instances)
         
         # postprocess the images to be the same shape as the original
-        if output_recall_scores:
-            return results
-        elif do_postprocess:
+        if do_postprocess:
             assert not torch.jit.is_scripting(), "Scripting is not supported for postprocess."
             return GeneralizedRCNN._postprocess(results, batched_inputs, images.image_sizes)
         else:
