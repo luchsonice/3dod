@@ -38,7 +38,6 @@ from cubercnn.data import (
 )
 from cubercnn.evaluation import (
     Omni3DEvaluationHelper,
-    inference_on_dataset
 )
 from cubercnn.modeling.meta_arch import build_model
 from cubercnn import util, vis, data
@@ -62,7 +61,7 @@ def init_segmentation(device='cpu'):
     return predictor
 
 
-def inference_on_dataset_custom(model, data_loader, segmentor, output_recall_scores:bool=False):
+def inference_on_dataset(model, data_loader, segmentor):
     """
     Run model on the data_loader. 
     Also benchmark the inference speed of `model.__call__` accurately.
@@ -94,7 +93,7 @@ def inference_on_dataset_custom(model, data_loader, segmentor, output_recall_sco
         stack.enter_context(torch.no_grad())
 
         for idx, inputs in track(enumerate(data_loader), description="Inference", total=total):
-
+            if idx > 1: break
             outputs = model(inputs, segmentor, output_recall_scores=False)
             for input, output in zip(inputs, outputs):
 
@@ -281,32 +280,32 @@ def do_test(cfg, model, iteration='final', storage=None):
         data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
 
         data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=1)
-        if cfg.PLOT.RECALL_SCORES: output_recall_scores = True
+        if cfg.PLOT.EVAL == 'MABO': output_recall_scores = True
         else: output_recall_scores = False
         if output_recall_scores:
             mean_average_best_overlap_scores = mean_average_best_overlap(model, data_loader, segmentor, output_recall_scores)
 
         # TODO: code can only run to here at the moment
-        exit()
-        results_json = inference_on_dataset_custom(model, data_loader, segmentor, output_recall_scores=False)
+        # exit()
+        else:
+            results_json = inference_on_dataset(model, data_loader, segmentor)
+            '''
+            Individual dataset evaluation
+            '''
+            eval_helper.add_predictions(dataset_name, results_json)
+            eval_helper.save_predictions(dataset_name)
+            eval_helper.evaluate(dataset_name)
 
-        '''
-        Individual dataset evaluation
-        '''
-        eval_helper.add_predictions(dataset_name, results_json)
-        eval_helper.save_predictions(dataset_name)
-        eval_helper.evaluate(dataset_name)
-
-        '''
-        Optionally, visualize some instances
-        '''
-        instances = torch.load(os.path.join(output_folder, dataset_name, 'instances_predictions.pth'))
-        log_str = vis.visualize_from_instances(
-            instances, data_loader.dataset, dataset_name, 
-            cfg.INPUT.MIN_SIZE_TEST, os.path.join(output_folder, dataset_name), 
-            MetadataCatalog.get('omni3d_model').thing_classes, iteration
-        )
-        logger.info(log_str)
+            '''
+            Optionally, visualize some instances
+            '''
+            instances = torch.load(os.path.join(output_folder, dataset_name, 'instances_predictions.pth'))
+            log_str = vis.visualize_from_instances(
+                instances, data_loader.dataset, dataset_name, 
+                cfg.INPUT.MIN_SIZE_TEST, os.path.join(output_folder, dataset_name), 
+                MetadataCatalog.get('omni3d_model').thing_classes, iteration
+            )
+            logger.info(log_str)
 
         
     '''
@@ -383,15 +382,16 @@ def main(args):
     model = build_model(cfg, priors=priors)
 
     # skip straight to eval mode
-    # DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
-    #     cfg.MODEL.WEIGHTS, resume=False)
+    if cfg.PLOT.EVAL != 'MABO':
+        DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
+            cfg.MODEL.WEIGHTS, resume=False)
     return do_test(cfg, model)
 
 
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
-    args.opts.append('PLOT.RECALL_SCORES')
-    args.opts.append(True)
+    # args.opts.append('PLOT.EVAL')
+    # args.opts.append('MABO') or 'AP'
     print("Command Line Args:", args)
 
     main(args)
