@@ -560,6 +560,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             contours3D = np.array([scaled_contour_x, scaled_contour_y, scaled_contour_z]).T
 
+            # https://automaticaddison.com/how-to-determine-the-orientation-of-an-object-using-opencv/
             # PCA
             pca = PCA(n_components=3)
             pca.fit(contours3D)
