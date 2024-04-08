@@ -103,12 +103,12 @@ reference_box = Box(proposals[image].proposal_boxes[0].tensor[0])
 # Get depth info
 depth_image = np.load(f"datasets/depth_maps/{batched_inputs[image]['image_id']}.npz")['depth']
 depth_image = resize(depth_image,(img.shape[0],img.shape[1]))
-depth_patch = depth_image[int(reference_box.x1):int(reference_box.x2),int(reference_box.y1):int(reference_box.y2)]
+depth_patch = torch.tensor(depth_image[int(reference_box.x1):int(reference_box.x2),int(reference_box.y1):int(reference_box.y2)])
 
 ####################################################################################################################################################################################################################################################################################
 
 # Get Proposals
-x_points = [1]#, 10, 100]#, 1000, 10000]#, 100000]
+x_points = [1, 10, 100]#, 1000, 10000]#, 100000]
 number_of_proposals = x_points[-1]
 
 with open('filetransfer/priors.pkl', 'rb') as f:
@@ -154,6 +154,8 @@ else:
         pickle.dump(masks, f)
 
 seg_mask = masks[0]
+for i in range(120):
+     seg_mask[i] = np.zeros(len(seg_mask[i]))
 bube_corners = [pred_cubes[i].get_bube_corners(K_scaled) for i in range(number_of_proposals)]
 segment_scores = score_segmentation(seg_mask, bube_corners)
 idx_scores_segment = np.argsort(segment_scores)[::-1]
@@ -177,84 +179,7 @@ sorted_angles_IoU = [IoU3D[i] for i in idx_scores_angles]
 angle_ious = [np.max(sorted_angles_IoU[:n]) for n in x_points]
 print('IoU3D of best angle score',sorted_angles_IoU[0])
 
-# 2D Contour
-seg_mask_uint8 = np.array(seg_mask).astype(np.uint8) * 255
-ret, thresh = cv2.threshold(seg_mask_uint8, 0.5, 1, 0)
-contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-contour_x = []
-contour_y = []
-for i in range(len(contours)):
-     for j in range(len(contours[i])):
-          contour_x.append(contours[i][j][0][0])
-          contour_y.append(contours[i][j][0][1])
-
-# 3rd dimension
-contour_z = np.zeros(len(contour_x))
-for i in range(len(contour_x)):
-     contour_z[i] = depth_image[contour_x[i],contour_y[i]]
-
-min_val = np.min(contour_x)
-max_val = np.max(contour_x)
-scaled_contour_x = (contour_x - min_val) / (max_val - min_val)
-
-min_val = np.min(contour_y)
-max_val = np.max(contour_y)
-scaled_contour_y = (contour_y - min_val) / (max_val - min_val)
-
-min_val = np.min(contour_z)
-max_val = np.max(contour_z)
-scaled_contour_z = (contour_z - min_val) / (max_val - min_val)
-
-contours3D = np.array([scaled_contour_x, scaled_contour_y, scaled_contour_z]).T
-
-# PCA
-pca = PCA(n_components=3)
-pca.fit(contours3D)
-orientations = pca.components_
-
-def gram_schmidt(vectors):
-    basis = []
-    for vector in vectors:
-        new_vector = vector - sum(np.dot(vector, b) * b for b in basis)
-        if np.linalg.norm(new_vector) > 1e-10:
-            basis.append(new_vector / np.linalg.norm(new_vector))
-
-    return np.array(basis)
-
-basis = gram_schmidt(orientations)
-euler_angles = np.arctan2(basis[2, 1], basis[2, 2]), np.arcsin(-basis[2, 0]), np.arctan2(basis[1, 0], basis[0, 0])
-print(basis.T)
-print('found angles',np.array(euler_angles) % (pi / 2))
-print('gt angles',util.mat2euler(gt_R) % (pi / 2))
-
-def vectors_from_rotation_matrix(rotation_matrix):
-    # Extract vectors from rotation matrix
-    v1 = rotation_matrix[:, 0]
-    v2 = rotation_matrix[:, 1]
-    v3 = rotation_matrix[:, 2]
-
-    return np.array([v1, v2, v3])
-
-#orientations = vectors_from_rotation_matrix(np.array(gt_R)) #gt rotation
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-points_2d_homogeneous = np.dot(K_scaled, orientations.T).T
-
-# Convert homogeneous coordinates to Cartesian coordinates
-points_2d = points_2d_homogeneous[:, :2] / points_2d_homogeneous[:, 2:]
 
 
 # Plotting
@@ -318,27 +243,7 @@ ax.plot(torch.cat((gt_box.get_all_corners()[:,0],gt_box.get_all_corners()[0,0].r
 ax.scatter(gt____whlxyz[0],gt____whlxyz[1],color='r')
 plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'box_with_highest_iou.png'),dpi=300, bbox_inches='tight')
 
-distances = np.linalg.norm(points_2d, axis=1)
 
-# Normalize points by dividing each coordinate by its distance from the origin
-points_2d = points_2d / np.max(distances)
-#points_2d = points_2d / distances[:, np.newaxis]
-
-# Contour Plot
-cntr = np.array(gt____whlxyz[:2])
-p1 = (cntr[0] + points_2d[0][0], cntr[1] + points_2d[0][1])
-p2 = (cntr[0] + points_2d[1][0], cntr[1] + points_2d[1][1])
-p3 = (cntr[0] + points_2d[2][0], cntr[1] + points_2d[2][1])
-
-fig = plt.figure()
-ax = fig.add_subplot(111)
-drawAxis(prop_img, cntr, p1, (255, 255, 0), 150)
-drawAxis(prop_img, cntr, p2, (0, 0, 255), 150)
-drawAxis(prop_img, cntr, p3, (0, 255, 255), 150)
-ax.imshow(prop_img)
-show_mask(seg_mask,ax)
-#ax.scatter(contour_x, contour_y, c='r', s=1)
-plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'contour.png'),dpi=300, bbox_inches='tight')
 ####################################################################################################################################################################################################################################################################################
 
 
@@ -380,19 +285,135 @@ meshes_text = ['box with 0 3diou']
 meshes_text.append('gt cube')
 pred_meshes.append(gt_cube.__getitem__(0).detach())
 
-fig = plt.figure()
-ax = fig.add_subplot(111)
-prop_img = v_pred.get_image()
-img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, K_scaled.cpu().numpy(), pred_meshes,text=meshes_text, blend_weight=0.5, blend_weight_overlay=0.85,scale = img.shape[0])
-im_concat = np.concatenate((img_3DPR, img_novel), axis=1)
-im_concat = im_concat[..., ::-1]
-util.imwrite(im_concat, os.path.join('ProposalNetwork/output/AMOB', 'tmp.jpg'))
 
-center = normalised_space_to_pixel(np.array(pred_cubes[idx].center)[:2],img.shape[:2][::-1])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 2D Contour
+seg_mask_uint8 = np.array(seg_mask).astype(np.uint8) * 255
+for i in range(120):
+     seg_mask_uint8[i] = np.zeros(len(seg_mask_uint8[i]))
+ret, thresh = cv2.threshold(seg_mask_uint8, 0.5, 1, 0)
+contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+contour_x = []
+contour_y = []
+for i in range(len(contours)):
+     for j in range(len(contours[i])):
+          contour_x.append(contours[i][j][0][0])
+          contour_y.append(contours[i][j][0][1])
+
+# 3rd dimension
+contour_z = np.zeros(len(contour_x))
+for i in range(len(contour_x)):
+     contour_z[i] = depth_image[contour_x[i],contour_y[i]]
+
+min_val = np.min(contour_x)
+max_val = np.max(contour_x)
+scaled_contour_x = (contour_x - min_val) / (max_val - min_val)
+
+min_val = np.min(contour_y)
+max_val = np.max(contour_y)
+scaled_contour_y = (contour_y - min_val) / (max_val - min_val)
+
+min_val = np.min(contour_z)
+max_val = np.max(contour_z)
+scaled_contour_z = (contour_z - min_val) / (max_val - min_val)
+
+contours3D = np.array([scaled_contour_x, scaled_contour_y, scaled_contour_z]).T
+
+# PCA
+pca = PCA(n_components=3)
+pca.fit(contours3D)
+orientations = pca.components_ #eigenvectors
+
+def gram_schmidt(vectors):
+    basis = []
+    for vector in vectors:
+        new_vector = vector - sum(np.dot(vector, b) * b for b in basis)
+        if np.linalg.norm(new_vector) > 1e-10:
+            basis.append(new_vector / np.linalg.norm(new_vector))
+
+    return np.array(basis)
+
+basis = gram_schmidt(orientations)
+euler_angles = util.mat2euler(basis.T)
+
+print('found euler angles', [f'{x:.2f}' for x in euler_angles])
+print('gt euler angles', [f'{x:.2f}' for x in util.mat2euler(gt_R)])
+
+def vectors_from_rotation_matrix(rotation_matrix):
+    # Extract vectors from rotation matrix
+    v1 = rotation_matrix[:, 0]
+    v2 = rotation_matrix[:, 1]
+    v3 = rotation_matrix[:, 2]
+
+    return np.array([v1, v2, v3])
+
+#orientations = vectors_from_rotation_matrix(np.array(gt_R)) #gt rotation
+
+
+
+points_2d_homogeneous = np.dot(K_scaled, orientations.T).T
+
+# Convert homogeneous coordinates to Cartesian coordinates
+points_2d = points_2d_homogeneous[:, :2] / points_2d_homogeneous[:, 2:]
+
+distances = np.linalg.norm(points_2d, axis=1)
+
+# Normalize points by dividing each coordinate by its distance from the origin
+points_2d = points_2d / np.max(distances)
+#points_2d = points_2d / distances[:, np.newaxis]
+
+# Contour Plot
+cntr = np.array(gt____whlxyz[:3])
+p1 = (cntr[0] + points_2d[0][0], cntr[1] + points_2d[0][1])
+p2 = (cntr[0] + points_2d[1][0], cntr[1] + points_2d[1][1])
+p3 = (cntr[0] + points_2d[2][0], cntr[1] + points_2d[2][1])
+
 fig = plt.figure()
 ax = fig.add_subplot(111)
-vis_img_3d = img_3DPR.astype(np.uint8)
-ax.imshow(vis_img_3d)
-ax.scatter([135.45,135.45,259.76,259.76],[121.6,236.29,121.6,236.29],color='b')
-ax.scatter(center[0],center[1],color='r')
-plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'tmp2.png'),dpi=300, bbox_inches='tight')
+drawAxis(prop_img, cntr, p1, (255, 255, 0), 150)
+drawAxis(prop_img, cntr, p2, (0, 0, 255), 150)
+drawAxis(prop_img, cntr, p3, (0, 255, 255), 150)
+ax.imshow(prop_img)
+show_mask(seg_mask,ax)
+ax.scatter(contour_x, contour_y, c='r', s=1)
+plt.savefig(os.path.join('ProposalNetwork/output/AMOB', 'contour.png'),dpi=300, bbox_inches='tight')

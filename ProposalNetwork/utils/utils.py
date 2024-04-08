@@ -46,7 +46,7 @@ def sample_normal_greater_than(mean, std, threshold):
         sample = np.random.normal(mean, std)
     return sample
 
-def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
+def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior, angles):
     '''
     need xyz, whl, and pose (R)
     '''
@@ -63,10 +63,7 @@ def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
 
     # R
     #rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6)) # Use this when learnable
-    rx = np.random.rand(1) * np.pi - np.pi/2
-    ry = np.random.rand(1) * np.pi - np.pi/2
-    rz = np.random.rand(1) * np.pi - np.pi/2
-    rotation_matrix = torch.from_numpy(util.euler2mat([rx,ry,rz]))
+    rotation_matrix = torch.from_numpy(util.euler2mat(angles))
     
     return xyz, whl, rotation_matrix
 

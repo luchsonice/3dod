@@ -34,6 +34,8 @@ from cubercnn.modeling.roi_heads.fast_rcnn import FastRCNNOutputs
 from cubercnn import util, vis
 from tqdm import tqdm
 
+from sklearn.decomposition import PCA
+
 logger = logging.getLogger(__name__)
 
 E_CONSTANT = 2.71828183
@@ -497,6 +499,16 @@ class ROIHeads_Boxer(StandardROIHeads):
         number_of_proposals = 1000
         pred_cube_meshes = []
         mask_per_image = mask_per_image[0] # this should be looped over
+
+        def gram_schmidt(vectors):
+                basis = []
+                for vector in vectors:
+                    new_vector = vector - sum(np.dot(vector, b) * b for b in basis)
+                    if np.linalg.norm(new_vector) > 1e-10:
+                        basis.append(new_vector / np.linalg.norm(new_vector))
+
+                return np.array(basis)
+
         gt_cube_meshes = []
         im_shape = images_raw.tensor.shape[2:][::-1] # im shape should be (x,y)
         n_gt = len(gt_boxes3D)
@@ -504,7 +516,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_IoU2D    = np.zeros((n_gt, number_of_proposals))
         score_seg      = np.zeros((n_gt, number_of_proposals))
         score_dim      = np.zeros((n_gt, number_of_proposals))
-        score_angle    = np.zeros((n_gt, number_of_proposals))
         score_combined = np.zeros((n_gt, number_of_proposals))
         # it is important that the zip is exhaustedd at the shortest length
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
@@ -517,7 +528,47 @@ class ROIHeads_Boxer(StandardROIHeads):
             reference_box = reference_box.to_device('cpu')
             priors = [prior_dims_mean[i].cpu().numpy(), prior_dims_std[i].cpu().numpy()]
             depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.y1):int(reference_box.y2),int(reference_box.x1):int(reference_box.x2)]
-            pred_cubes = propose(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals)
+
+             # 2D Contour
+            seg_mask_uint8 = np.array(mask_per_image[i][0]).astype(np.uint8) * 255
+            _, thresh = cv2.threshold(seg_mask_uint8, 0.5, 1, 0)
+            contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+            contour_x = []
+            contour_y = []
+            for m in range(len(contours)):
+                for j in range(len(contours[m])):
+                    contour_x.append(contours[m][j][0][0])
+                    contour_y.append(contours[m][j][0][1])
+
+            # 3rd dimension
+            contour_z = np.zeros(len(contour_x))
+            for m in range(len(contour_x)):
+                contour_z[m] = depth_maps.tensor.cpu().squeeze()[contour_y[m],contour_x[m]]
+
+            min_val = np.min(contour_x)
+            max_val = np.max(contour_x)
+            scaled_contour_x = (contour_x - min_val) / (max_val - min_val)
+
+            min_val = np.min(contour_y)
+            max_val = np.max(contour_y)
+            scaled_contour_y = (contour_y - min_val) / (max_val - min_val)
+
+            min_val = np.min(contour_z)
+            max_val = np.max(contour_z)
+            scaled_contour_z = (contour_z - min_val) / (max_val - min_val)
+
+            contours3D = np.array([scaled_contour_x, scaled_contour_y, scaled_contour_z]).T
+
+            # PCA
+            pca = PCA(n_components=3)
+            pca.fit(contours3D)
+            orientations = pca.components_
+
+            basis = gram_schmidt(orientations)
+            euler_angles = util.mat2euler(basis.T)
+
+            pred_cubes = propose(reference_box, depth_patch, priors, im_shape, euler_angles, number_of_proposals=number_of_proposals)
             # ## end cpu region
 
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
