@@ -164,4 +164,4 @@ def get_cfg_defaults(cfg):
 
     cfg.PLOT = CN(new_allowed=True)
     cfg.PLOT.OUTPUT_DIR = ''
-    cfg.PLOT.RECALL_SCORES = False
+    cfg.PLOT.EVAL = ''

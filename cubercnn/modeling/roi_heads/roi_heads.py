@@ -274,6 +274,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             # mask for each proposal
             # NOTE: at the the moment the this assumes a batch size of 1, since the test loader has it hardcoded
+            targets = [target[target.gt_classes >= 0] for target in targets]
             if output_recall_scores:
                 pred_instances = None
                 masks = []
@@ -311,7 +312,6 @@ class ROIHeads_Boxer(StandardROIHeads):
                     masks.append(mask_per_image)
             
             #filter out some invalid targets, TODO: this logic is already somewhere else, but I dont know where
-            targets = [target[target.gt_classes >= 0] for target in targets]
             if output_recall_scores:
                 pred_instances = self._forward_cube_as_mesh(images, images_raw, masks, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets)
             else:
@@ -419,6 +419,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             gt_boxes: List
             gt_box_classes: List
             mask_per_image: List
+            Ks_scaled_per_box: torch.tensor
 
         # features = [features[f] for f in self.in_features]
 
@@ -478,6 +479,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         # num_boxes_per_image = [len(i) for i in proposal_boxes]
 
+        # This way of doing the scaling manipulates an entire batch at once.
         # scale the intrinsics according to the ratio the image has been scaled. 
         # this means the projections at the current scale are in sync.
         # Ks_scaled_per_box = torch.cat([
@@ -486,7 +488,8 @@ class ROIHeads_Boxer(StandardROIHeads):
         # ]).to(gt_boxes3D.device)
         # Ks_scaled_per_box[:, -1, -1] = 1
 
-        Ks_scaled_per_box = Ks[0]
+        Ks_scaled_per_box = Ks[0]/im_scales_ratio[0]
+        Ks_scaled_per_box[-1, -1] = 1
 
         if self.dims_priors_enabled:
             # gather prior dimensions
@@ -564,7 +567,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         stat_empty_boxes = sum_percentage_empty_boxes/n_gt
 
-        p_info = Plotinfo(pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image)
+        p_info = Plotinfo(pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box)
 
         if self.training:
             return pred_cube_meshes, None
@@ -620,7 +623,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         # ]).to(gt_boxes3D.device)
         # Ks_scaled_per_box[:, -1, -1] = 1
 
-        Ks_scaled_per_box = Ks[0].to(gt_boxes3D.device)
+        Ks_scaled_per_box = (Ks[0]/im_scales_ratio[0]).to(gt_boxes3D.device)
 
         if self.dims_priors_enabled:
             # gather prior dimensions
