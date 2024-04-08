@@ -46,7 +46,6 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1,
     z_range = [percentile_lower,percentile_higher]
     z_grid = np.linspace(z_range[0],z_range[1],number_of_proposals)
 
-    
     # Should also have min and max
     w_prior = torch.tensor([priors[0][0], priors[1][0]])
     h_prior = torch.tensor([priors[0][1], priors[1][1]])
@@ -56,7 +55,7 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1,
 
     # Check whether it is possible to find gt
     if not (gt_cube == None) and not is_gt_included(gt_cube,x_range, y_range, z_range, w_prior, h_prior, l_prior):
-        print('GT cannot be found!')
+        pass
 
     list_of_cubes = []
     for i in range(number_of_proposals):

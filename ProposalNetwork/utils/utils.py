@@ -170,39 +170,42 @@ def mask_iou(segmentation_mask, bube_mask):
 
 def is_gt_included(gt_cube,x_range,y_range,z_range, w_prior, h_prior, l_prior):
     # Define how far away dimensions need to be to be counted as unachievable
-    stds_away = 3
+    stds_away = 2
     # Center
+    because_of = []
     if not (x_range[0] < gt_cube.center[0] < x_range[1]):
-        print('Because of x')
-        return False
-    elif not (y_range[0] < gt_cube.center[1] < y_range[1]):
-        print('Because of y')
-        return False
+        if (gt_cube.center[0] < x_range[0]):
+            val = abs(x_range[0] - gt_cube.center[0])
+        else:
+            val = abs(gt_cube.center[0] - x_range[1])
+        because_of.append(f'x by {val:.1f}')
+    if not (y_range[0] < gt_cube.center[1] < y_range[1]):
+        because_of.append('y')
     # Depth
-    elif not (z_range[0] < gt_cube.center[2] < z_range[1]):
-        print('Because of z')
-        return False
+    if not (z_range[0] < gt_cube.center[2] < z_range[1]):
+        if (gt_cube.center[2] < z_range[0]):
+            val = abs(z_range[0] - gt_cube.center[2])
+        else:
+            val = abs(gt_cube.center[2] - z_range[1])
+        because_of.append(f'z by {val:.1f}')
     # Dimensions
-    elif (gt_cube.dimensions[0] < w_prior[0]-stds_away*w_prior[1]):
-        print('Because of w-')
-        return False
-    elif (gt_cube.dimensions[0] > w_prior[0]+stds_away*w_prior[1]):
-        print('Because of w+')
-        return False
-    elif (gt_cube.dimensions[1] < h_prior[0]-stds_away*h_prior[1]):
-        print('Because of h-')
-        return False
-    elif (gt_cube.dimensions[1] > h_prior[0]+stds_away*h_prior[1]):
-        print('Because of h+')
-        return False
-    elif (gt_cube.dimensions[2] < l_prior[0]-stds_away*l_prior[1]):
-        print('Because of l-')
-        return False
-    elif (gt_cube.dimensions[2] > l_prior[0]+stds_away*l_prior[1]):
-        print('Because of l+')
-        return False
-    else:
+    if (gt_cube.dimensions[0] < w_prior[0]-stds_away*w_prior[1]):
+        because_of.append('w-')
+    if (gt_cube.dimensions[0] > w_prior[0]+stds_away*w_prior[1]):
+        because_of.append('w+')
+    if (gt_cube.dimensions[1] < h_prior[0]-stds_away*h_prior[1]):
+        because_of.append('h-')
+    if (gt_cube.dimensions[1] > h_prior[0]+stds_away*h_prior[1]):
+        because_of.append('h+')
+    if (gt_cube.dimensions[2] < l_prior[0]-stds_away*l_prior[1]):
+        because_of.append('l-')
+    if (gt_cube.dimensions[2] > l_prior[0]+stds_away*l_prior[1]):
+        because_of.append('l+')
+    if because_of == []:
         return True
+    else:
+        print('GT cannot be found due to',because_of)
+        return False
 
     # rotation nothing yet
 
