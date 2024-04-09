@@ -419,7 +419,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             gt_boxes: List
             gt_box_classes: List
             mask_per_image: List
-            Ks_scaled_per_box: torch.tensor
+            K: np.array
 
         # features = [features[f] for f in self.in_features]
 
@@ -567,7 +567,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         stat_empty_boxes = sum_percentage_empty_boxes/n_gt
 
-        p_info = Plotinfo(pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box)
+        p_info = Plotinfo(pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
 
         if self.training:
             return pred_cube_meshes, None

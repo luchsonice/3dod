@@ -126,7 +126,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
 
         for i, inputs in track(enumerate(data_loader), description="Making Mean average best overlap plots", total=total):
             # if i >5: break # #TODO DEBUG:
-            if i > 1:
+            if i > 0:
                 break
             output = model(inputs, segmentor, output_recall_scores)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, stat_empty_boxes
@@ -173,7 +173,6 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
             fig, (ax, ax1) = plt.subplots(2,1, figsize=(14, 10))
             input = next(d_iter)[0]
             images_raw = input['image']
-            K = np.array(input['K'])
             
             prop_img = convert_image_to_rgb(images_raw.permute(1,2,0).cpu().numpy(), 'BGR').copy()
             v_pred = Visualizer(prop_img, None)
@@ -182,7 +181,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
                 , assigned_colors=colors
             )
             prop_img2 = v_pred.get_image()
-            img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img2, K, p_info.pred_cube_meshes,text=pred_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
+            img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img2, p_info.K, p_info.pred_cube_meshes,text=pred_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
             vis_img_3d = img_3DPR.astype(np.uint8)
             vis_img_3d = show_mask2(p_info.mask_per_image.cpu().numpy(), vis_img_3d, random_color=colors)
             ax.set_title('Predicted')
@@ -191,7 +190,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
             ax.imshow(np.concatenate((vis_img_3d, img_novel), axis=1))
 
             gt_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[i] for i in p_info.gt_box_classes]
-            img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, K, p_info.gt_cube_meshes,text=gt_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
+            img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, p_info.K, p_info.gt_cube_meshes,text=gt_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
             vis_img_3d = img_3DPR.astype(np.uint8)
             im_concat = np.concatenate((vis_img_3d, img_novel), axis=1)
             ax1.set_title('GT')
