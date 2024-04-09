@@ -44,11 +44,15 @@ class Box:
         if self.x1 > self.x2 or self.y1 > self.y2:
             raise ValueError('(x1, y1) must be the upper left corner. Did you make sure that the input is in the correct order? (upper left, bottom right)')
 
-        self.box = Boxes(coords.clone().detach().reshape(1,4))
         self.width = self.x2 - self.x1
         self.height = self.y2 - self.y1
         self.center = torch.tensor([self.x1 + self.width/2, self.y1+self.height/2])
         self.area = self.width * self.height
+
+    @property
+    def box(self) -> Boxes:
+        '''this function is accessed like Box.box'''
+        return Boxes(torch.tensor([[self.x1, self.y1, self.x2, self.y2]],device=self.x1.device))
 
     def get_all_corners(self) -> torch.Tensor:
         '''
@@ -71,7 +75,6 @@ class Box:
         Args:
             device: The device to move the tensors to (e.g., 'cuda', 'cpu').
         '''
-        self.box = self.box.to(device)
         self.center = self.center.to(device)
         self.width = self.width.to(device)
         self.height = self.height.to(device)

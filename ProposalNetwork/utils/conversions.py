@@ -48,6 +48,24 @@ def pixel_to_normalised_space(pixel_coord, im_shape):
     
     return new_coords
 
+def pixel_to_normalised_space_torch(pixel_coord, im_shape):
+    '''
+    pixel_coord: Nx2
+    '''
+    if pixel_coord.shape == (2,):
+        pixel_coord = pixel_coord.reshape(1,2) # TODO should be for general N
+
+    new_height, new_width = 2,2
+    old_width = im_shape[0]
+    old_height = im_shape[1]
+    new_coords = pixel_coord.to(torch.float32)
+    new_coords[:, 0] -= 0.5 * old_width
+    new_coords[:, 1] -= 0.5 * old_height
+    new_coords[:, 0] *= new_width / old_width
+    new_coords[:, 1] *= new_height / old_height
+    
+    return new_coords
+
 def normalised_space_to_pixel(coords,im_shape):
     coords = np.array(coords)
     if np.shape(coords) == (2,):

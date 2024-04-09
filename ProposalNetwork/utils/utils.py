@@ -46,6 +46,15 @@ def sample_normal_greater_than(mean, std, threshold):
         sample = np.random.normal(mean, std)
     return sample
 
+def sample_normal_greater_than_para(mean, std, threshold, count):
+    device = mean.device
+    mean = mean.item()
+    std = std.item()
+    samples = torch.normal(mean, std, size=(count,))
+    while torch.any(samples < threshold):
+        samples[samples < threshold] = torch.normal(mean, std, size=((samples < threshold).sum(),))
+    return samples.to(device)
+
 def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
     '''
     need xyz, whl, and pose (R)
@@ -67,6 +76,33 @@ def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
     ry = np.random.rand(1) * np.pi - np.pi/2
     rz = np.random.rand(1) * np.pi - np.pi/2
     rotation_matrix = torch.from_numpy(util.euler2mat([rx,ry,rz]))
+    
+    return xyz, whl, rotation_matrix
+
+def make_cubes_parallel(x_range, y_range, z, w_prior, h_prior, l_prior, number_of_proposals=1):
+    '''
+    need xyz, whl, and pose (R)
+    it does not run faster on cuda.
+    '''
+    # xyz
+    x_range = x_range.repeat(number_of_proposals,1)
+    y_range = y_range.repeat(number_of_proposals,1)
+    x = (x_range[:, 0]-x_range[:, 1]).t() * torch.rand(number_of_proposals) + x_range[:, 1]
+    y = (y_range[:, 0]-y_range[:, 1]).t() * torch.rand(number_of_proposals) + y_range[:, 1]
+    xyz = torch.stack([x, y, z], 1)
+
+    # whl
+    w = sample_normal_greater_than_para(w_prior[0], w_prior[1], 0.1, number_of_proposals)
+    h = sample_normal_greater_than_para(h_prior[0], h_prior[1], 0.1, number_of_proposals)
+    l = sample_normal_greater_than_para(l_prior[0], l_prior[1], 0.05, number_of_proposals)
+    whl = torch.stack([w, h, l], 1)
+
+    # R
+    #rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6)) # Use this when learnable
+    rx = torch.rand(number_of_proposals) * np.pi - np.pi/2
+    ry = torch.rand(number_of_proposals) * np.pi - np.pi/2
+    rz = torch.rand(number_of_proposals) * np.pi - np.pi/2
+    rotation_matrix = util.euler2mat_torch(torch.stack([rx,ry,rz],1))
     
     return xyz, whl, rotation_matrix
 
