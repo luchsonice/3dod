@@ -46,19 +46,13 @@ def pixel_to_normalised_space(pixel_coord, im_shape, norm_shape):
     
     return new_coords # TODO feel like its missing a line, something if normshape is not 2. Where did we take inspiration from? A library?
 
-def normalised_space_to_pixel(coords,im_shape): # TODO needs to be updated
-    coords = np.array(coords)
-    if np.shape(coords) == (2,):
-        coords = coords.reshape(1,2)
+def normalised_space_to_pixel(coords, im_shape, norm_shape):
+    new_coords = np.array(coords).astype(np.float32)
 
-    new_height, new_width = im_shape[1],im_shape[0]
-    old_width = 2
-    old_height = 2
-    new_coords = coords.astype(np.float32)
-    new_coords[:, 0] *= new_width / old_width
-    new_coords[:, 1] *= new_height / old_height
-    new_coords[:, 0] += 0.5 * new_width
-    new_coords[:, 1] += 0.5 * new_height
+    for i in range(len(new_coords)):
+        new_dim = im_shape[i]
+        old_dim = norm_shape[i]
+        new_coords[i] *= new_dim / old_dim
+        new_coords[i] += 0.5 * new_dim
 
-    return [[int(entry) for entry in sublist] for sublist in new_coords][0]
-    
+    return new_coords
