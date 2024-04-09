@@ -56,7 +56,7 @@
             "program": "tools/eval_boxes.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml"]
+            "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml", "PLOT.EVAL", "MABO"]
         },
         {
             "name": "Python: Current File",
