@@ -34,9 +34,9 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1,
     # Removing the outer 25% on each side of range for center point
     n = 4
     x_range_px = [reference_box.x1+reference_box.width/n,reference_box.x2-reference_box.width/n]
-    x_range = pixel_to_normalised_space(x_range_px,[im_shape[0],im_shape[0]])[0]
+    x_range = pixel_to_normalised_space(x_range_px,[im_shape[0],im_shape[0]],[2,2])
     y_range_px = [reference_box.y1+reference_box.height/n,reference_box.y2-reference_box.height/n]
-    y_range = pixel_to_normalised_space(y_range_px,[im_shape[1],im_shape[1]])[0]
+    y_range = pixel_to_normalised_space(y_range_px,[im_shape[1],im_shape[1]],[2,2])
 
     # Depth grid
     #z_range = [torch.min(depth_image), torch.max(depth_image)]
@@ -45,7 +45,7 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1,
     percentile_higher = torch.kthvalue(flattened_depth_image, int(0.85 * flattened_depth_image.numel())).values.item()
     z_range = [percentile_lower,percentile_higher]
     z_grid = np.linspace(z_range[0],z_range[1],number_of_proposals)
-
+    
     # Should also have min and max
     w_prior = torch.tensor([priors[0][0], priors[1][0]])
     h_prior = torch.tensor([priors[0][1], priors[1][1]])
