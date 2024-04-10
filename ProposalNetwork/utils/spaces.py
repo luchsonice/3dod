@@ -138,7 +138,7 @@ class Cube:
         return util.mesh_cuboid(torch.cat((self.center,self.dimensions)), self.rotation, color=color)
 
     def get_all_corners(self) -> torch.Tensor:
-        return self.cube.verts_list()[0]
+        return self.get_cube().verts_list()[0]
     
     def get_bube_corners(self,K) -> torch.Tensor:
         cube_corners = self.get_all_corners()
@@ -163,5 +163,4 @@ class Cube:
         self.center = self.center.to(device)
         self.dimensions = self.dimensions.to(device)
         self.rotation = self.rotation.to(device)
-        self.cube = self.cube.to(device)
         return self
