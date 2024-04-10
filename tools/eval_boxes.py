@@ -123,9 +123,10 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         stack.enter_context(torch.no_grad())
 
         outputs = []
-
+        total_num_instances = 0
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
             # if i >0: break # #TODO DEBUG:
+            total_num_instances += len(inputs[0]['instances'])
             output = model(inputs, segmentor, output_recall_scores)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, stat_empty_boxes
             if output is not None:
@@ -156,7 +157,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.xlabel('Number of Proposals')
         plt.ylabel('3D IoU')
         plt.legend()
-        plt.title('Mean Average Best Overlap vs Number of Proposals ({} images)'.format(1+i))
+        plt.title('Mean Average Best Overlap vs Number of Proposals ({} images, {} instances)'.format(1+i,total_num_instances))
         f_name = os.path.join('ProposalNetwork/output/MABO', 'MABO.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         print('saved to ', f_name)
