@@ -120,10 +120,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         stack.enter_context(torch.no_grad())
 
         outputs = []
-        total_num_instances = 0
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
-            # if i >0: break # #TODO DEBUG:
-            total_num_instances += len(inputs[0]['instances'])
+            if i >0: break # #TODO DEBUG:
             output = model(inputs, segmentor, output_recall_scores)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, stat_empty_boxes
             if output is not None:
@@ -143,6 +141,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         score_seg = score_seg.mean(axis=0)
         score_dim = score_dim.mean(axis=0)
         score_combined = score_combined.mean(axis=0)
+        total_num_instances = len(Iou3D)
                 
         plt.figure(figsize=(8,5))
         plt.plot(score_combined, linestyle='-',c='black', label='combined') 
