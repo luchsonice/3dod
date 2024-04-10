@@ -46,8 +46,12 @@ class Box:
 
         self.width = self.x2 - self.x1
         self.height = self.y2 - self.y1
-        self.center = torch.tensor([self.x1 + self.width/2, self.y1+self.height/2])
         self.area = self.width * self.height
+
+    @property
+    def center(self) -> torch.Tensor:
+        '''this function is accessed like Box.center'''
+        return torch.tensor([self.x1 + self.width/2, self.y1+self.height/2], device=self.x1.device)
 
     @property
     def box(self) -> Boxes:
@@ -75,7 +79,6 @@ class Box:
         Args:
             device: The device to move the tensors to (e.g., 'cuda', 'cpu').
         '''
-        self.center = self.center.to(device)
         self.width = self.width.to(device)
         self.height = self.height.to(device)
         self.area = self.area.to(device)
@@ -119,21 +122,20 @@ class Cube:
         self.dimensions = tensor[3:6]
         self.rotation = R
 
-        if self.dimensions[0] < 0:
-            raise ValueError('Width must be greater than 0.')
-        if self.dimensions[1] < 0:
-            raise ValueError('Height must be greater than 0.')
-        if self.dimensions[2] < 0:
-            raise ValueError('Length must be greater than 0.')
+        # if self.dimensions[0] < 0:
+        #     raise ValueError('Width must be greater than 0.')
+        # if self.dimensions[1] < 0:
+        #     raise ValueError('Height must be greater than 0.')
+        # if self.dimensions[2] < 0:
+        #     raise ValueError('Length must be greater than 0.')
         
-        if self.rotation.shape != (3,3):
-            raise ValueError('Rotation must be a 3x3 matrix.')
+        # if self.rotation.shape != (3,3):
+        #     raise ValueError('Rotation must be a 3x3 matrix.')
 
-        color = [c/255.0 for c in util.get_color()]
-        self.cube = util.mesh_cuboid(torch.cat((self.center,self.dimensions)), self.rotation, color=color)
 
     def get_cube(self):
-        return self.cube
+        color = [c/255.0 for c in util.get_color()]
+        return util.mesh_cuboid(torch.cat((self.center,self.dimensions)), self.rotation, color=color)
 
     def get_all_corners(self) -> torch.Tensor:
         return self.cube.verts_list()[0]

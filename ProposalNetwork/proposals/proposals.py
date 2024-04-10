@@ -1,9 +1,8 @@
-from ProposalNetwork.utils.spaces import Box, Cube
-from ProposalNetwork.utils.conversions import pixel_to_normalised_space, normalised_space_to_pixel, pixel_to_normalised_space_torch
+from ProposalNetwork.utils.spaces import Cube
+from ProposalNetwork.utils.conversions import pixel_to_normalised_space, pixel_to_normalised_space_torch
 from ProposalNetwork.utils.utils import make_cube, is_gt_included, make_cubes_parallel
 import torch
 import numpy as np
-from cubercnn import util
 
 def propose_random(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=1):
     '''
@@ -103,7 +102,6 @@ def propose2(reference_box, depth_image, priors, im_shape, number_of_proposals=1
     w_prior = torch.tensor([priors[0][0], priors[1][0]], device=depth_image.device)
     h_prior = torch.tensor([priors[0][1], priors[1][1]], device=depth_image.device)
     l_prior = torch.tensor([priors[0][2], priors[1][2]], device=depth_image.device)
-
 
     list_of_cubes = []
     # Predict cubes

@@ -98,13 +98,18 @@ def make_cubes_parallel(x_range, y_range, z, w_prior, h_prior, l_prior, number_o
     whl = torch.stack([w, h, l], 1)
 
     # R
-    #rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6)) # Use this when learnable
-    rx = torch.rand(number_of_proposals) * np.pi - np.pi/2
-    ry = torch.rand(number_of_proposals) * np.pi - np.pi/2
-    rz = torch.rand(number_of_proposals) * np.pi - np.pi/2
-    rotation_matrix = util.euler2mat_torch(torch.stack([rx,ry,rz],1))
+    rotation_matrix = randn_orthobasis_torch(number_of_proposals) 
     
     return xyz, whl, rotation_matrix
+
+def randn_orthobasis_torch(num_samples=1):
+    z = torch.randn(num_samples, 3, 3)
+    z = z / torch.norm(z, p=2, dim=-1, keepdim=True)
+    z[:, 0] = torch.cross(z[:, 1], z[:, 2], dim=-1)
+    z[:, 0] = z[:, 0] / torch.norm(z[:, 0], dim=-1, keepdim=True)
+    z[:, 1] = torch.cross(z[:, 2], z[:, 0], dim=-1)
+    z[:, 1] = z[:, 1] / torch.norm(z[:, 1], dim=-1, keepdim=True)
+    return z
 
 def is_box_included_in_other_box(reference_box, proposed_box):
     reference_corners = reference_box.get_all_corners()
