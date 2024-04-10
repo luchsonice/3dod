@@ -3,6 +3,7 @@ from ProposalNetwork.utils.conversions import pixel_to_normalised_space, normali
 from ProposalNetwork.utils.utils import make_cube, is_gt_included, make_cubes_parallel
 import torch
 import numpy as np
+from cubercnn import util
 
 def propose_random(reference_box, depth_image, K_scaled, im_shape, number_of_proposals=1):
     '''
@@ -32,35 +33,41 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1,
     priors = [prior_mean, prior_std] 2x3
     '''
     # Removing the outer 25% on each side of range for center point
-    n = 4
-    x_range_px = [reference_box.x1+reference_box.width/n,reference_box.x2-reference_box.width/n]
-    x_range = pixel_to_normalised_space(x_range_px,[im_shape[0],im_shape[0]],[2,2])
-    y_range_px = [reference_box.y1+reference_box.height/n,reference_box.y2-reference_box.height/n]
-    y_range = pixel_to_normalised_space(y_range_px,[im_shape[1],im_shape[1]],[2,2])
+    x_stretch = 1.2
+    y_stretch = x_stretch * im_shape[1]/im_shape[0]
+    d = 4
+    x_range_px = [reference_box.x1+reference_box.width/d,reference_box.x2-reference_box.width/d]
+    y_range_px = [reference_box.y1+reference_box.height/d,reference_box.y2-reference_box.height/d]
 
     # Depth grid
-    #z_range = [torch.min(depth_image), torch.max(depth_image)]
     flattened_depth_image = depth_image.flatten()
     percentile_lower = torch.kthvalue(flattened_depth_image, int(0.15 * flattened_depth_image.numel())).values.item()
     percentile_higher = torch.kthvalue(flattened_depth_image, int(0.85 * flattened_depth_image.numel())).values.item()
     z_range = [percentile_lower,percentile_higher]
-    z_grid = np.linspace(z_range[0],z_range[1],number_of_proposals)
-    
+    z_grid = np.linspace(z_range[0],z_range[1],number_of_proposals) #TODO Scale depth (maybe with focal length)
+
     # Should also have min and max
     w_prior = torch.tensor([priors[0][0], priors[1][0]])
     h_prior = torch.tensor([priors[0][1], priors[1][1]])
     l_prior = torch.tensor([priors[0][2], priors[1][2]])
 
-    #print(x_range,y_range,z_range,w_prior,h_prior,l_prior)
-
     # Check whether it is possible to find gt
+    x_range = pixel_to_normalised_space(x_range_px,[im_shape[0],im_shape[0]],[x_stretch * np.mean(z_grid),x_stretch * np.mean(z_grid)])
+    y_range = pixel_to_normalised_space(y_range_px,[im_shape[1],im_shape[1]],[y_stretch * np.mean(z_grid),y_stretch * np.mean(z_grid)])
     if not (gt_cube == None) and not is_gt_included(gt_cube,x_range, y_range, z_range, w_prior, h_prior, l_prior):
         pass
 
+    #print('x',x_range,gt_cube.center[0].numpy())
+    #print('y',y_range,gt_cube.center[1].numpy())
+    #print('z',z_range,gt_cube.center[2].numpy())
     list_of_cubes = []
     for i in range(number_of_proposals):
+        # Transform center
+        x_range = pixel_to_normalised_space(x_range_px,[im_shape[0],im_shape[0]],[x_stretch * z_grid[i],x_stretch * z_grid[i]])
+        y_range = pixel_to_normalised_space(y_range_px,[im_shape[1],im_shape[1]],[y_stretch * z_grid[i],y_stretch * z_grid[i]])
+
         # Predict cube
-        pred_xyz, pred_whl, pred_pose = make_cube(x_range,y_range,z_grid[i],w_prior,h_prior,l_prior)
+        pred_xyz, pred_whl, pred_pose = make_cube(x_range,y_range,z_grid[i],w_prior,h_prior,l_prior,gt_cube)
         pred_cube = Cube(torch.cat((pred_xyz, pred_whl), dim=0),pred_pose)
         list_of_cubes.append(pred_cube)
 

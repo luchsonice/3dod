@@ -495,7 +495,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         #     for (i, num) in enumerate(num_boxes_per_image)
         # ]).to(gt_boxes3D.device)
         # Ks_scaled_per_box[:, -1, -1] = 1
-
         Ks_scaled_per_box = Ks[0]/im_scales_ratio[0]
         Ks_scaled_per_box[-1, -1] = 1
 
@@ -524,7 +523,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_IoU2D    = np.zeros((n_gt, number_of_proposals))
         score_seg      = np.zeros((n_gt, number_of_proposals))
         score_dim      = np.zeros((n_gt, number_of_proposals))
-        score_angle    = np.zeros((n_gt, number_of_proposals))
         score_combined = np.zeros((n_gt, number_of_proposals))
         # it is important that the zip is exhaustedd at the shortest length
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
@@ -563,7 +561,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
             score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
 
-            highest_score = np.argmax(IoU2D_scores)
+            highest_score = np.argmax(combined_score)
             pred_cube = pred_cubes[highest_score]
             pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
             # append all cubes pred_cubes
