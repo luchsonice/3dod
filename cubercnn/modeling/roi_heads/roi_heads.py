@@ -497,6 +497,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         # Ks_scaled_per_box[:, -1, -1] = 1
         Ks_scaled_per_box = Ks[0]/im_scales_ratio[0]
         Ks_scaled_per_box[-1, -1] = 1
+        print('focal',Ks_scaled_per_box[0,0])
 
         if self.dims_priors_enabled:
             # gather prior dimensions
@@ -536,9 +537,9 @@ class ROIHeads_Boxer(StandardROIHeads):
             depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.y1):int(reference_box.y2),int(reference_box.x1):int(reference_box.x2)]
             # ## end cpu region
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
-            # pred_cubes = propose(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
+            pred_cubes = propose(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
             # this new implementation is somewhat faster
-            pred_cubes = propose2(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
+            #pred_cubes = propose2(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
 
             # transfer pred_cubes to device
             pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]

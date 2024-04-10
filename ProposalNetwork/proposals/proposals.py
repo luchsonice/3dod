@@ -74,7 +74,7 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1,
     # TODO proposal should be different enough from each other, grid search?
     # TODO normals for rotations
     
-    return 
+    return list_of_cubes
 
 def propose2(reference_box, depth_image, priors, im_shape, number_of_proposals=1, gt_cube=None):
     '''
