@@ -46,7 +46,7 @@ def sample_normal_greater_than(mean, std, threshold):
         sample = np.random.normal(mean, std)
     return sample
 
-def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
+def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior, gt):
     '''
     need xyz, whl, and pose (R)
     '''
@@ -63,9 +63,9 @@ def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
 
     # R
     #rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6)) # Use this when learnable
-    rx = np.random.rand(1) * np.pi - np.pi/2
-    ry = np.random.rand(1) * np.pi - np.pi/2
-    rz = np.random.rand(1) * np.pi - np.pi/2
+    rx = np.random.rand(1) * 2 * np.pi - np.pi
+    ry = np.random.rand(1) * 2 * np.pi - np.pi
+    rz = np.random.rand(1) * 2 * np.pi - np.pi
     rotation_matrix = torch.from_numpy(util.euler2mat([rx,ry,rz]))
     
     return xyz, whl, rotation_matrix
@@ -170,7 +170,7 @@ def mask_iou(segmentation_mask, bube_mask):
 
 def is_gt_included(gt_cube,x_range,y_range,z_range, w_prior, h_prior, l_prior):
     # Define how far away dimensions need to be to be counted as unachievable
-    stds_away = 2
+    stds_away = 1.5
     # Center
     because_of = []
     if not (x_range[0] < gt_cube.center[0] < x_range[1]):
@@ -180,7 +180,11 @@ def is_gt_included(gt_cube,x_range,y_range,z_range, w_prior, h_prior, l_prior):
             val = abs(gt_cube.center[0] - x_range[1])
         because_of.append(f'x by {val:.1f}')
     if not (y_range[0] < gt_cube.center[1] < y_range[1]):
-        because_of.append('y')
+        if (gt_cube.center[1] < y_range[0]):
+            val = abs(y_range[0] - gt_cube.center[1])
+        else:
+            val = abs(gt_cube.center[1] - y_range[1])
+        because_of.append(f'y by {val:.1f}')
     # Depth
     if not (z_range[0] < gt_cube.center[2] < z_range[1]):
         if (gt_cube.center[2] < z_range[0]):

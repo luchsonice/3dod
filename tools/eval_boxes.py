@@ -157,7 +157,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.xlabel('Number of Proposals')
         plt.ylabel('3D IoU')
         plt.legend()
-        plt.title('Mean Average Best Overlap vs Number of Proposals')
+        plt.title('Mean Average Best Overlap vs Number of Proposals ({} images)'.format(1+i))
         f_name = os.path.join('ProposalNetwork/output/MABO', 'MABO.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         print('saved to ', f_name)

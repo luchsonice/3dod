@@ -25,7 +25,7 @@ def score_segmentation(segmentation_mask, bube_corners):
         polygon_points = cv2.convexHull(np.array(bube_corners[i]))
         polygon_points = np.array([polygon_points],dtype=np.int32)
         cv2.fillPoly(bube_mask, polygon_points, 1)
-        scores.append(mask_iou(segmentation_mask, bube_mask))
+        scores.append(mask_iou(segmentation_mask, bube_mask)) # TODO I think we should try diving by gt as its unfair in combined
 
     return scores
 
