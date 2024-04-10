@@ -53,7 +53,7 @@ def init_segmentation(device='cpu'):
     # this is the smallest model
     sam_checkpoint = "segment-anything/sam_vit_b_01ec64.pth"
     model_type = "vit_b"
-    print('SAM device:', device)
+    logger.info(f'SAM device: {device}')
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
 
@@ -144,7 +144,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         score_seg = score_seg.mean(axis=0)
         score_dim = score_dim.mean(axis=0)
         score_combined = score_combined.mean(axis=0)
-        total_num_instances = len(Iou3D)
+        total_num_instances = np.sum([x[0].gt_boxes3D.shape[0] for x in outputs])
                 
         plt.figure(figsize=(8,5))
         plt.plot(score_combined, linestyle='-',c='black', label='combined') 
