@@ -276,6 +276,9 @@ class ROIHeads_Boxer(StandardROIHeads):
             # NOTE: at the the moment the this assumes a batch size of 1, since the test loader has it hardcoded
             targets = [target[target.gt_classes >= 0] for target in targets]
             if output_recall_scores:
+                # sometimes there are no valid targets in the image.
+                if len(targets) == 0:
+                    return None
                 pred_instances = None
                 masks = []
                 for img, instance in zip(images_raw.tensor, targets): # over all images in batch
