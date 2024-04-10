@@ -1,14 +1,11 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates
-from concurrent.futures import ProcessPoolExecutor
-import copy
+
+
 from dataclasses import dataclass
 import logging
-from detectron2.data.detection_utils import convert_image_to_rgb
-from detectron2.layers.nms import batched_nms
-from detectron2.utils.visualizer import Visualizer
-from matplotlib import pyplot as plt
+
 import numpy as np
-import cv2
+
 from typing import Dict, List, Tuple
 import torch
 from torch import nn
@@ -18,24 +15,22 @@ from pytorch3d.transforms.so3 import (
 )
 from detectron2.config import configurable
 from detectron2.structures import Instances, Boxes, pairwise_iou, pairwise_ioa
-from detectron2.layers import ShapeSpec, nonzero_tuple
+from detectron2.layers import ShapeSpec
 from detectron2.modeling.proposal_generator.proposal_utils import add_ground_truth_to_proposals
 from detectron2.utils.events import get_event_storage
 from detectron2.modeling.roi_heads import (
     StandardROIHeads, ROI_HEADS_REGISTRY, select_foreground_proposals,
 )
 from detectron2.modeling.poolers import ROIPooler
-from ProposalNetwork.proposals.proposals import propose, propose2
-from ProposalNetwork.scoring.scorefunction import score_angles, score_dimensions, score_iou, score_segmentation
-from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_space
+from ProposalNetwork.proposals.proposals import propose, propose_old
+from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_segmentation
+from ProposalNetwork.utils.conversions import cube_to_box
 from ProposalNetwork.utils.spaces import Box, Cube
-from ProposalNetwork.utils.utils import Boxes_to_list_of_Box, iou_2d, iou_3d
+from ProposalNetwork.utils.utils import iou_3d
 from cubercnn.modeling.roi_heads.cube_head import build_cube_head
 from cubercnn.modeling.proposal_generator.rpn import subsample_labels
 from cubercnn.modeling.roi_heads.fast_rcnn import FastRCNNOutputs
-from cubercnn import util, vis
-from tqdm import tqdm
-from concurrent.futures import ProcessPoolExecutor
+from cubercnn import util
 
 logger = logging.getLogger(__name__)
 
@@ -430,30 +425,8 @@ class ROIHeads_Boxer(StandardROIHeads):
             K: np.array
 
         # features = [features[f] for f in self.in_features]
-
-        # training on foreground
-        if self.training:
-
-            losses = {}
-
-            # add up the amount we should normalize the losses by. 
-            # this follows the same logic as the BoxHead, where each FG proposal 
-            # is able to contribute the same amount of supervision. Technically, 
-            # this value doesn't change during training unless the batch size is dynamic.
-            self.normalize_factor = max(sum([i.gt_classes.numel() for i in instances]), 1.0)
-
-            # The loss is only defined on positive proposals
-            proposals, _ = select_foreground_proposals(instances, self.num_classes)
-            proposal_boxes = [x.proposal_boxes for x in proposals]
-            pred_boxes = [x.pred_boxes for x in proposals]
-
-            box_classes = (torch.cat([p.gt_classes for p in proposals], dim=0) if len(proposals) else torch.empty(0))
-            gt_boxes3D = torch.cat([p.gt_boxes3D for p in proposals], dim=0,)
-            gt_poses = torch.cat([p.gt_poses for p in proposals], dim=0,)
-
-            assert len(gt_poses) == len(gt_boxes3D) == len(box_classes)
         
-        elif output_recall_scores:
+        if output_recall_scores:
             # pred_boxes = [x.pred_boxes for x in instances]
             # proposal_boxes = pred_boxes
             # box_classes = torch.cat([x.pred_classes for x in instances])
@@ -497,7 +470,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         # Ks_scaled_per_box[:, -1, -1] = 1
         Ks_scaled_per_box = Ks[0]/im_scales_ratio[0]
         Ks_scaled_per_box[-1, -1] = 1
-        print('focal',Ks_scaled_per_box[0,0])
 
         if self.dims_priors_enabled:
             # gather prior dimensions
@@ -537,10 +509,8 @@ class ROIHeads_Boxer(StandardROIHeads):
             depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.y1):int(reference_box.y2),int(reference_box.x1):int(reference_box.x2)]
             # ## end cpu region
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
-            pred_cubes = propose(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
-            # this new implementation is somewhat faster
-            #pred_cubes = propose2(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
-
+            pred_cubes = propose_old(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
+            
             # transfer pred_cubes to device
             pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
             pred_boxes = [cube_to_box(pred_cube, Ks_scaled_per_box) for pred_cube in pred_cubes]
@@ -562,7 +532,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
             score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
 
-            highest_score = np.argmax(combined_score)
+            highest_score = np.argmax(Iou3D)
             pred_cube = pred_cubes[highest_score]
             pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
             # append all cubes pred_cubes

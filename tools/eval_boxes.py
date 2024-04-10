@@ -1,9 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates
 from contextlib import ExitStack
-import itertools
 import logging
 import os
-import pickle
 from detectron2.data.detection_utils import convert_image_to_rgb
 from detectron2.evaluation.evaluator import inference_context
 from detectron2.utils.visualizer import Visualizer
@@ -15,17 +13,16 @@ import datetime
 import detectron2.utils.comm as comm
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
-from detectron2.data import DatasetCatalog, MetadataCatalog
+from detectron2.data import MetadataCatalog
 from detectron2.engine import (
     default_argument_parser, 
     default_setup, 
 )
 from detectron2.utils.logger import setup_logger
-import wandb
 import torch.nn as nn
 from rich.progress import track
 
-from ProposalNetwork.utils.utils import show_mask, show_mask2
+from ProposalNetwork.utils.utils import show_mask2
 from cubercnn.data.dataset_mapper import DatasetMapper3D
 from cubercnn.evaluation.omni3d_evaluation import instances_to_coco_json
 
@@ -225,7 +222,7 @@ def do_test(cfg, model, iteration='final', storage=None):
         iter_label=iteration,
         only_2d=only_2d,
     )
-
+ 
     segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
 
     for dataset_name in dataset_names_test:

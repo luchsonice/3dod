@@ -40,10 +40,6 @@ class Box:
         self.x2 = coords[2]
         self.y2 = coords[3]
 
-        # check that (x1, y1) is indeed the upper left corner
-        if self.x1 > self.x2 or self.y1 > self.y2:
-            raise ValueError('(x1, y1) must be the upper left corner. Did you make sure that the input is in the correct order? (upper left, bottom right)')
-
         self.width = self.x2 - self.x1
         self.height = self.y2 - self.y1
         self.area = self.width * self.height
