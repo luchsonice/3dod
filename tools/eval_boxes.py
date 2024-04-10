@@ -90,7 +90,6 @@ def inference_on_dataset(model, data_loader, segmentor):
         stack.enter_context(torch.no_grad())
 
         for idx, inputs in track(enumerate(data_loader), description="Inference", total=total):
-            if idx > 1: break
             outputs = model(inputs, segmentor, output_recall_scores=False)
             for input, output in zip(inputs, outputs):
 
@@ -121,7 +120,6 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
 
         outputs = []
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
-            if i >0: break # #TODO DEBUG:
             output = model(inputs, segmentor, output_recall_scores)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, stat_empty_boxes
             if output is not None:

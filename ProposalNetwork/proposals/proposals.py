@@ -39,7 +39,7 @@ def propose_old(reference_box, depth_image, priors, im_shape, number_of_proposal
 
     #print('x',x_range,gt_cube.center[0].numpy())
     #print('y',y_range,gt_cube.center[1].numpy())
-    print('z',z_range,gt_cube.center[2].numpy())
+    #print('z',z_range,gt_cube.center[2].numpy())
     list_of_cubes = []
     for i in range(number_of_proposals):
         # Transform center

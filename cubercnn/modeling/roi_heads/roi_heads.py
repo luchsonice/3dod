@@ -509,7 +509,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.y1):int(reference_box.y2),int(reference_box.x1):int(reference_box.x2)]
             # ## end cpu region
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
-            pred_cubes = propose_old(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
+            pred_cubes = propose(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
             
             # transfer pred_cubes to device
             pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
@@ -532,7 +532,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
             score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
 
-            highest_score = np.argmax(Iou3D)
+            highest_score = np.argmax(IoU3D)
             pred_cube = pred_cubes[highest_score]
             pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
             # append all cubes pred_cubes
