@@ -40,10 +40,6 @@ class Box:
         self.x2 = coords[2]
         self.y2 = coords[3]
 
-        # check that (x1, y1) is indeed the upper left corner
-        if self.x1 > self.x2 or self.y1 > self.y2:
-            raise ValueError('(x1, y1) must be the upper left corner. Did you make sure that the input is in the correct order? (upper left, bottom right)')
-
         self.width = self.x2 - self.x1
         self.height = self.y2 - self.y1
         self.center = torch.tensor([self.x1 + self.width/2, self.y1+self.height/2])
@@ -119,24 +115,12 @@ class Cube:
         self.dimensions = tensor[3:6]
         self.rotation = R
 
-        if self.dimensions[0] < 0:
-            raise ValueError('Width must be greater than 0.')
-        if self.dimensions[1] < 0:
-            raise ValueError('Height must be greater than 0.')
-        if self.dimensions[2] < 0:
-            raise ValueError('Length must be greater than 0.')
-        
-        if self.rotation.shape != (3,3):
-            raise ValueError('Rotation must be a 3x3 matrix.')
-
-        color = [c/255.0 for c in util.get_color()]
-        self.cube = util.mesh_cuboid(torch.cat((self.center,self.dimensions)), self.rotation, color=color)
-
     def get_cube(self):
-        return self.cube
+        color = [c/255.0 for c in util.get_color()]
+        return util.mesh_cuboid(torch.cat((self.center,self.dimensions)), self.rotation, color=color)
 
     def get_all_corners(self) -> torch.Tensor:
-        return self.cube.verts_list()[0]
+        return self.get_cube().verts_list()[0]
     
     def get_bube_corners(self,K) -> torch.Tensor:
         cube_corners = self.get_all_corners()
@@ -161,5 +145,4 @@ class Cube:
         self.center = self.center.to(device)
         self.dimensions = self.dimensions.to(device)
         self.rotation = self.rotation.to(device)
-        self.cube = self.cube.to(device)
         return self

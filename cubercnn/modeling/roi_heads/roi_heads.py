@@ -1,14 +1,11 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates
-from concurrent.futures import ProcessPoolExecutor
-import copy
+
+
 from dataclasses import dataclass
 import logging
-from detectron2.data.detection_utils import convert_image_to_rgb
-from detectron2.layers.nms import batched_nms
-from detectron2.utils.visualizer import Visualizer
-from matplotlib import pyplot as plt
+
 import numpy as np
-import cv2
+
 from typing import Dict, List, Tuple
 import torch
 from torch import nn
@@ -18,24 +15,22 @@ from pytorch3d.transforms.so3 import (
 )
 from detectron2.config import configurable
 from detectron2.structures import Instances, Boxes, pairwise_iou, pairwise_ioa
-from detectron2.layers import ShapeSpec, nonzero_tuple
+from detectron2.layers import ShapeSpec
 from detectron2.modeling.proposal_generator.proposal_utils import add_ground_truth_to_proposals
 from detectron2.utils.events import get_event_storage
 from detectron2.modeling.roi_heads import (
     StandardROIHeads, ROI_HEADS_REGISTRY, select_foreground_proposals,
 )
 from detectron2.modeling.poolers import ROIPooler
-from ProposalNetwork.proposals.proposals import propose, propose2
-from ProposalNetwork.scoring.scorefunction import score_angles, score_dimensions, score_iou, score_segmentation
-from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_space
+from ProposalNetwork.proposals.proposals import propose
+from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_segmentation
+from ProposalNetwork.utils.conversions import cube_to_box
 from ProposalNetwork.utils.spaces import Box, Cube
-from ProposalNetwork.utils.utils import Boxes_to_list_of_Box, iou_2d, iou_3d
+from ProposalNetwork.utils.utils import iou_3d
 from cubercnn.modeling.roi_heads.cube_head import build_cube_head
 from cubercnn.modeling.proposal_generator.rpn import subsample_labels
 from cubercnn.modeling.roi_heads.fast_rcnn import FastRCNNOutputs
-from cubercnn import util, vis
-from tqdm import tqdm
-from concurrent.futures import ProcessPoolExecutor
+from cubercnn import util
 
 logger = logging.getLogger(__name__)
 
@@ -497,7 +492,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         # Ks_scaled_per_box[:, -1, -1] = 1
         Ks_scaled_per_box = Ks[0]/im_scales_ratio[0]
         Ks_scaled_per_box[-1, -1] = 1
-        print('focal',Ks_scaled_per_box[0,0])
 
         if self.dims_priors_enabled:
             # gather prior dimensions

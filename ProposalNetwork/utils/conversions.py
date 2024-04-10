@@ -35,7 +35,7 @@ def pixel_to_normalised_space(pixel_coord, im_shape, norm_shape):
     im_shape: List of length N
     norm_shape: List of length N
     '''
-    new_coords = np.array(pixel_coord).astype(np.float32)
+    new_coords = pixel_coord.to(torch.float32)
 
     for i in range(len(pixel_coord)):
         old_dim = im_shape[i]
@@ -56,38 +56,4 @@ def normalised_space_to_pixel(coords, im_shape, norm_shape):
         new_coords[i] += 0.5 * new_dim
 
     return new_coords
-
-def pixel_to_normalised_space_torch(pixel_coord, im_shape):
-    '''
-    pixel_coord: Nx2
-    '''
-    if pixel_coord.shape == (2,):
-        pixel_coord = pixel_coord.reshape(1,2) # TODO should be for general N
-
-    new_height, new_width = 2,2
-    old_width = im_shape[0]
-    old_height = im_shape[1]
-    new_coords = pixel_coord.to(torch.float32)
-    new_coords[:, 0] -= 0.5 * old_width
-    new_coords[:, 1] -= 0.5 * old_height
-    new_coords[:, 0] *= new_width / old_width
-    new_coords[:, 1] *= new_height / old_height
-    
-    return new_coords
-
-def normalised_space_to_pixel(coords,im_shape):
-    coords = np.array(coords)
-    if np.shape(coords) == (2,):
-        coords = coords.reshape(1,2) # TODO should be for general N
-
-    new_height, new_width = im_shape[1],im_shape[0]
-    old_width = 2
-    old_height = 2
-    new_coords = coords.astype(np.float32)
-    new_coords[:, 0] *= new_width / old_width
-    new_coords[:, 1] *= new_height / old_height
-    new_coords[:, 0] += 0.5 * new_width
-    new_coords[:, 1] += 0.5 * new_height
-
-    return [[int(entry) for entry in sublist] for sublist in new_coords][0]
     
