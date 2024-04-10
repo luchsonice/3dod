@@ -1,4 +1,5 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates
+from concurrent.futures import ProcessPoolExecutor
 import copy
 from dataclasses import dataclass
 import logging
@@ -34,6 +35,7 @@ from cubercnn.modeling.proposal_generator.rpn import subsample_labels
 from cubercnn.modeling.roi_heads.fast_rcnn import FastRCNNOutputs
 from cubercnn import util, vis
 from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -277,11 +279,11 @@ class ROIHeads_Boxer(StandardROIHeads):
             targets = [target[target.gt_classes >= 0] for target in targets]
             if output_recall_scores:
                 # sometimes there are no valid targets in the image.
-                if len(targets) == 0:
-                    return None
                 pred_instances = None
                 masks = []
                 for img, instance in zip(images_raw.tensor, targets): # over all images in batch
+                    if len(instance) == 0:
+                        return None
                     mask_per_image = torch.zeros((len(instance), 1, images_raw.tensor.shape[2], images_raw.tensor.shape[3]))
                     img = np.array(img.permute(1, 2, 0).cpu())
 
@@ -316,7 +318,10 @@ class ROIHeads_Boxer(StandardROIHeads):
             
             #filter out some invalid targets, TODO: this logic is already somewhere else, but I dont know where
             if output_recall_scores:
-                pred_instances = self._forward_cube_as_mesh(images, images_raw, masks, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets)
+                pred_instances = self._forward_cube_as_mesh, images, images_raw, masks, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets)
+                # with ProcessPoolExecutor() as executor:
+                #     futures = [executor.submit(self._forward_cube_as_mesh, images, images_raw, mask, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets) for mask in masks]
+                #     pred_instances = [future.result() for future in futures]
             else:
                 pred_instances =         self._forward_cube(images, images_raw, masks, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets)
             return pred_instances
