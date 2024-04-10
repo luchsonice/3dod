@@ -318,7 +318,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             
             #filter out some invalid targets, TODO: this logic is already somewhere else, but I dont know where
             if output_recall_scores:
-                pred_instances = self._forward_cube_as_mesh, images, images_raw, masks, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets)
+                pred_instances = self._forward_cube_as_mesh(images, images_raw, masks, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets)
                 # with ProcessPoolExecutor() as executor:
                 #     futures = [executor.submit(self._forward_cube_as_mesh, images, images_raw, mask, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets) for mask in masks]
                 #     pred_instances = [future.result() for future in futures]
