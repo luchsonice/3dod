@@ -35,6 +35,9 @@ def pixel_to_normalised_space(pixel_coord, im_shape, norm_shape):
     im_shape: List of length N
     norm_shape: List of length N
     '''
+    if not torch.is_tensor(pixel_coord):
+        pixel_coord = torch.tensor(pixel_coord)
+
     new_coords = pixel_coord.to(torch.float32)
 
     for i in range(len(pixel_coord)):
