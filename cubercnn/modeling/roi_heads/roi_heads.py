@@ -24,7 +24,7 @@ from detectron2.modeling.roi_heads import (
     StandardROIHeads, ROI_HEADS_REGISTRY, select_foreground_proposals,
 )
 from detectron2.modeling.poolers import ROIPooler
-from ProposalNetwork.proposals.proposals import propose
+from ProposalNetwork.proposals.proposals import propose, propose2
 from ProposalNetwork.scoring.scorefunction import score_angles, score_dimensions, score_iou, score_segmentation
 from ProposalNetwork.utils.conversions import cube_to_box, pixel_to_normalised_space
 from ProposalNetwork.utils.spaces import Box, Cube
@@ -276,6 +276,9 @@ class ROIHeads_Boxer(StandardROIHeads):
             # NOTE: at the the moment the this assumes a batch size of 1, since the test loader has it hardcoded
             targets = [target[target.gt_classes >= 0] for target in targets]
             if output_recall_scores:
+                # sometimes there are no valid targets in the image.
+                if len(targets) == 0:
+                    return None
                 pred_instances = None
                 masks = []
                 for img, instance in zip(images_raw.tensor, targets): # over all images in batch
@@ -528,8 +531,9 @@ class ROIHeads_Boxer(StandardROIHeads):
             depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.y1):int(reference_box.y2),int(reference_box.x1):int(reference_box.x2)]
             # ## end cpu region
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
-            pred_cubes = propose(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
-
+            # pred_cubes = propose(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
+            # this new implementation is somewhat faster
+            pred_cubes = propose2(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
 
             # transfer pred_cubes to device
             pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
@@ -555,6 +559,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             highest_score = np.argmax(combined_score)
             pred_cube = pred_cubes[highest_score]
             pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
+            # append all cubes pred_cubes
             gt_cube_meshes.append(gt_cube.get_cube().__getitem__(0).detach())
         # ################
         

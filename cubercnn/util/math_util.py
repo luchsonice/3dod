@@ -104,6 +104,33 @@ def euler2mat(euler):
 
     return R
 
+def euler2mat_torch(euler):
+    R_x = torch.stack([
+        torch.tensor([[1, 0, 0],
+                        [0, torch.cos(angle), -torch.sin(angle)],
+                        [0, torch.sin(angle), torch.cos(angle)]])
+        for angle in euler[:, 0]
+    ])
+
+    R_y = torch.stack([
+        torch.tensor([[torch.cos(angle), 0, torch.sin(angle)],
+                        [0, 1, 0],
+                        [-torch.sin(angle), 0, torch.cos(angle)]])
+        for angle in euler[:, 1]
+    ])
+
+    R_z = torch.stack([
+        torch.tensor([[torch.cos(angle), -torch.sin(angle), 0],
+                        [torch.sin(angle), torch.cos(angle), 0],
+                        [0, 0, 1]])
+        for angle in euler[:, 2]
+    ])
+
+    R = torch.matmul(R_z, torch.matmul(R_y, R_x))
+    # (n x 3 x 3 out tensor)
+    return R
+
+
 def to_float_tensor(input):
 
     data_type = type(input)
