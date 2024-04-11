@@ -71,17 +71,17 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1,
     list_of_cubes : List of Cube
     stats         : tensor N x number_of_proposals
     '''
-    # Removing the outer 25% on each side of range for center point
+    # Removing the outer % on each side of range for center point
     x_stretch = 1.2
     y_stretch = x_stretch * im_shape[1]/im_shape[0]
     d = 4
-    x_range_px = torch.tensor([reference_box.x1+reference_box.width/d,reference_box.x2-reference_box.width/d],device=depth_image.device)
+    x_range_px = torch.tensor([reference_box.x1+reference_box.width/(d+1),reference_box.x2-reference_box.width/d],device=depth_image.device)
     y_range_px = torch.tensor([reference_box.y1+reference_box.height/d,reference_box.y2-reference_box.height/d],device=depth_image.device)
 
     # Depth grid
     flattened_depth_image = depth_image.flatten()
     percentile_lower = torch.kthvalue(flattened_depth_image, int(0.1 * flattened_depth_image.numel())).values.item()
-    percentile_higher = torch.kthvalue(flattened_depth_image, int(0.8 * flattened_depth_image.numel())).values.item()
+    percentile_higher = torch.kthvalue(flattened_depth_image, int(0.9 * flattened_depth_image.numel())).values.item()
     z_range = [percentile_lower,percentile_higher]
     z_grid = torch.linspace(z_range[0],z_range[1],number_of_proposals, device=depth_image.device)
 
@@ -105,7 +105,7 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1,
     # Predict cubes
     pred_xyz, pred_whl, pred_pose = make_cubes_parallel(x_range,y_range,z_grid,w_prior,h_prior,l_prior, number_of_proposals)
     for i in range(number_of_proposals):
-        pred_cube = Cube(torch.cat((pred_xyz[i], pred_whl[i]), dim=0),pred_pose[i])
+        pred_cube = Cube(torch.cat((pred_xyz[i], pred_whl[i]), dim=0),pred_pose)
         list_of_cubes.append(pred_cube)
 
     # Statistics
@@ -113,9 +113,9 @@ def propose(reference_box, depth_image, priors, im_shape, number_of_proposals=1,
     stat_x = gt_in_norm_range(x_range,gt_cube.center[0])
     stat_y = gt_in_norm_range(y_range,gt_cube.center[1])
     stat_z = gt_in_norm_range(z_range,gt_cube.center[2])
-    stat_w = gt_in_norm_range([torch.max(w_prior[0]-stds*w_prior[1],torch.tensor(0.1)),w_prior[0]+stds*w_prior[1]],gt_cube.dimensions[0])
-    stat_h = gt_in_norm_range([torch.max(h_prior[0]-stds*h_prior[1],torch.tensor(0.1)),h_prior[0]+stds*h_prior[1]],gt_cube.dimensions[1])
-    stat_l = gt_in_norm_range([torch.max(l_prior[0]-stds*l_prior[1],torch.tensor(0.05)),l_prior[0]+stds*l_prior[1]],gt_cube.dimensions[2])
+    stat_w = gt_in_norm_range([torch.max(w_prior[0]-stds*w_prior[1],torch.tensor(0.1)),torch.min(w_prior[0]+stds*w_prior[1],w_prior[0]+1*w_prior[1])],gt_cube.dimensions[0])
+    stat_h = gt_in_norm_range([torch.max(h_prior[0]-stds*h_prior[1],torch.tensor(0.1)),torch.min(h_prior[0]+stds*h_prior[1],h_prior[0]+1*h_prior[1])],gt_cube.dimensions[1])
+    stat_l = gt_in_norm_range([torch.max(l_prior[0]-stds*l_prior[1],torch.tensor(0.05)),torch.min(l_prior[0]+stds*l_prior[1],l_prior[0]+0.4*l_prior[1])],gt_cube.dimensions[2])
     stat_whl = gt_in_norm_range([(w_prior[0]-stds*w_prior[1]) * (h_prior[0]-stds*h_prior[1]) * (l_prior[0]-stds*l_prior[1]),
                                  (w_prior[0]+stds*w_prior[1]) * (h_prior[0]+stds*h_prior[1]) * (l_prior[0]+stds*l_prior[1])],
                                  torch.prod(gt_cube.dimensions))

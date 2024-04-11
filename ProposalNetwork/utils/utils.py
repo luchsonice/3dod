@@ -46,13 +46,17 @@ def sample_normal_greater_than(mean, std, threshold):
         sample = np.random.normal(mean, std)
     return sample
 
-def sample_normal_greater_than_para(mean, std, threshold, count):
+def sample_normal_greater_than_para(mean, std, threshold_low, threshold_high, count):
     device = mean.device
-    mean = mean.item()
-    std = std.item()
+    # Generate samples from a normal distribution
     samples = torch.normal(mean, std, size=(count,))
-    while torch.any(samples < threshold):
-        samples[samples < threshold] = torch.normal(mean, std, size=((samples < threshold).sum(),))
+
+    # Ensure that all samples are greater than threshold_low and less than threshold_high
+    while torch.any((samples < threshold_low) | (samples > threshold_high)):
+        invalid_mask = (samples < threshold_low) | (samples > threshold_high)
+        # Replace invalid samples with new samples drawn from the normal distribution
+        samples[invalid_mask] = torch.normal(mean, std, size=(invalid_mask.sum(),))
+
     return samples.to(device)
 
 def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
@@ -92,14 +96,15 @@ def make_cubes_parallel(x_range, y_range, z, w_prior, h_prior, l_prior, number_o
     xyz = torch.stack([x, y, z], 1)
 
     # whl
-    w = sample_normal_greater_than_para(w_prior[0], w_prior[1], 0.1, number_of_proposals)
-    h = sample_normal_greater_than_para(h_prior[0], h_prior[1], 0.1, number_of_proposals)
-    l = sample_normal_greater_than_para(l_prior[0], l_prior[1], 0.05, number_of_proposals)
+    w = sample_normal_greater_than_para(w_prior[0], w_prior[1], torch.tensor(0.1), w_prior[0] + 1 * w_prior[1], number_of_proposals)
+    h = sample_normal_greater_than_para(h_prior[0], h_prior[1], torch.tensor(0.1), h_prior[0] + 1 * h_prior[1], number_of_proposals)
+    l = sample_normal_greater_than_para(l_prior[0], l_prior[1], torch.tensor(0.05),l_prior[0] + 0.4 * l_prior[1], number_of_proposals)
     whl = torch.stack([w, h, l], 1)
 
     # R
-    rotation_matrix = randn_orthobasis_torch(number_of_proposals) 
-    
+    #rotation_matrix = randn_orthobasis_torch(number_of_proposals) 
+    rotation_matrix = torch.tensor([[0.5,0,0.8660254],[0,1,0],[-0.8660254,0,0.5]]) 
+
     return xyz, whl, rotation_matrix
 
 def randn_orthobasis_torch(num_samples=1):
@@ -132,10 +137,6 @@ def gt_in_norm_range(range,gt):
     res = tmp / (range[1] - range[0])
     
     return res
-
-
-
-
 
 
 ##### Scoring
