@@ -127,6 +127,11 @@ def is_box_included_in_other_box(reference_box, proposed_box):
 
     return (reference_min_x <= proposed_min_x <= proposed_max_x <= reference_max_x and reference_min_y <= proposed_min_y <= proposed_max_y <= reference_max_y)
 
+def gt_in_norm_range(range,gt):
+    tmp = gt-range[0]
+    res = tmp / (range[1] - range[0])
+    
+    return res
 
 
 

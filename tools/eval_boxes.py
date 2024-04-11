@@ -121,7 +121,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         outputs = []
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
             output = model(inputs, segmentor, output_recall_scores)
-            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes
+            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes, stats
             if output is not None:
                 outputs.append(output)
 
@@ -145,10 +145,10 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
                 
         plt.figure(figsize=(8,5))
         plt.plot(score_combined, linestyle='-',c='black', label='combined') 
-        plt.plot(score_dim, linestyle='-',c='green',label='dim') 
+        plt.plot(score_dim, linestyle='-',c='teal',label='dim') 
         plt.plot(score_seg, linestyle='-',c='purple',label='segment')
         plt.plot(Iou2D, linestyle='-',c='orange',label='2d IoU') 
-        plt.plot(score_random, linestyle='-',c='teal',label='random') 
+        plt.plot(score_random, linestyle='-',c='grey',label='random') 
         plt.grid(True)
         plt.xscale('log')
         plt.xlabel('Number of Proposals')
@@ -159,7 +159,21 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         print('saved to ', f_name)
 
-
+        # Statistics
+        stats = torch.cat([x[8] for x in outputs],dim=0)
+        num_bins = 40
+        titles = ['x','y','z','w','h','l','rx','ry','rz']
+        plt.figure(figsize=(15, 15))
+        for i,title in enumerate(titles):
+            plt.subplot(3, 3, 1+i)
+            plt.hist(stats[:,i].numpy(), bins=num_bins, color='darkslategrey', density=True)
+            plt.axvline(x=0, color='red')
+            plt.axvline(x=1, color='red')
+            plt.title(title)
+        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats.png')
+        plt.savefig(f_name, dpi=300, bbox_inches='tight')
+        print('saved to ', f_name)
+        
         # ## for vis
         d_iter = iter(data_loader)
         for i , _ in enumerate(outputs):

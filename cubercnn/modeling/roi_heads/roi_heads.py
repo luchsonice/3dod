@@ -491,13 +491,13 @@ class ROIHeads_Boxer(StandardROIHeads):
         gt_cube_meshes = []
         im_shape = images_raw.tensor.shape[2:][::-1] # im shape should be (x,y)
         n_gt = len(gt_boxes3D)
-        print(n_gt)
         sum_percentage_empty_boxes = 0
         score_IoU2D    = np.zeros((n_gt, number_of_proposals))
         score_seg      = np.zeros((n_gt, number_of_proposals))
         score_dim      = np.zeros((n_gt, number_of_proposals))
         score_combined = np.zeros((n_gt, number_of_proposals))
         score_random   = np.zeros((n_gt, number_of_proposals))
+        stats_image    = torch.zeros(n_gt,9)
         # it is important that the zip is exhaustedd at the shortest length
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
         for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
@@ -510,14 +510,13 @@ class ROIHeads_Boxer(StandardROIHeads):
             depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.y1):int(reference_box.y2),int(reference_box.x1):int(reference_box.x2)]
             # ## end cpu region
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
-            pred_cubes = propose(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
+            pred_cubes, stats_instance = propose(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
             
             # transfer pred_cubes to device
             pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
             pred_boxes = [cube_to_box(pred_cube, Ks_scaled_per_box) for pred_cube in pred_cubes]
             # iou
             IoU3D = iou_3d(gt_cube, pred_cubes).cpu().numpy()
-            sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
             pred_cubes = [pred_cube.to_device('cpu') for pred_cube in pred_cubes]
             bube_corners = [pred_cubes[j].get_bube_corners(Ks_scaled_per_box.cpu()) for j in range(number_of_proposals)]
             dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
@@ -540,6 +539,11 @@ class ROIHeads_Boxer(StandardROIHeads):
             pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
             # append all cubes pred_cubes
             gt_cube_meshes.append(gt_cube.get_cube().__getitem__(0).detach())
+
+            # stats
+            sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
+            stats_image[i] = stats_instance
+
         # ################
         
         score_IoU2D    = np.mean(score_IoU2D, axis=0)
@@ -556,7 +560,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             return pred_cube_meshes, None
         else:
             if output_recall_scores:
-                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes
+                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes, stats_image
             return pred_cube_meshes
         
     def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, features, instances, Ks, im_current_dims, im_scales_ratio, output_recall_scores, targets):
