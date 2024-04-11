@@ -339,7 +339,7 @@ class BoxNet(RCNN3D):
         # except don't normalise the input for the segmentation method
         images = self.preprocess_image(batched_inputs)
         images_raw = self.preprocess_image(batched_inputs, img_type='image', normalise=False, NoOp=True)
-        depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False)
+        depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False, NoOp=True)
 
         # scaling factor for the sample relative to its original scale
         # e.g., how much has the image been upsampled by? or downsampled?
