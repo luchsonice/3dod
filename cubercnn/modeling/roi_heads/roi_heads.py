@@ -497,6 +497,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_seg      = np.zeros((n_gt, number_of_proposals))
         score_dim      = np.zeros((n_gt, number_of_proposals))
         score_combined = np.zeros((n_gt, number_of_proposals))
+        score_random   = np.zeros((n_gt, number_of_proposals))
         # it is important that the zip is exhaustedd at the shortest length
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
         for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
@@ -526,11 +527,13 @@ class ROIHeads_Boxer(StandardROIHeads):
             segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), bube_corners)
             dim_scores = score_dimensions(priors, dimensions)
             combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
+            random_score = np.random.rand(number_of_proposals)
             
             score_IoU2D[i,:] = accumulate_scores(IoU2D_scores, IoU3D)
             score_seg[i,:] = accumulate_scores(segment_scores, IoU3D)
             score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
             score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
+            score_random[i,:] = accumulate_scores(random_score, IoU3D)
 
             highest_score = np.argmax(IoU3D)
             pred_cube = pred_cubes[highest_score]
@@ -543,6 +546,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_seg      = np.mean(score_seg, axis=0)
         score_dim      = np.mean(score_dim, axis=0)
         score_combined = np.mean(score_combined, axis=0)
+        score_random   = np.mean(score_random, axis=0)
 
         stat_empty_boxes = sum_percentage_empty_boxes/n_gt
 
@@ -552,7 +556,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             return pred_cube_meshes, None
         else:
             if output_recall_scores:
-                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, stat_empty_boxes
+                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes
             return pred_cube_meshes
         
     def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, features, instances, Ks, im_current_dims, im_scales_ratio, output_recall_scores, targets):

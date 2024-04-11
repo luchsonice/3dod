@@ -121,7 +121,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         outputs = []
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
             output = model(inputs, segmentor, output_recall_scores)
-            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, stat_empty_boxes
+            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes
             if output is not None:
                 outputs.append(output)
 
@@ -131,7 +131,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         score_seg       = np.array([x[3] for x in outputs])
         score_dim       = np.array([x[4] for x in outputs])
         score_combined  = np.array([x[5] for x in outputs])
-        stat_empty_boxes  = np.array([x[6] for x in outputs])
+        score_random    = np.array([x[6] for x in outputs])
+        stat_empty_boxes= np.array([x[7] for x in outputs])
         print('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
 
         Iou3D = Iou3D.mean(axis=0)
@@ -139,6 +140,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         score_seg = score_seg.mean(axis=0)
         score_dim = score_dim.mean(axis=0)
         score_combined = score_combined.mean(axis=0)
+        score_random = score_random.mean(axis=0)
         total_num_instances = np.sum([x[0].gt_boxes3D.shape[0] for x in outputs])
                 
         plt.figure(figsize=(8,5))
@@ -146,6 +148,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.plot(score_dim, linestyle='-',c='green',label='dim') 
         plt.plot(score_seg, linestyle='-',c='purple',label='segment')
         plt.plot(Iou2D, linestyle='-',c='orange',label='2d IoU') 
+        plt.plot(score_random, linestyle='-',c='teal',label='random') 
         plt.grid(True)
         plt.xscale('log')
         plt.xlabel('Number of Proposals')
