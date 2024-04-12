@@ -96,9 +96,9 @@ def make_cubes_parallel(x_range, y_range, z, w_prior, h_prior, l_prior, number_o
     xyz = torch.stack([x, y, z], 1)
 
     # whl
-    w = sample_normal_greater_than_para(w_prior[0], w_prior[1], torch.tensor(0.1), w_prior[0] + 1 * w_prior[1], number_of_proposals)
-    h = sample_normal_greater_than_para(h_prior[0], h_prior[1], torch.tensor(0.1), h_prior[0] + 1 * h_prior[1], number_of_proposals)
-    l = sample_normal_greater_than_para(l_prior[0], l_prior[1], torch.tensor(0.05),l_prior[0] + 0.4 * l_prior[1], number_of_proposals)
+    w = sample_normal_greater_than_para(w_prior[0], w_prior[1]/2, torch.tensor(0.1), w_prior[0] + 1 * w_prior[1], number_of_proposals) # NOTE Halving std right now. Improves but sketchy
+    h = sample_normal_greater_than_para(h_prior[0], h_prior[1]/2, torch.tensor(0.1), h_prior[0] + 1 * h_prior[1], number_of_proposals)
+    l = sample_normal_greater_than_para(l_prior[0], l_prior[1]/2, torch.tensor(0.05),l_prior[0] + 0.4 * l_prior[1], number_of_proposals)
     whl = torch.stack([w, h, l], 1)
 
     # R
