@@ -22,8 +22,8 @@ FX = 256 * 0.6
 NYU_DATA = False
 FINAL_HEIGHT = 256
 FINAL_WIDTH = 256
-INPUT_DIR = './my_test/input'
-OUTPUT_DIR = './my_test/output'
+INPUT_DIR = 'depth/metric_depth'
+OUTPUT_DIR = 'depth/metric_depth'
 DATASET = 'nyu' # Lets not pick a fight with the model's dataloader
 
 def process_images(model):
@@ -59,6 +59,7 @@ def process_images(model):
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(points)
             pcd.colors = o3d.utility.Vector3dVector(colors)
+            o3d.visualization.draw_geometries([pcd])
             o3d.io.write_point_cloud(os.path.join(OUTPUT_DIR, os.path.splitext(os.path.basename(image_path))[0] + ".ply"), pcd)
         except Exception as e:
             print(f"Error processing {image_path}: {e}")
@@ -73,7 +74,7 @@ def main(model_name, pretrained_resource):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-m", "--model", type=str, default='zoedepth', help="Name of the model to test")
-    parser.add_argument("-p", "--pretrained_resource", type=str, default='local::./checkpoints/depth_anything_metric_depth_indoor.pt', help="Pretrained resource to use for fetching weights.")
+    parser.add_argument("-p", "--pretrained_resource", type=str, default='local::depth/checkpoints/depth_anything_metric_depth_indoor.pt', help="Pretrained resource to use for fetching weights.")
 
     args = parser.parse_args()
     main(args.model, args.pretrained_resource)
