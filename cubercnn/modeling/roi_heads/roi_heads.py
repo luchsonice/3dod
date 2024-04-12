@@ -22,7 +22,7 @@ from detectron2.modeling.roi_heads import (
     StandardROIHeads, ROI_HEADS_REGISTRY, select_foreground_proposals,
 )
 from detectron2.modeling.poolers import ROIPooler
-from ProposalNetwork.proposals.proposals import propose, propose_old
+from ProposalNetwork.proposals.proposals import propose
 from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_segmentation
 from ProposalNetwork.utils.conversions import cube_to_box
 from ProposalNetwork.utils.spaces import Box, Cube

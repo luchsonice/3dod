@@ -40,12 +40,6 @@ def compute_rotation_matrix_from_ortho6d(poses):
 
     return matrix
 
-def sample_normal_greater_than(mean, std, threshold):
-    sample = np.random.normal(mean, std)
-    while sample < threshold:
-        sample = np.random.normal(mean, std)
-    return sample
-
 def sample_normal_greater_than_para(mean, std, threshold_low, threshold_high, count):
     device = mean.device
     # Generate samples from a normal distribution
@@ -58,31 +52,6 @@ def sample_normal_greater_than_para(mean, std, threshold_low, threshold_high, co
         samples[invalid_mask] = torch.normal(mean, std, size=(invalid_mask.sum(),))
 
     return samples.to(device)
-
-def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
-    '''
-    need xyz, whl, and pose (R)
-    '''
-    # xyz
-    x = (x_range[0]-x_range[1]) * torch.rand(1) + x_range[1]
-    y = (y_range[0]-y_range[1]) * torch.rand(1) + y_range[1]
-    xyz = torch.tensor([x, y, z])
-
-    # whl
-    w = sample_normal_greater_than(w_prior[0],w_prior[1],0.1)
-    h = sample_normal_greater_than(h_prior[0],h_prior[1],0.1)
-    l = sample_normal_greater_than(l_prior[0],l_prior[1],0.05)
-    whl = torch.tensor([w, h, l])
-
-    # R
-    #rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6)) # Use this when learnable
-    rx = np.random.rand(1) * 2 * np.pi - np.pi
-    ry = np.random.rand(1) * 2 * np.pi - np.pi
-    rz = np.random.rand(1) * 2 * np.pi - np.pi
-    rotation_matrix = torch.from_numpy(util.euler2mat([rx,ry,rz]))
-    
-    return xyz, whl, rotation_matrix
-
 
 def randn_orthobasis_torch(num_samples=1):
     z = torch.randn(num_samples, 3, 3)
