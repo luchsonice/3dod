@@ -1,8 +1,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-
 from cubercnn import util
+
+# From this awesome guy
+# https://math.stackexchange.com/a/4832876
+
 
 # https://math.stackexchange.com/questions/442418/random-generation-of-rotation-matrices/1602779#1602779
 # http://home.lu.lv/~sd20008/papers/essays/Random%20unitary%20[paper].pdf
@@ -111,10 +114,11 @@ def plot_scatter(pointses, filename, kwargses):
     ax = fig.add_subplot(projection="3d", computed_zorder=False)
     for points, kwargs in zip(pointses, kwargses):
         ax.scatter(*np.asarray(points).T, marker=".", **kwargs)
-    ax.view_init(elev=45, azim=-45, roll=0)
+    ax.view_init(elev=15, azim=41, roll=0)
     ax.set(xlim=(-1, 1), ylim=(-1, 1), zlim=(-1, 1))
     ax.set_aspect("equal", adjustable="box")
-    fig.savefig('ProposalNetwork/output/random_rotation/'+filename, dpi=300, bbox_inches="tight", pad_inches=0)
+    ax.set_title(filename)
+    fig.savefig('ProposalNetwork/output/random_rotation/rot3x3_'+filename+'.png', dpi=300, bbox_inches="tight", pad_inches=0)
     # plt.show()
     # exit()
     plt.close(fig)
@@ -143,13 +147,13 @@ for name, func in METHODS.items():
     t1 = time.perf_counter()
     rot = func(num_samples=5000 // (2 if "_half" in name else 1))
     t2 = time.perf_counter()
-    print(f'{name}\t\t Time: {t2-t1:.4f}')
+    print(f'{name}\t\t\t Time: {t2-t1:.4f}')
     if 'torch' in name:
         y = rot @ torch.from_numpy(x)
     else:
         y = rot @ x
     plot_scatter(
         [y, [x]],
-        f"rot3x3_{name}.png",
+        f"{name}",
         [{"s": 1, "alpha": 0.5}, {"s": 64, "color": "#ff77cc"}],
     )
