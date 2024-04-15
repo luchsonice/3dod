@@ -50,7 +50,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
 
     # Finish z
     z = z_tmp+l/2
-    z = sample_normal_greater_than_para(torch.median(z), torch.std(z), torch.tensor(0),torch.tensor(7), number_of_proposals)
+    z = sample_normal_greater_than_para(torch.median(z), torch.std(z), torch.tensor(0),torch.tensor(100), number_of_proposals)
     xyz = torch.stack([x, y, z], 1)
 
     # Pose
