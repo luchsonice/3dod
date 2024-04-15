@@ -18,8 +18,8 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     '''
     ####### Center
     # Removing the outer % on each side of range for center point
-    m = 5
-    x_range_px = torch.tensor([reference_box.x1+reference_box.width/(m+1),reference_box.x2-reference_box.width/m],device=depth_image.device)
+    m = 6
+    x_range_px = torch.tensor([reference_box.x1+reference_box.width/m,reference_box.x2-reference_box.width/m],device=depth_image.device)
     y_range_px = torch.tensor([reference_box.y1+reference_box.height/m,reference_box.y2-reference_box.height/m],device=depth_image.device)
     # Find depths
     x_grid_px = torch.linspace(x_range_px[0],x_range_px[1],number_of_proposals, device=depth_image.device).long()
@@ -28,14 +28,14 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     y_indices = y_grid_px.round()
     d = depth_image[y_indices, x_indices]
     # Calculate x and y
-    opposite_side_x = x_grid_px-K[0,2].repeat(number_of_proposals) #abs()?
-    opposite_side_y = y_grid_px-K[1,2].repeat(number_of_proposals) #abs()?
+    opposite_side_x = x_grid_px-K[0,2].repeat(number_of_proposals)
+    opposite_side_y = y_grid_px-K[1,2].repeat(number_of_proposals)
     adjacent_side = K[0,0].repeat(number_of_proposals)
     angle_x = torch.atan2(opposite_side_x,adjacent_side)
     angle_y = torch.atan2(opposite_side_y,adjacent_side)
     x = d * torch.sin(angle_x)
     y = d * torch.sin(angle_y)
-    # Calculatre z
+    # Calculate z
     dx = torch.sqrt(d**2 - y**2)
     z_tmp = torch.sqrt(dx**2 - x**2)
     
