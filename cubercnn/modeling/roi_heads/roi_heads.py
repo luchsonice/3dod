@@ -1,5 +1,6 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates
-
+import pyransac3d as pyrsc
+import open3d as o3d
+from ProposalNetwork.utils import utils
 
 from dataclasses import dataclass
 import logging
@@ -424,66 +425,59 @@ class ROIHeads_Boxer(StandardROIHeads):
             mask_per_image: List
             K: np.array
 
-        # features = [features[f] for f in self.in_features]
-        
-        if output_recall_scores:
-            # pred_boxes = [x.pred_boxes for x in instances]
-            # proposal_boxes = pred_boxes
-            # box_classes = torch.cat([x.pred_classes for x in instances])
-            gt_box_classes = (torch.cat([p.gt_classes for p in targets], dim=0) if len(targets) else torch.empty(0))
-            gt_boxes3D = torch.cat([p.gt_boxes3D for p in targets], dim=0,)
-            gt_boxes = torch.cat([p.gt_boxes for p in targets], dim=0,) if len(targets) > 1 else targets[0].gt_boxes
-            gt_poses = torch.cat([p.gt_poses for p in targets], dim=0,)
-        # eval on all instances
-        else:
-            proposals = instances
-            pred_boxes = [x.pred_boxes for x in instances]
-            proposal_boxes = pred_boxes
-            box_classes = torch.cat([x.pred_classes for x in instances])
+        gt_box_classes = (torch.cat([p.gt_classes for p in targets], dim=0) if len(targets) else torch.empty(0))
+        gt_boxes3D = torch.cat([p.gt_boxes3D for p in targets], dim=0,)
+        gt_boxes = torch.cat([p.gt_boxes for p in targets], dim=0,) if len(targets) > 1 else targets[0].gt_boxes
+        gt_poses = torch.cat([p.gt_poses for p in targets], dim=0,)
 
-        # the boxes don't actually get scaled currently for some reason
-        # proposal_boxes_scaled = self.scale_proposals(proposal_boxes)
-        # gt_boxes_scaled = self.scale_proposals([targets[0].gt_boxes])
-
-        # forward features
-        # we might want to look into how to use the cube_features in the future.
-        # cube_features = self.cube_pooler(features, proposal_boxes_scaled).flatten(1)
-
-        # n = cube_features.shape[0]
         n = len(gt_boxes)
         
         # nothing to do..
         if n == 0:
             return instances if not self.training else (instances, {})
         
-        num_boxes_per_image = [len(i) for i in gt_boxes]
-
-        # num_boxes_per_image = [len(i) for i in proposal_boxes]
-
-        # This way of doing the scaling manipulates an entire batch at once.
-        # scale the intrinsics according to the ratio the image has been scaled. 
-        # this means the projections at the current scale are in sync.
-        # Ks_scaled_per_box = torch.cat([
-        #     (Ks[i]/im_scales_ratio[i]).unsqueeze(0).repeat([num, 1, 1]) 
-        #     for (i, num) in enumerate(num_boxes_per_image)
-        # ]).to(gt_boxes3D.device)
-        # Ks_scaled_per_box[:, -1, -1] = 1
         Ks_scaled_per_box = Ks[0]/im_scales_ratio[0]
         Ks_scaled_per_box[-1, -1] = 1
 
         if self.dims_priors_enabled:
             # gather prior dimensions
-            # prior_dims = self.priors_dims_per_cat.detach().repeat([n, 1, 1, 1])[fg_inds, box_classes]
             prior_dims = self.priors_dims_per_cat.detach()
             prior_dims = prior_dims[:, gt_box_classes, :, :].squeeze(0)
             prior_dims_mean = prior_dims[:, 0, :]
             prior_dims_std = prior_dims[:, 1, :]
         
-        # forward predictions
-        # implement all actual 3D cube prediction in the CubeHead_vanilla class
-        # cube_2d_deltas, cube_z, cube_dims, cube_pose, cube_uncert = self.cube_head(cube_features)
+        # ### point cloud
+        use_nth = 5
+        dp_map = depth_maps.tensor.cpu().squeeze()[::use_nth,::use_nth]
+        focal_length_x, focal_length_y = dp_map.shape[1] / 2, dp_map.shape[0] / 2
+        FINAL_WIDTH, FINAL_HEIGHT = dp_map.shape[1], dp_map.shape[0]
+        x, y = np.meshgrid(np.arange(FINAL_WIDTH), np.arange(FINAL_HEIGHT))
+        x = (x - FINAL_WIDTH / 2) / focal_length_x
+        y = (y - FINAL_HEIGHT / 2) / focal_length_y
+        z = np.array(dp_map)
+        # normalise the points
+        points = np.stack((np.multiply(x, z)*-1, np.multiply(y, z)*-1, z), axis=-1).reshape(-1, 3)
+        # points = np.stack((x, y, z), axis=-1).reshape(-1, 3)
+        colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth]).reshape(-1, 3) / 255.0
+        plane = pyrsc.Plane()
+        # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
+        best_eq, best_inliers = plane.fit(points, thresh=0.1, maxIteration=1000)
+        # denormalize the points back
+        # points = np.stack((np.divide(points[:,0], z.flatten()), np.divide(points[:,1], z.flatten()), points[:,2]), axis=-1)
 
-        # ###### this functionality should prob be implemented in the self.cube_head.forward() ######
+
+        normal_vec = np.array(best_eq[:-1])
+        y_up = np.array([0,1,0])
+        z_up = np.array([0,0,1])
+        # make sure normal vector is consistent with y-up
+        if normal_vec @ y_up < 0:
+            normal_vec *= -1
+        if normal_vec @ z_up > normal_vec @ y_up:
+            # this means the plane has been found as the back wall
+            # to rectify this we can turn the vector 90 degrees around the local x-axis
+            # note that this assumes that the walls are perpendicular to the floor
+            normal_vec = np.array([normal_vec[0], normal_vec[2], -normal_vec[1]])
+        # ###        
 
         number_of_proposals = 1000
         pred_cube_meshes = []
@@ -491,7 +485,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         gt_cube_meshes = []
         im_shape = images_raw.tensor.shape[2:][::-1] # im shape should be (x,y)
         n_gt = len(gt_boxes3D)
-        print(n_gt)
+        print('n_gt: ', n_gt)
         sum_percentage_empty_boxes = 0
         score_IoU2D    = np.zeros((n_gt, number_of_proposals))
         score_seg      = np.zeros((n_gt, number_of_proposals))
@@ -500,6 +494,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         # it is important that the zip is exhaustedd at the shortest length
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
         for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
+            if i > 3: break
             # ## cpu region
             # NOTE: the instance_i (the predicted 2D box) might not correspond to the correct gt_3d, gt_pose
             # so therefore we use the GT 2D box to propose 3D boxes for now
@@ -509,7 +504,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.y1):int(reference_box.y2),int(reference_box.x1):int(reference_box.x2)]
             # ## end cpu region
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
-            pred_cubes = propose_old(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube)
+            pred_cubes = propose_old(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube, ground_normal=normal_vec)
             
             # transfer pred_cubes to device
             pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
@@ -532,11 +527,44 @@ class ROIHeads_Boxer(StandardROIHeads):
             score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
             score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
 
-            highest_score = np.argmax(Iou3D)
+            highest_score = np.argmax(IoU3D)
             pred_cube = pred_cubes[highest_score]
             pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
             # append all cubes pred_cubes
             gt_cube_meshes.append(gt_cube.get_cube().__getitem__(0).detach())
+
+            # #### only for visualising the point cloud and plane
+            R = pred_cube.rotation.numpy()
+            vec1, vec2, vec3, vec4 = utils.draw_vector(R[:,0]), utils.draw_vector(R[:,1]), utils.draw_vector(R[:,2]), utils.draw_vector(normal_vec, color=[0,1,0])
+            pcd = o3d.geometry.PointCloud()
+            # transform R such that y up is aligned with normal vector
+
+            pcd.points = o3d.utility.Vector3dVector(points)
+            pcd.colors = o3d.utility.Vector3dVector(colors)
+            # display normal vector in point cloud 
+                        
+            plane = pcd.select_by_index(best_inliers).paint_uniform_color([1, 0, 0])
+            not_plane = pcd.select_by_index(best_inliers, invert=True)
+            mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(origin=[0, 0, 0])
+            # rotate mesh by R
+            # mesh = mesh.rotate(R)
+            # X-axis : Red arrow
+            # Y-axis : Green arrow
+            # Z-axis : Blue arrow
+            # draw 3d box
+            cub = o3d.geometry.TriangleMesh.create_box(pred_cube.dimensions[0], pred_cube.dimensions[1], pred_cube.dimensions[2]).paint_uniform_color([1, 0.706, 0]).compute_vertex_normals()
+            # Translate the mesh to the origin
+            cub.rotate(R, center=(0,0,0))
+            cub2 = o3d.geometry.TriangleMesh.create_box(pred_cube.dimensions[0], pred_cube.dimensions[1], pred_cube.dimensions[2]).paint_uniform_color([0.5, 0.706, 0.2]).compute_vertex_normals()
+            # Translate the mesh to the origin
+            basis = np.array([[1,0,0],[0,1,0],[0,0,1]]).T
+            obb = plane.get_oriented_bounding_box()
+            obb.color = [0, 0, 1]
+            objs = [plane, not_plane, mesh, obb, vec1, vec2, vec3, vec4, cub]
+            o3d.visualization.draw_geometries(objs)
+            a = 2
+            # ###### 
+
         # ################
         
         score_IoU2D    = np.mean(score_IoU2D, axis=0)

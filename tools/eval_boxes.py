@@ -121,7 +121,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
 
         outputs = []
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
-            if i >0: break # #TODO DEBUG:
+            if i > 0: break # #TODO DEBUG:
             output = model(inputs, segmentor, output_recall_scores)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, stat_empty_boxes
             if output is not None:
@@ -215,13 +215,6 @@ def do_test(cfg, model, iteration='final', storage=None):
     only_2d = cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_3D == 0.0
     output_folder = os.path.join(cfg.OUTPUT_DIR, "inference", 'iter_{}'.format(iteration))
 
-    eval_helper = Omni3DEvaluationHelper(
-        dataset_names_test, 
-        filter_settings, 
-        output_folder, 
-        iter_label=iteration,
-        only_2d=only_2d,
-    )
  
     segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
 
@@ -284,6 +277,14 @@ def do_test(cfg, model, iteration='final', storage=None):
         # exit()
         else:
             results_json = inference_on_dataset(model, data_loader, segmentor)
+
+            eval_helper = Omni3DEvaluationHelper(
+                dataset_names_test, 
+                filter_settings, 
+                output_folder, 
+                iter_label=iteration,
+                only_2d=only_2d,
+            )
             '''
             Individual dataset evaluation
             '''
@@ -353,8 +354,6 @@ def main(args):
     
     name = f'cube {datetime.datetime.now().isoformat()}'
     # wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
-
-    logger.info('Preprocessing Training Datasets')
 
     priors = None
 

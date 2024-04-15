@@ -3,6 +3,7 @@ from ProposalNetwork.utils.spaces import Box
 import numpy as np
 from cubercnn import util
 import matplotlib.pyplot as plt
+import open3d as o3d
 
 from detectron2.structures import pairwise_iou
 from pytorch3d.ops import box3d_overlap
@@ -55,7 +56,7 @@ def sample_normal_greater_than_para(mean, std, threshold, count):
         samples[samples < threshold] = torch.normal(mean, std, size=((samples < threshold).sum(),))
     return samples.to(device)
 
-def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
+def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior, ground_normal=None):
     '''
     need xyz, whl, and pose (R)
     '''
@@ -72,10 +73,10 @@ def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
 
     # R
     #rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6)) # Use this when learnable
-    rx = np.random.rand(1) * 2 * np.pi - np.pi
-    ry = np.random.rand(1) * 2 * np.pi - np.pi
-    rz = np.random.rand(1) * 2 * np.pi - np.pi
-    rotation_matrix = torch.from_numpy(util.euler2mat([rx,ry,rz]))
+    angles = np.linspace(0, np.pi, 36) # 5 degree steps
+    rotation_matrix = torch.from_numpy(orthobasis_from_normal(ground_normal, 0))
+    if ground_normal is None:
+        rotation_matrix = randn_orthobasis_torch(1)
     
     return xyz, whl, rotation_matrix
 
@@ -111,6 +112,15 @@ def randn_orthobasis_torch(num_samples=1):
     z[:, 1] = z[:, 1] / torch.norm(z[:, 1], dim=-1, keepdim=True)
     return z
 
+def randn_orthobasis(num_samples=1):
+    z = np.random.randn(num_samples, 3, 3)
+    z = z / np.linalg.norm(z, axis=-1, keepdims=True)
+    z[:, 0] = np.cross(z[:, 1], z[:, 2], axis=-1)
+    z[:, 0] = z[:, 0] / np.linalg.norm(z[:, 0], axis=-1, keepdims=True)
+    z[:, 1] = np.cross(z[:, 2], z[:, 0], axis=-1)
+    z[:, 1] = z[:, 1] / np.linalg.norm(z[:, 1], axis=-1, keepdims=True)
+    return z
+
 def is_box_included_in_other_box(reference_box, proposed_box):
     reference_corners = reference_box.get_all_corners()
     proposed_corners = proposed_box.get_all_corners()
@@ -128,10 +138,53 @@ def is_box_included_in_other_box(reference_box, proposed_box):
     return (reference_min_x <= proposed_min_x <= proposed_max_x <= reference_max_x and reference_min_y <= proposed_min_y <= proposed_max_y <= reference_max_y)
 
 
+# plotting
+def draw_vector(vector, color=(0, 0, 1)):
+    # Create a LineSet object
+    line_set = o3d.geometry.LineSet()
 
+    # Set the points of the LineSet to be the origin and the vector
+    line_set.points = o3d.utility.Vector3dVector([np.zeros(3), vector])
+    line_set.colors = o3d.utility.Vector3dVector([color, color])
 
+    # Set the lines of the LineSet to be a line from the first point to the second point
+    line_set.lines = o3d.utility.Vector2iVector([[0, 1]])
 
+    # Draw the LineSet
+    return line_set
 
+# ##things for making rotations
+def vec_perp(vec):
+    '''generate a vector perpendicular to vec in 3d'''
+    # https://math.stackexchange.com/a/2450825
+    a, b, c = vec
+    if a == 0:
+        return np.array([0,c,-b])
+    return np.array([b,-a,0])
+
+def orthobasis_from_normal(normal, yaw_angle=0):
+    '''generate an orthonormal/Rotation matrix basis from a normal vector in 3d
+     
+       returns a 3x3 matrix with the basis vectors as columns, 3rd column is the original normal vector
+    '''
+    x = rotate_vector(vec_perp(normal), normal, yaw_angle)
+    x = x / np.linalg.norm(x, ord=2)
+    y = np.cross(normal, x)
+    return np.array([x, y, normal]).T # the vectors should be as columns
+
+def rotate_vector(v, k, theta):
+    '''rotate a vector v around an axis k by an angle theta
+    it is assumed that k is a unit vector (p2 norm = 1)'''
+    # https://medium.com/@sim30217/rodrigues-rotation-formula-47489db49050
+    cos_theta = np.cos(theta)
+    sin_theta = np.sin(theta)
+    
+    term1 = v * cos_theta
+    term2 = np.cross(k, v) * sin_theta
+    term3 = k * np.dot(k, v) * (1 - cos_theta)
+    
+    return term1 + term2 + term3
+# ########### End rotations
 
 ##### Scoring
 def iou_2d(gt_box, proposal_boxes):
