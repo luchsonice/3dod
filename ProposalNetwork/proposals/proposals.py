@@ -27,16 +27,15 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     x_indices = x_grid_px.round()
     y_indices = y_grid_px.round()
     d = depth_image[y_indices, x_indices]
-    # Calculate x and y
-    opposite_side_x = x_grid_px-K[0,2].repeat(number_of_proposals)
-    opposite_side_y = y_grid_px-K[1,2].repeat(number_of_proposals)
-    adjacent_side = K[0,0].repeat(number_of_proposals)
+    # Calculate x and y and temporary z
+    opposite_side_x = x_grid_px-K[0,2].repeat(number_of_proposals) # x-directional distance in px between image center and object center
+    opposite_side_y = y_grid_px-K[1,2].repeat(number_of_proposals) # y-directional distance in px between image center and object center
+    adjacent_side = K[0,0].repeat(number_of_proposals) # depth in px to image plane
     angle_x = torch.atan2(opposite_side_x,adjacent_side)
     angle_y = torch.atan2(opposite_side_y,adjacent_side)
-    x = d * torch.sin(angle_x)
     y = d * torch.sin(angle_y)
-    # Calculate z
     dx = torch.sqrt(d**2 - y**2)
+    x = dx * torch.sin(angle_x)
     z_tmp = torch.sqrt(dx**2 - x**2)
     
 
