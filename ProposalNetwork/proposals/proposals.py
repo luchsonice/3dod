@@ -32,8 +32,8 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     opposite_side_y = y_grid_px-K[1,2].repeat(number_of_proposals) # y-directional distance in px between image center and object center
     adjacent_side = K[0,0].repeat(number_of_proposals) # depth in px to image plane
     angle_x = torch.atan2(opposite_side_x,adjacent_side)
-    angle_d = torch.atan2(opposite_side_y,d)
-    y = d * torch.sin(angle_d)
+    angle_y = torch.atan2(opposite_side_y,adjacent_side)
+    y = d * torch.sin(angle_y)
     dx = torch.sqrt(d**2 - y**2)
     x = dx * torch.sin(angle_x)
     z_tmp = torch.sqrt(dx**2 - x**2)
