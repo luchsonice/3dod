@@ -455,8 +455,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         # nothing to do..
         if n == 0:
             return instances if not self.training else (instances, {})
-        
-        num_boxes_per_image = [len(i) for i in gt_boxes]
 
         # num_boxes_per_image = [len(i) for i in proposal_boxes]
 
@@ -478,7 +476,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             prior_dims = prior_dims[:, gt_box_classes, :, :].squeeze(0)
             prior_dims_mean = prior_dims[:, 0, :]
             prior_dims_std = prior_dims[:, 1, :]
-        
+
         # forward predictions
         # implement all actual 3D cube prediction in the CubeHead_vanilla class
         # cube_2d_deltas, cube_z, cube_dims, cube_pose, cube_uncert = self.cube_head(cube_features)

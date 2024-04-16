@@ -157,6 +157,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.title('Mean Average Best Overlap vs Number of Proposals ({} images, {} instances)'.format(1+i,total_num_instances))
         f_name = os.path.join('ProposalNetwork/output/MABO', 'MABO.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
+        plt.close()
         print('saved to ', f_name)
 
         # Statistics
@@ -172,6 +173,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
             plt.title(title)
         f_name = os.path.join('ProposalNetwork/output/MABO', 'stats.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
+        plt.close()
         print('saved to ', f_name)
         
         # ## for vis
@@ -208,6 +210,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
             ax1.imshow(im_concat)
             f_name = os.path.join('ProposalNetwork/output/MABO/vis/', f'vis_{i}.png')
             plt.savefig(f_name, dpi=300, bbox_inches='tight')
+            plt.close()
             a=2
 
             # with open(f'ProposalNetwork/output/MABO/vis/out_{i}.pkl', 'wb') as f:
@@ -372,6 +375,9 @@ def main(args):
     logger.info('Preprocessing Training Datasets')
 
     priors = None
+    import pickle
+    with open('filetransfer/priors.pkl', 'rb') as f:
+        priors, Metadatacatalog = pickle.load(f)
 
     category_path = 'output/Baseline_sgd/category_meta.json'
     # category_path = os.path.join(util.file_parts(args.opts[1])[0], 'category_meta.json')
