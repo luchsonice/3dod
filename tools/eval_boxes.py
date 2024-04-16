@@ -151,6 +151,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.plot(score_random, linestyle='-',c='grey',label='random') 
         plt.grid(True)
         plt.xscale('log')
+        plt.xlim(left=1)
         plt.xlabel('Number of Proposals')
         plt.ylabel('3D IoU')
         plt.legend()
@@ -377,7 +378,7 @@ def main(args):
     priors = None
     import pickle
     with open('filetransfer/priors.pkl', 'rb') as f:
-        priors, Metadatacatalog = pickle.load(f)
+        priors, _ = pickle.load(f)
 
     category_path = 'output/Baseline_sgd/category_meta.json'
     # category_path = os.path.join(util.file_parts(args.opts[1])[0], 'category_meta.json')

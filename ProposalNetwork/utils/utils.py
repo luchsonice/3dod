@@ -46,7 +46,7 @@ def sample_normal_greater_than_para(mean, std, threshold_low, threshold_high, co
     samples = torch.normal(mean, std, size=(count,))
 
     # Ensure that all samples are greater than threshold_low and less than threshold_high
-    while torch.any((samples < threshold_low) | (samples > threshold_high)):
+    while torch.any((samples < threshold_low) | (samples > threshold_high)): # TODO stop argument in case of never sampling
         invalid_mask = (samples < threshold_low) | (samples > threshold_high)
         # Replace invalid samples with new samples drawn from the normal distribution
         samples[invalid_mask] = torch.normal(mean, std, size=(invalid_mask.sum(),))
