@@ -1,3 +1,4 @@
+from matplotlib import pyplot as plt
 import pyransac3d as pyrsc
 import open3d as o3d
 from ProposalNetwork.utils import utils
@@ -456,15 +457,12 @@ class ROIHeads_Boxer(StandardROIHeads):
         y = (y - FINAL_HEIGHT / 2) / focal_length_y
         z = np.array(dp_map)
         # normalise the points
+        # https://medium.com/arbeon/create-a-point-cloud-using-a-depth-map-how-like-this-fed598ab4f8c
         points = np.stack((np.multiply(x, z)*-1, np.multiply(y, z)*-1, z), axis=-1).reshape(-1, 3)
-        # points = np.stack((x, y, z), axis=-1).reshape(-1, 3)
         colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth]).reshape(-1, 3) / 255.0
         plane = pyrsc.Plane()
         # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
         best_eq, best_inliers = plane.fit(points, thresh=0.1, maxIteration=1000)
-        # denormalize the points back
-        # points = np.stack((np.divide(points[:,0], z.flatten()), np.divide(points[:,1], z.flatten()), points[:,2]), axis=-1)
-
 
         normal_vec = np.array(best_eq[:-1])
         y_up = np.array([0,1,0])
@@ -477,6 +475,15 @@ class ROIHeads_Boxer(StandardROIHeads):
             # to rectify this we can turn the vector 90 degrees around the local x-axis
             # note that this assumes that the walls are perpendicular to the floor
             normal_vec = np.array([normal_vec[0], normal_vec[2], -normal_vec[1]])
+
+        v2 =  utils.vec_perp(normal_vec)
+        v2 = v2 / np.linalg.norm(v2)
+        v3 = np.cross(normal_vec, v2)
+        # vt = utils.rotate_vector()
+
+        # R = np.column_stack((v2, v3, normal_vec))
+        # R = np.eye(3)
+        R = utils.orthobasis_from_normal(normal_vec, 0)
         # ###        
 
         number_of_proposals = 1000
@@ -494,7 +501,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         # it is important that the zip is exhaustedd at the shortest length
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
         for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
-            if i > 3: break
+            if i > 1: break
             # ## cpu region
             # NOTE: the instance_i (the predicted 2D box) might not correspond to the correct gt_3d, gt_pose
             # so therefore we use the GT 2D box to propose 3D boxes for now
@@ -529,12 +536,13 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             highest_score = np.argmax(IoU3D)
             pred_cube = pred_cubes[highest_score]
+            pred_cube.rotation = torch.from_numpy(R)
             pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
             # append all cubes pred_cubes
             gt_cube_meshes.append(gt_cube.get_cube().__getitem__(0).detach())
 
             # #### only for visualising the point cloud and plane
-            R = pred_cube.rotation.numpy()
+            # R = pred_cube.rotation.numpy()
             vec1, vec2, vec3, vec4 = utils.draw_vector(R[:,0]), utils.draw_vector(R[:,1]), utils.draw_vector(R[:,2]), utils.draw_vector(normal_vec, color=[0,1,0])
             pcd = o3d.geometry.PointCloud()
             # transform R such that y up is aligned with normal vector
@@ -547,7 +555,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             not_plane = pcd.select_by_index(best_inliers, invert=True)
             mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(origin=[0, 0, 0])
             # rotate mesh by R
-            # mesh = mesh.rotate(R)
+            # mesh = mesh.rotate(gt_pose.numpy())
             # X-axis : Red arrow
             # Y-axis : Green arrow
             # Z-axis : Blue arrow
@@ -555,13 +563,10 @@ class ROIHeads_Boxer(StandardROIHeads):
             cub = o3d.geometry.TriangleMesh.create_box(pred_cube.dimensions[0], pred_cube.dimensions[1], pred_cube.dimensions[2]).paint_uniform_color([1, 0.706, 0]).compute_vertex_normals()
             # Translate the mesh to the origin
             cub.rotate(R, center=(0,0,0))
-            cub2 = o3d.geometry.TriangleMesh.create_box(pred_cube.dimensions[0], pred_cube.dimensions[1], pred_cube.dimensions[2]).paint_uniform_color([0.5, 0.706, 0.2]).compute_vertex_normals()
-            # Translate the mesh to the origin
-            basis = np.array([[1,0,0],[0,1,0],[0,0,1]]).T
             obb = plane.get_oriented_bounding_box()
             obb.color = [0, 0, 1]
             objs = [plane, not_plane, mesh, obb, vec1, vec2, vec3, vec4, cub]
-            o3d.visualization.draw_geometries(objs)
+            # o3d.visualization.draw_geometries(objs)
             a = 2
             # ###### 
 

@@ -73,10 +73,11 @@ def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior, ground_normal=None
 
     # R
     #rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6)) # Use this when learnable
-    angles = np.linspace(0, np.pi, 36) # 5 degree steps
-    rotation_matrix = torch.from_numpy(orthobasis_from_normal(ground_normal, 0))
     if ground_normal is None:
-        rotation_matrix = randn_orthobasis_torch(1)
+        rotation_matrix = randn_orthobasis_torch(1).squeeze(0)
+    else:
+        angles = np.linspace(0, np.pi, 36) # 5 degree steps
+        rotation_matrix = torch.from_numpy(orthobasis_from_normal(ground_normal, 0))
     
     return xyz, whl, rotation_matrix
 
