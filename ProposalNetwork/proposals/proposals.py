@@ -55,7 +55,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     x *= 1.3
     y *= 1.4
     x_width = torch.max(x) - torch.min(x)
-    x = sample_normal_greater_than_para(torch.min(x) + x_width/2, torch.std(x), torch.min(x),torch.max(x), number_of_proposals)
+    x = sample_normal_greater_than_para(torch.min(x) + x_width/2, torch.std(x), torch.min(x),torch.max(x), number_of_proposals) # TODO Run without limits
     y_width = torch.max(y) - torch.min(y)
     y = sample_normal_greater_than_para(torch.min(y) + y_width/2, torch.std(y), torch.min(y),torch.max(y), number_of_proposals)
     xyz = torch.stack([x, y, z], 1)
