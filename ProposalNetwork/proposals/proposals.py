@@ -1,3 +1,4 @@
+from ProposalNetwork.utils import utils
 from ProposalNetwork.utils.spaces import Cube
 from ProposalNetwork.utils.utils import gt_in_norm_range, sample_normal_greater_than_para
 import torch
@@ -73,7 +74,11 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     """
     
     # Pose
-    rotation_matrix = torch.tensor([[0.5,0,0.8660254],[0,1,0],[-0.8660254,0,0.5]])
+    if ground_normal is None:
+        rotation_matrix = utils.randn_orthobasis_torch(1).squeeze(0)
+    else:
+        angles = np.linspace(0, 2*np.pi, 72) # 5 degree steps
+        rotation_matrix = torch.from_numpy(utils.orthobasis_from_normal(ground_normal, np.random.choice(angles)).astype(np.float32))
 
     # Check whether it is possible to find gt
     # if not (gt_cube == None) and not is_gt_included(gt_cube,x_range, y_range, z_range, w_prior, h_prior, l_prior):
