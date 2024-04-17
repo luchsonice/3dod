@@ -514,7 +514,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.y1):int(reference_box.y2),int(reference_box.x1):int(reference_box.x2)]
             # ## end cpu region
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
-            pred_cubes = propose_old(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube, ground_normal=normal_vec, R=R)
+            pred_cubes = propose_old(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals, gt_cube=gt_cube, ground_normal=normal_vec)
             
             # transfer pred_cubes to device
             pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
