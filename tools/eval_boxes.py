@@ -234,13 +234,6 @@ def do_test(cfg, model, iteration='final', storage=None):
     only_2d = cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_3D == 0.0
     output_folder = os.path.join(cfg.OUTPUT_DIR, "inference", 'iter_{}'.format(iteration))
 
-    eval_helper = Omni3DEvaluationHelper(
-        dataset_names_test, 
-        filter_settings, 
-        output_folder, 
-        iter_label=iteration,
-        only_2d=only_2d,
-    )
  
     segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
 
@@ -303,6 +296,14 @@ def do_test(cfg, model, iteration='final', storage=None):
         # exit()
         else:
             results_json = inference_on_dataset(model, data_loader, segmentor)
+
+            eval_helper = Omni3DEvaluationHelper(
+                dataset_names_test, 
+                filter_settings, 
+                output_folder, 
+                iter_label=iteration,
+                only_2d=only_2d,
+            )
             '''
             Individual dataset evaluation
             '''
@@ -372,8 +373,6 @@ def main(args):
     
     name = f'cube {datetime.datetime.now().isoformat()}'
     # wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
-
-    logger.info('Preprocessing Training Datasets')
 
     priors = None
     import pickle

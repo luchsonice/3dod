@@ -159,11 +159,11 @@ class Omni3D(COCO):
 
             _, name, _ = util.file_parts(annotation_file)
 
-            print('loading {} annotations into memory...'.format(name))
+            logger.info('loading {} annotations into memory...'.format(name))
             tic = time.time()
             dataset = json.load(open(annotation_file, 'r'))
             assert type(dataset)==dict, 'annotation file format {} not supported'.format(type(dataset))
-            print('Done (t={:0.2f}s)'.format(time.time()- tic))
+            logger.info('Done (t={:0.2f}s)'.format(time.time()- tic))
 
             if type(dataset['info']) == list:
                 dataset['info'] = dataset['info'][0]

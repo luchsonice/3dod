@@ -4,7 +4,7 @@ import torch
 import numpy as np
 from cubercnn import util
 
-def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None):
+def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal=None):
     '''
     Proposes a cube. The ranges are largely random, except for that the center needs to be inside the reference box.
     Also, objects have a length, width and height according to priors.
