@@ -34,12 +34,12 @@ def propose_old(reference_box, depth_image, priors, im_shape, number_of_proposal
     # Check whether it is possible to find gt
     x_range = pixel_to_normalised_space(x_range_px,[im_shape[0],im_shape[0]],[x_stretch * np.mean(z_grid),x_stretch * np.mean(z_grid)])
     y_range = pixel_to_normalised_space(y_range_px,[im_shape[1],im_shape[1]],[y_stretch * np.mean(z_grid),y_stretch * np.mean(z_grid)])
-    if not (gt_cube == None) and not is_gt_included(gt_cube,x_range, y_range, z_range, w_prior, h_prior, l_prior):
-        pass
+    #if not (gt_cube == None) and not is_gt_included(gt_cube,x_range, y_range, z_range, w_prior, h_prior, l_prior):
+    #    pass
 
     #print('x',x_range,gt_cube.center[0].numpy())
     #print('y',y_range,gt_cube.center[1].numpy())
-    print('z',z_range,gt_cube.center[2].numpy())
+    #print('z',z_range,gt_cube.center[2].numpy())
     list_of_cubes = []
     for i in range(number_of_proposals):
         # Transform center

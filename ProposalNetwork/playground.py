@@ -213,14 +213,21 @@ pca = PCA(n_components=3)
 pca.fit(contours3D)
 orientations = pca.components_
 
-def gram_schmidt(vectors):
-    basis = []
-    for vector in vectors:
-        new_vector = vector - sum(np.dot(vector, b) * b for b in basis)
-        if np.linalg.norm(new_vector) > 1e-10:
-            basis.append(new_vector / np.linalg.norm(new_vector))
-
-    return np.array(basis)
+def gram_schmidt(n):
+    # Choose an arbitrary vector
+    v1 = np.array([1.0, 0.0, 0.0])  # Choose a simple starting vector
+    
+    # Normalize the first vector
+    v1 /= np.linalg.norm(v1)
+    
+    # Calculate the second vector using Gram-Schmidt process
+    v2 = n - np.dot(n, v1) * v1
+    v2 /= np.linalg.norm(v2)
+    
+    # Calculate the third vector as the cross product of v1 and v2
+    v3 = np.cross(v1, v2)
+    
+    return v1, v2, v3
 
 basis = gram_schmidt(orientations)
 euler_angles = np.arctan2(basis[2, 1], basis[2, 2]), np.arcsin(-basis[2, 0]), np.arctan2(basis[1, 0], basis[0, 0])

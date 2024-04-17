@@ -1,5 +1,5 @@
 import pyransac3d as pyrsc
-import open3d as o3d
+#import open3d as o3d
 from ProposalNetwork.utils import utils
 
 from dataclasses import dataclass
@@ -456,27 +456,37 @@ class ROIHeads_Boxer(StandardROIHeads):
         y = (y - FINAL_HEIGHT / 2) / focal_length_y
         z = np.array(dp_map)
         # normalise the points
-        points = np.stack((np.multiply(x, z)*-1, np.multiply(y, z)*-1, z), axis=-1).reshape(-1, 3)
-        # points = np.stack((x, y, z), axis=-1).reshape(-1, 3)
+        points = np.stack((np.multiply(x, z/2), np.multiply(y, z/2), z), axis=-1).reshape(-1, 3)
+        #points = np.stack((x, y, z), axis=-1).reshape(-1, 3)
         colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth]).reshape(-1, 3) / 255.0
         plane = pyrsc.Plane()
         # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
-        best_eq, best_inliers = plane.fit(points, thresh=0.1, maxIteration=1000)
+        best_eq, best_inliers = plane.fit(points, thresh=0.05, maxIteration=1000)
         # denormalize the points back
         # points = np.stack((np.divide(points[:,0], z.flatten()), np.divide(points[:,1], z.flatten()), points[:,2]), axis=-1)
 
-
         normal_vec = np.array(best_eq[:-1])
+        
+        #normal_vec = np.array([normal_vec[1], normal_vec[0], normal_vec[2]])
+        x_up = np.array([1,0,0])
         y_up = np.array([0,1,0])
         z_up = np.array([0,0,1])
         # make sure normal vector is consistent with y-up
-        if normal_vec @ y_up < 0:
-            normal_vec *= -1
-        if normal_vec @ z_up > normal_vec @ y_up:
+        
+        if abs(normal_vec @ z_up) > abs(normal_vec @ y_up):
             # this means the plane has been found as the back wall
             # to rectify this we can turn the vector 90 degrees around the local x-axis
             # note that this assumes that the walls are perpendicular to the floor
             normal_vec = np.array([normal_vec[0], normal_vec[2], -normal_vec[1]])
+        if abs(normal_vec @ x_up) > abs(normal_vec @ y_up):
+            # this means the plane has been found as the back wall
+            # to rectify this we can turn the vector 90 degrees around the local x-axis
+            # note that this assumes that the walls are perpendicular to the floor
+            print('this')
+            normal_vec = np.array([-normal_vec[2], normal_vec[0], normal_vec[1]])
+        if normal_vec @ y_up < 0:
+            normal_vec *= -1
+        print(normal_vec)
         # ###        
 
         number_of_proposals = 1000
@@ -485,7 +495,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         gt_cube_meshes = []
         im_shape = images_raw.tensor.shape[2:][::-1] # im shape should be (x,y)
         n_gt = len(gt_boxes3D)
-        print('n_gt: ', n_gt)
         sum_percentage_empty_boxes = 0
         score_IoU2D    = np.zeros((n_gt, number_of_proposals))
         score_seg      = np.zeros((n_gt, number_of_proposals))
@@ -494,7 +503,8 @@ class ROIHeads_Boxer(StandardROIHeads):
         # it is important that the zip is exhaustedd at the shortest length
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
         for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
-            if i > 3: break
+            if i > 0: break
+            print(gt_pose[:,1])
             # ## cpu region
             # NOTE: the instance_i (the predicted 2D box) might not correspond to the correct gt_3d, gt_pose
             # so therefore we use the GT 2D box to propose 3D boxes for now
@@ -535,6 +545,8 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             # #### only for visualising the point cloud and plane
             R = pred_cube.rotation.numpy()
+            
+            """
             vec1, vec2, vec3, vec4 = utils.draw_vector(R[:,0]), utils.draw_vector(R[:,1]), utils.draw_vector(R[:,2]), utils.draw_vector(normal_vec, color=[0,1,0])
             pcd = o3d.geometry.PointCloud()
             # transform R such that y up is aligned with normal vector
@@ -563,6 +575,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             objs = [plane, not_plane, mesh, obb, vec1, vec2, vec3, vec4, cub]
             o3d.visualization.draw_geometries(objs)
             a = 2
+            """
             # ###### 
 
         # ################
@@ -655,7 +668,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         # it is important that the zip is exhaustedd at the shortest length
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
         for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
-
             # ## cpu region
             # NOTE: the instance_i (the predicted 2D box) might not correspond to the correct gt_3d, gt_pose
             # so therefore we use the GT 2D box to propose 3D boxes for now

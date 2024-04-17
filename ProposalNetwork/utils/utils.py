@@ -3,7 +3,7 @@ from ProposalNetwork.utils.spaces import Box
 import numpy as np
 from cubercnn import util
 import matplotlib.pyplot as plt
-import open3d as o3d
+#import open3d as o3d
 
 from detectron2.structures import pairwise_iou
 from pytorch3d.ops import box3d_overlap
@@ -77,7 +77,7 @@ def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior, ground_normal=None
     rotation_matrix = torch.from_numpy(orthobasis_from_normal(ground_normal, 0))
     if ground_normal is None:
         rotation_matrix = randn_orthobasis_torch(1)
-    
+  
     return xyz, whl, rotation_matrix
 
 def make_cubes_parallel(x_range, y_range, z, w_prior, h_prior, l_prior, number_of_proposals=1):
@@ -137,7 +137,7 @@ def is_box_included_in_other_box(reference_box, proposed_box):
 
     return (reference_min_x <= proposed_min_x <= proposed_max_x <= reference_max_x and reference_min_y <= proposed_min_y <= proposed_max_y <= reference_max_y)
 
-
+"""
 # plotting
 def draw_vector(vector, color=(0, 0, 1)):
     # Create a LineSet object
@@ -152,6 +152,7 @@ def draw_vector(vector, color=(0, 0, 1)):
 
     # Draw the LineSet
     return line_set
+"""
 
 # ##things for making rotations
 def vec_perp(vec):
@@ -160,7 +161,7 @@ def vec_perp(vec):
     a, b, c = vec
     if a == 0:
         return np.array([0,c,-b])
-    return np.array([b,-a,0])
+    return np.array(normalize_vector(torch.tensor([b,-a,0])))
 
 def orthobasis_from_normal(normal, yaw_angle=0):
     '''generate an orthonormal/Rotation matrix basis from a normal vector in 3d
@@ -170,7 +171,7 @@ def orthobasis_from_normal(normal, yaw_angle=0):
     x = rotate_vector(vec_perp(normal), normal, yaw_angle)
     x = x / np.linalg.norm(x, ord=2)
     y = np.cross(normal, x)
-    return np.array([x, y, normal]).T # the vectors should be as columns
+    return np.array([x, normal, y]).T # the vectors should be as columns
 
 def rotate_vector(v, k, theta):
     '''rotate a vector v around an axis k by an angle theta
