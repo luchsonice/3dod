@@ -40,67 +40,18 @@ def compute_rotation_matrix_from_ortho6d(poses):
 
     return matrix
 
-def sample_normal_greater_than(mean, std, threshold):
-    sample = np.random.normal(mean, std)
-    while sample < threshold:
-        sample = np.random.normal(mean, std)
-    return sample
-
-def sample_normal_greater_than_para(mean, std, threshold, count):
+def sample_normal_greater_than_para(mean, std, threshold_low, threshold_high, count):
     device = mean.device
-    mean = mean.item()
-    std = std.item()
+    # Generate samples from a normal distribution
     samples = torch.normal(mean, std, size=(count,))
-    while torch.any(samples < threshold):
-        samples[samples < threshold] = torch.normal(mean, std, size=((samples < threshold).sum(),))
+
+    # Ensure that all samples are greater than threshold_low and less than threshold_high
+    while torch.any((samples < threshold_low) | (samples > threshold_high)): # TODO stop argument in case of never sampling
+        invalid_mask = (samples < threshold_low) | (samples > threshold_high)
+        # Replace invalid samples with new samples drawn from the normal distribution
+        samples[invalid_mask] = torch.normal(mean, std, size=(invalid_mask.sum(),))
+
     return samples.to(device)
-
-def make_cube(x_range, y_range, z, w_prior, h_prior, l_prior):
-    '''
-    need xyz, whl, and pose (R)
-    '''
-    # xyz
-    x = (x_range[0]-x_range[1]) * torch.rand(1) + x_range[1]
-    y = (y_range[0]-y_range[1]) * torch.rand(1) + y_range[1]
-    xyz = torch.tensor([x, y, z])
-
-    # whl
-    w = sample_normal_greater_than(w_prior[0],w_prior[1],0.1)
-    h = sample_normal_greater_than(h_prior[0],h_prior[1],0.1)
-    l = sample_normal_greater_than(l_prior[0],l_prior[1],0.05)
-    whl = torch.tensor([w, h, l])
-
-    # R
-    #rotation_matrix = compute_rotation_matrix_from_ortho6d(torch.rand(6)) # Use this when learnable
-    rx = np.random.rand(1) * 2 * np.pi - np.pi
-    ry = np.random.rand(1) * 2 * np.pi - np.pi
-    rz = np.random.rand(1) * 2 * np.pi - np.pi
-    rotation_matrix = torch.from_numpy(util.euler2mat([rx,ry,rz]))
-    
-    return xyz, whl, rotation_matrix
-
-def make_cubes_parallel(x_range, y_range, z, w_prior, h_prior, l_prior, number_of_proposals=1):
-    '''
-    need xyz, whl, and pose (R)
-    it does not run faster on cuda.
-    '''
-    # xyz
-    x_range = x_range.repeat(number_of_proposals,1)
-    y_range = y_range.repeat(number_of_proposals,1)
-    x = (x_range[:, 0]-x_range[:, 1]).t() * torch.rand(number_of_proposals) + x_range[:, 1]
-    y = (y_range[:, 0]-y_range[:, 1]).t() * torch.rand(number_of_proposals) + y_range[:, 1]
-    xyz = torch.stack([x, y, z], 1)
-
-    # whl
-    w = sample_normal_greater_than_para(w_prior[0], w_prior[1], 0.1, number_of_proposals)
-    h = sample_normal_greater_than_para(h_prior[0], h_prior[1], 0.1, number_of_proposals)
-    l = sample_normal_greater_than_para(l_prior[0], l_prior[1], 0.05, number_of_proposals)
-    whl = torch.stack([w, h, l], 1)
-
-    # R
-    rotation_matrix = randn_orthobasis_torch(number_of_proposals) 
-    
-    return xyz, whl, rotation_matrix
 
 def randn_orthobasis_torch(num_samples=1):
     z = torch.randn(num_samples, 3, 3)
@@ -127,10 +78,11 @@ def is_box_included_in_other_box(reference_box, proposed_box):
 
     return (reference_min_x <= proposed_min_x <= proposed_max_x <= reference_max_x and reference_min_y <= proposed_min_y <= proposed_max_y <= reference_max_y)
 
-
-
-
-
+def gt_in_norm_range(range,gt):
+    tmp = gt-range[0]
+    res = tmp / (range[1] - range[0])
+    
+    return res
 
 
 ##### Scoring

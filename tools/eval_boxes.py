@@ -90,7 +90,6 @@ def inference_on_dataset(model, data_loader, segmentor):
         stack.enter_context(torch.no_grad())
 
         for idx, inputs in track(enumerate(data_loader), description="Inference", total=total):
-            if idx > 1: break
             outputs = model(inputs, segmentor, output_recall_scores=False)
             for input, output in zip(inputs, outputs):
 
@@ -121,9 +120,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
 
         outputs = []
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
-            if i >0: break # #TODO DEBUG:
             output = model(inputs, segmentor, output_recall_scores)
-            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, stat_empty_boxes
+            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes, stats
             if output is not None:
                 outputs.append(output)
 
@@ -133,7 +131,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         score_seg       = np.array([x[3] for x in outputs])
         score_dim       = np.array([x[4] for x in outputs])
         score_combined  = np.array([x[5] for x in outputs])
-        stat_empty_boxes  = np.array([x[6] for x in outputs])
+        score_random    = np.array([x[6] for x in outputs])
+        stat_empty_boxes= np.array([x[7] for x in outputs])
         print('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
 
         Iou3D = Iou3D.mean(axis=0)
@@ -141,24 +140,43 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         score_seg = score_seg.mean(axis=0)
         score_dim = score_dim.mean(axis=0)
         score_combined = score_combined.mean(axis=0)
+        score_random = score_random.mean(axis=0)
         total_num_instances = np.sum([x[0].gt_boxes3D.shape[0] for x in outputs])
                 
         plt.figure(figsize=(8,5))
         plt.plot(score_combined, linestyle='-',c='black', label='combined') 
-        plt.plot(score_dim, linestyle='-',c='green',label='dim') 
+        plt.plot(score_dim, linestyle='-',c='teal',label='dim') 
         plt.plot(score_seg, linestyle='-',c='purple',label='segment')
         plt.plot(Iou2D, linestyle='-',c='orange',label='2d IoU') 
+        plt.plot(score_random, linestyle='-',c='grey',label='random') 
         plt.grid(True)
         plt.xscale('log')
+        plt.xlim(left=1)
         plt.xlabel('Number of Proposals')
         plt.ylabel('3D IoU')
         plt.legend()
         plt.title('Mean Average Best Overlap vs Number of Proposals ({} images, {} instances)'.format(1+i,total_num_instances))
         f_name = os.path.join('ProposalNetwork/output/MABO', 'MABO.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
+        plt.close()
         print('saved to ', f_name)
 
-
+        # Statistics
+        stats = torch.cat([x[8] for x in outputs],dim=0)
+        num_bins = 40
+        titles = ['x','y','z','w','h','l','rx','ry','rz']
+        plt.figure(figsize=(15, 15))
+        for i,title in enumerate(titles):
+            plt.subplot(3, 3, 1+i)
+            plt.hist(stats[:,i].numpy(), bins=num_bins, color='darkslategrey', density=True)
+            plt.axvline(x=0, color='red')
+            plt.axvline(x=1, color='red')
+            plt.title(title)
+        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats.png')
+        plt.savefig(f_name, dpi=300, bbox_inches='tight')
+        plt.close()
+        print('saved to ', f_name)
+        
         # ## for vis
         d_iter = iter(data_loader)
         for i , _ in enumerate(outputs):
@@ -193,6 +211,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
             ax1.imshow(im_concat)
             f_name = os.path.join('ProposalNetwork/output/MABO/vis/', f'vis_{i}.png')
             plt.savefig(f_name, dpi=300, bbox_inches='tight')
+            plt.close()
             a=2
 
             # with open(f'ProposalNetwork/output/MABO/vis/out_{i}.pkl', 'wb') as f:
@@ -357,6 +376,9 @@ def main(args):
     logger.info('Preprocessing Training Datasets')
 
     priors = None
+    import pickle
+    with open('filetransfer/priors.pkl', 'rb') as f:
+        priors, _ = pickle.load(f)
 
     category_path = 'output/Baseline_sgd/category_meta.json'
     # category_path = os.path.join(util.file_parts(args.opts[1])[0], 'category_meta.json')
