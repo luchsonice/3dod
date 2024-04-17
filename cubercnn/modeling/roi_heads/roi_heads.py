@@ -457,7 +457,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         y = (y - FINAL_HEIGHT / 2) / focal_length_y
         z = np.array(dp_map)
         # normalise the points
-<<<<<<< HEAD
         points = np.stack((np.multiply(x, z/2), np.multiply(y, z/2), z), axis=-1).reshape(-1, 3)
         #points = np.stack((x, y, z), axis=-1).reshape(-1, 3)
         colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth]).reshape(-1, 3) / 255.0
@@ -466,14 +465,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         best_eq, best_inliers = plane.fit(points, thresh=0.05, maxIteration=1000)
         # denormalize the points back
         # points = np.stack((np.divide(points[:,0], z.flatten()), np.divide(points[:,1], z.flatten()), points[:,2]), axis=-1)
-=======
-        # https://medium.com/arbeon/create-a-point-cloud-using-a-depth-map-how-like-this-fed598ab4f8c
-        points = np.stack((np.multiply(x, z)*-1, np.multiply(y, z)*-1, z), axis=-1).reshape(-1, 3)
-        colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth]).reshape(-1, 3) / 255.0
-        plane = pyrsc.Plane()
-        # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
-        best_eq, best_inliers = plane.fit(points, thresh=0.1, maxIteration=1000)
->>>>>>> e33ce76fe65ee0f43969d1ab827c8a042d023d59
 
         normal_vec = np.array(best_eq[:-1])
         
@@ -488,7 +479,6 @@ class ROIHeads_Boxer(StandardROIHeads):
             # to rectify this we can turn the vector 90 degrees around the local x-axis
             # note that this assumes that the walls are perpendicular to the floor
             normal_vec = np.array([normal_vec[0], normal_vec[2], -normal_vec[1]])
-<<<<<<< HEAD
         if abs(normal_vec @ x_up) > abs(normal_vec @ y_up):
             # this means the plane has been found as the back wall
             # to rectify this we can turn the vector 90 degrees around the local x-axis
@@ -498,17 +488,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         if normal_vec @ y_up < 0:
             normal_vec *= -1
         print(normal_vec)
-=======
-
-        v2 =  utils.vec_perp(normal_vec)
-        v2 = v2 / np.linalg.norm(v2)
-        v3 = np.cross(normal_vec, v2)
-        # vt = utils.rotate_vector()
-
-        # R = np.column_stack((v2, v3, normal_vec))
-        # R = np.eye(3)
-        R = utils.orthobasis_from_normal(normal_vec, 0)
->>>>>>> e33ce76fe65ee0f43969d1ab827c8a042d023d59
         # ###        
 
         number_of_proposals = 1000
@@ -525,12 +504,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         # it is important that the zip is exhaustedd at the shortest length
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
         for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
-<<<<<<< HEAD
-            if i > 0: break
-            print(gt_pose[:,1])
-=======
             if i > 1: break
->>>>>>> e33ce76fe65ee0f43969d1ab827c8a042d023d59
             # ## cpu region
             # NOTE: the instance_i (the predicted 2D box) might not correspond to the correct gt_3d, gt_pose
             # so therefore we use the GT 2D box to propose 3D boxes for now
@@ -569,15 +543,10 @@ class ROIHeads_Boxer(StandardROIHeads):
             pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
             # append all cubes pred_cubes
             gt_cube_meshes.append(gt_cube.get_cube().__getitem__(0).detach())
-
-            # #### only for visualising the point cloud and plane
-<<<<<<< HEAD
-            R = pred_cube.rotation.numpy()
             
             """
-=======
+            # #### only for visualising the point cloud and plane
             # R = pred_cube.rotation.numpy()
->>>>>>> e33ce76fe65ee0f43969d1ab827c8a042d023d59
             vec1, vec2, vec3, vec4 = utils.draw_vector(R[:,0]), utils.draw_vector(R[:,1]), utils.draw_vector(R[:,2]), utils.draw_vector(normal_vec, color=[0,1,0])
             pcd = o3d.geometry.PointCloud()
             # transform R such that y up is aligned with normal vector
