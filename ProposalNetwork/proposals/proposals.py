@@ -4,7 +4,7 @@ from ProposalNetwork.utils.utils import make_cube, is_gt_included, make_cubes_pa
 import torch
 import numpy as np
 
-def propose_old(reference_box, depth_image, priors, im_shape, number_of_proposals=1, gt_cube=None, ground_normal=None):
+def propose_old(reference_box, depth_image, priors, im_shape, number_of_proposals=1, gt_cube=None, ground_normal=None, R=None):
     '''
     Proposes a cube. The ranges are largely random, except for that the center needs to be inside the reference box.
     Also, objects have a length, width and height according to priors.
@@ -48,7 +48,7 @@ def propose_old(reference_box, depth_image, priors, im_shape, number_of_proposal
 
         # Predict cube
         pred_xyz, pred_whl, pred_pose = make_cube(x_range,y_range,z_grid[i],w_prior,h_prior,l_prior, ground_normal)
-        pred_cube = Cube(torch.cat((pred_xyz, pred_whl), dim=0),pred_pose)
+        pred_cube = Cube(torch.cat((pred_xyz, pred_whl), dim=0),R)
         list_of_cubes.append(pred_cube)
 
     # TODO proposal should be different enough from each other, grid search?
