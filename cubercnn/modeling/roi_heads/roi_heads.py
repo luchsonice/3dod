@@ -504,7 +504,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         # it is important that the zip is exhaustedd at the shortest length
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
         for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
-            if i > 1: break
             # ## cpu region
             # NOTE: the instance_i (the predicted 2D box) might not correspond to the correct gt_3d, gt_pose
             # so therefore we use the GT 2D box to propose 3D boxes for now
@@ -539,7 +538,6 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             highest_score = np.argmax(IoU3D)
             pred_cube = pred_cubes[highest_score]
-            pred_cube.rotation = torch.from_numpy(R)
             pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
             # append all cubes pred_cubes
             gt_cube_meshes.append(gt_cube.get_cube().__getitem__(0).detach())
