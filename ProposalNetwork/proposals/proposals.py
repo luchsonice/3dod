@@ -51,7 +51,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
 
     # Finish z
     z = z_tmp+l
-    z = sample_normal_greater_than_para(torch.median(z), torch.std(z) * 1.2, torch.tensor(0),torch.tensor(100), number_of_proposals)
+    z = sample_normal_greater_than_para(torch.median(z), torch.std(z) * 1.2, torch.tensor(-0.3),torch.tensor(100), number_of_proposals)
 
     x *= 1.3
     y *= 1.4
@@ -92,13 +92,12 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
         list_of_cubes.append(pred_cube)
     
     # Statistics
-    stds = 2
     stat_x = gt_in_norm_range([torch.min(x),torch.max(x)],gt_cube.center[0])
     stat_y = gt_in_norm_range([torch.min(y),torch.max(y)],gt_cube.center[1])
     stat_z = gt_in_norm_range([torch.min(z),torch.max(z)],gt_cube.center[2])
-    stat_w = gt_in_norm_range([torch.max(w_prior[0]-stds*w_prior[1],torch.tensor(0.2)),torch.min(w_prior[0]+stds*w_prior[1],w_prior[0]+2*w_prior[1])],gt_cube.dimensions[0])
-    stat_h = gt_in_norm_range([torch.max(h_prior[0]-stds*h_prior[1],torch.tensor(0.05)),torch.min(h_prior[0]+stds*h_prior[1],h_prior[0]+2*h_prior[1])],gt_cube.dimensions[1])
-    stat_l = gt_in_norm_range([torch.max(l_prior[0]-stds*l_prior[1],torch.tensor(0.05)),torch.min(l_prior[0]+stds*l_prior[1],l_prior[0]+2*l_prior[1])],gt_cube.dimensions[2])
+    stat_w = gt_in_norm_range([torch.min(w),torch.max(w)],gt_cube.dimensions[0])
+    stat_h = gt_in_norm_range([torch.min(h),torch.max(h)],gt_cube.dimensions[1])
+    stat_l = gt_in_norm_range([torch.min(l),torch.max(l)],gt_cube.dimensions[2])
     angles = util.mat2euler(gt_cube.rotation)
     stat_rx = gt_in_norm_range(torch.tensor([-np.pi,np.pi]),torch.tensor(angles[0]))
     stat_ry = gt_in_norm_range(torch.tensor([-np.pi,np.pi]),torch.tensor(angles[1]))
