@@ -273,14 +273,12 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             # mask for each proposal
             # NOTE: at the the moment the this assumes a batch size of 1, since the test loader has it hardcoded
-            targets = [target[target.gt_classes >= 0] for target in targets]
+            # targets = [target[target.gt_classes >= 0] for target in targets]
             if output_recall_scores:
                 # sometimes there are no valid targets in the image.
                 pred_instances = None
                 masks = []
                 for img, instance in zip(images_raw.tensor, targets): # over all images in batch
-                    if len(instance) == 0:
-                        return None
                     mask_per_image = torch.zeros((len(instance), 1, images_raw.tensor.shape[2], images_raw.tensor.shape[3]))
                     img = np.array(img.permute(1, 2, 0).cpu())
 
@@ -487,7 +485,6 @@ class ROIHeads_Boxer(StandardROIHeads):
             normal_vec = np.array([-normal_vec[2], normal_vec[0], normal_vec[1]])
         if normal_vec @ y_up < 0:
             normal_vec *= -1
-        print(normal_vec)
         # ###        
 
         number_of_proposals = 1000
@@ -512,7 +509,6 @@ class ROIHeads_Boxer(StandardROIHeads):
             reference_box = Box(gt_2d)
             reference_box = reference_box.to_device('cpu')
             priors = [prior_dims_mean[i].cpu().numpy(), prior_dims_std[i].cpu().numpy()]
-            depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.y1):int(reference_box.y2),int(reference_box.x1):int(reference_box.x2)]
             # ## end cpu region
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
             pred_cubes, stats_instance = propose(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_cube, ground_normal=normal_vec)

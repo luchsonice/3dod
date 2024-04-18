@@ -17,11 +17,40 @@ from detectron2.data.samplers import (
     RepeatFactorTrainingSampler, 
     TrainingSampler
 )
-from detectron2.data.build import (
-    filter_images_with_only_crowd_annotations, 
+from detectron2.data.build import ( 
     build_batch_data_loader,
     trivial_batch_collator
 )
+
+def filter_images_with_only_crowd_annotations(dataset_dicts):
+    """
+    Filter out images with none annotations or only crowd annotations
+    (i.e., images without non-crowd annotations).
+    A common training-time preprocessing on COCO dataset.
+
+    Args:
+        dataset_dicts (list[dict]): annotations in Detectron2 Dataset format.
+
+    Returns:
+        list[dict]: the same format, but filtered.
+    """
+    num_before = len(dataset_dicts)
+
+    def valid(anns):
+        for ann in anns:
+            if ann.get("iscrowd", 0) == 0:
+                return True
+        return False
+
+    dataset_dicts = [x for x in dataset_dicts if valid(x["annotations"])]
+    num_after = len(dataset_dicts)
+    logger = logging.getLogger(__name__)
+    logger.info(
+        "Removed {} images marked with crowd. {} images left.".format(
+            num_before - num_after, num_after
+        )
+    )
+    return dataset_dicts
 
 def get_detection_dataset_dicts(names, filter_empty=True, **kwargs):
     
@@ -190,13 +219,13 @@ def build_detection_train_loader(dataset, *, mapper, sampler=None, total_batch_s
         num_workers=num_workers
     )
 
-def _test_loader_from_config(cfg, dataset_name, mapper=None):
+def _test_loader_from_config(cfg, dataset_name, mapper=None, filter_empty=False):
     if isinstance(dataset_name, str):
         dataset_name = [dataset_name]
 
     dataset = get_detection_dataset_dicts(
         dataset_name,
-        filter_empty=False,
+        filter_empty=filter_empty,
         proposal_files=[
             cfg.DATASETS.PROPOSAL_FILES_TEST[list(cfg.DATASETS.TEST).index(x)] for x in dataset_name
         ]
