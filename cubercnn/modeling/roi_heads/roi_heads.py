@@ -429,10 +429,10 @@ class ROIHeads_Boxer(StandardROIHeads):
         gt_boxes = torch.cat([p.gt_boxes for p in targets], dim=0,) if len(targets) > 1 else targets[0].gt_boxes
         gt_poses = torch.cat([p.gt_poses for p in targets], dim=0,)
 
-        n = len(gt_boxes)
+        n_gt = len(gt_boxes)
         
         # nothing to do..
-        if n == 0:
+        if n_gt == 0:
             return instances if not self.training else (instances, {})
         
         Ks_scaled_per_box = Ks[0]/im_scales_ratio[0]
@@ -481,25 +481,22 @@ class ROIHeads_Boxer(StandardROIHeads):
             # this means the plane has been found as the back wall
             # to rectify this we can turn the vector 90 degrees around the local x-axis
             # note that this assumes that the walls are perpendicular to the floor
-            print('this')
             normal_vec = np.array([-normal_vec[2], normal_vec[0], normal_vec[1]])
         if normal_vec @ y_up < 0:
             normal_vec *= -1
-        # ###        
 
         number_of_proposals = 1000
         pred_cube_meshes = []
         mask_per_image = mask_per_image[0] # this should be looped over
         gt_cube_meshes = []
         im_shape = images_raw.tensor.shape[2:][::-1] # im shape should be (x,y)
-        n_gt = len(gt_boxes3D)
         sum_percentage_empty_boxes = 0
         score_IoU2D    = np.zeros((n_gt, number_of_proposals))
         score_seg      = np.zeros((n_gt, number_of_proposals))
         score_dim      = np.zeros((n_gt, number_of_proposals))
         score_combined = np.zeros((n_gt, number_of_proposals))
         score_random   = np.zeros((n_gt, number_of_proposals))
-        stats_image    = torch.zeros(n_gt,9)
+        stats_image    = torch.zeros(n_gt, 9)
         # it is important that the zip is exhaustedd at the shortest length
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
         for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
@@ -536,10 +533,8 @@ class ROIHeads_Boxer(StandardROIHeads):
             score_random[i,:] = accumulate_scores(random_score, IoU3D)
 
             highest_score = np.argmax(IoU3D)
-            highest_score = np.argmax(IoU3D)
             pred_cube = pred_cubes[highest_score]
             pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
-            # append all cubes pred_cubes
             gt_cube_meshes.append(gt_cube.get_cube().__getitem__(0).detach())
 
             # stats

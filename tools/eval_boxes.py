@@ -21,6 +21,7 @@ from detectron2.engine import (
 from detectron2.utils.logger import setup_logger
 import torch.nn as nn
 from rich.progress import track
+import pickle
 
 from ProposalNetwork.utils.utils import show_mask2
 from cubercnn.data.dataset_mapper import DatasetMapper3D
@@ -120,7 +121,6 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
 
         outputs = []
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
-            if i > 3: break
             output = model(inputs, segmentor, output_recall_scores)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes, stats
             if output is not None:
@@ -376,7 +376,6 @@ def main(args):
     # wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
 
     priors = None
-    import pickle
     with open('filetransfer/priors.pkl', 'rb') as f:
         priors, _ = pickle.load(f)
 
