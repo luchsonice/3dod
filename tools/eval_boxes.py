@@ -217,9 +217,10 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
             prop_img = convert_image_to_rgb(images_raw.permute(1,2,0).cpu().numpy(), 'BGR').copy()
             v_pred = Visualizer(prop_img, None)
             v_pred = v_pred.overlay_instances(
-                boxes=p_info.gt_boxes[0][0:box_size].tensor.cpu().numpy()
+                boxes=p_info.gt_boxes[0:box_size].tensor.cpu().numpy()
                 , assigned_colors=colors
             )
+            prop_img = v_pred.get_image()
             img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, p_info.K, p_info.pred_cube_meshes,text=pred_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
             vis_img_3d = img_3DPR.astype(np.uint8)
             vis_img_3d = show_mask2(p_info.mask_per_image.cpu().numpy(), vis_img_3d, random_color=colors)
@@ -311,7 +312,7 @@ def do_test(cfg, model, iteration='final', storage=None):
         data_mapper = DatasetMapper3D(cfg, is_train=False, mode='eval_with_gt')
         data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
 
-        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=1)
+        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, filter_empty=True, num_workers=1)
         if cfg.PLOT.EVAL == 'MABO': output_recall_scores = True
         else: output_recall_scores = False
         if output_recall_scores:
@@ -387,7 +388,8 @@ def setup(args):
 
     for dataset_name in dataset_names_test:
         if not(dataset_name in cfg.DATASETS.TRAIN):
-            simple_register(dataset_name, filter_settings, filter_empty=False)
+            # TODO: empties should not be filtering in test normally, or maybe they should??
+            simple_register(dataset_name, filter_settings, filter_empty=True)
     
     return cfg
 

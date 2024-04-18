@@ -122,7 +122,7 @@ def is_ignore(anno, filter_settings, image_height):
     return ignore
 
 
-def simple_register(dataset_name, filter_settings, filter_empty=False, datasets_root_path=None):
+def simple_register(dataset_name, filter_settings, filter_empty=True, datasets_root_path=None):
 
     if datasets_root_path is None:
         datasets_root_path = path_to_json = os.path.join('datasets', 'Omni3D',)
@@ -160,10 +160,8 @@ class Omni3D(COCO):
             _, name, _ = util.file_parts(annotation_file)
 
             logger.info('loading {} annotations into memory...'.format(name))
-            tic = time.time()
             dataset = json.load(open(annotation_file, 'r'))
             assert type(dataset)==dict, 'annotation file format {} not supported'.format(type(dataset))
-            logger.info('Done (t={:0.2f}s)'.format(time.time()- tic))
 
             if type(dataset['info']) == list:
                 dataset['info'] = dataset['info'][0]
@@ -272,7 +270,8 @@ class Omni3D(COCO):
 
                 # category is part of trainable categories?
                 if category_name in trainable_cats:
-                    valid_anns.append(self.dataset['annotations'][anno_idx])
+                    if not ignore:
+                        valid_anns.append(self.dataset['annotations'][anno_idx])
 
             self.dataset['annotations'] = valid_anns
 
@@ -332,7 +331,7 @@ def register_and_store_model_metadata(datasets, output_dir, filter_settings=None
     MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id  = id_map
 
 
-def load_omni3d_json(json_file, image_root, dataset_name, filter_settings, filter_empty=False):
+def load_omni3d_json(json_file, image_root, dataset_name, filter_settings, filter_empty=True):
     
     # read in the dataset
     timer = Timer()
@@ -385,7 +384,7 @@ def load_omni3d_json(json_file, image_root, dataset_name, filter_settings, filte
 
     invalid_count = 0
     
-    for (img_dict, anno_dict_list) in imgs_anns:
+    for img_dict, anno_dict_list in imgs_anns:
         
         has_valid_annotation = False
 
@@ -438,9 +437,14 @@ def load_omni3d_json(json_file, image_root, dataset_name, filter_settings, filte
             obj['pose'] = anno['R_cam']
 
             # store category as -1 for ignores!
-            obj["category_id"] = -1 if ignore else id_map[annotation_category_id]
-
-            objs.append(obj)
+            # OLD Logic
+            # obj["category_id"] = -1 if ignore else id_map[annotation_category_id]
+            if filter_empty:
+                obj["category_id"] = id_map[annotation_category_id]
+                if not ignore:
+                    objs.append(obj)
+            else:
+                obj["category_id"] = -1 if ignore else id_map[annotation_category_id]
 
             has_valid_annotation |= (not ignore)
 

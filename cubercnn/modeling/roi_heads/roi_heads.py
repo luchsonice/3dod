@@ -273,14 +273,12 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             # mask for each proposal
             # NOTE: at the the moment the this assumes a batch size of 1, since the test loader has it hardcoded
-            targets = [target[target.gt_classes >= 0] for target in targets]
+            # targets = [target[target.gt_classes >= 0] for target in targets]
             if output_recall_scores:
                 # sometimes there are no valid targets in the image.
                 pred_instances = None
                 masks = []
                 for img, instance in zip(images_raw.tensor, targets): # over all images in batch
-                    if len(instance) == 0:
-                        return None
                     mask_per_image = torch.zeros((len(instance), 1, images_raw.tensor.shape[2], images_raw.tensor.shape[3]))
                     img = np.array(img.permute(1, 2, 0).cpu())
 
@@ -499,7 +497,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         # it is important that the zip is exhaustedd at the shortest length
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
         for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
-            # ## cpu region
             # NOTE: the instance_i (the predicted 2D box) might not correspond to the correct gt_3d, gt_pose
             # so therefore we use the GT 2D box to propose 3D boxes for now
             reference_box = Box(gt_2d)
