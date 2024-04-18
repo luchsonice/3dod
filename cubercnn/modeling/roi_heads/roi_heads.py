@@ -458,14 +458,10 @@ class ROIHeads_Boxer(StandardROIHeads):
         z = np.array(dp_map)
         # normalise the points
         points = np.stack((np.multiply(x, z/2), np.multiply(y, z/2), z), axis=-1).reshape(-1, 3)
-        #points = np.stack((x, y, z), axis=-1).reshape(-1, 3)
         colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth]).reshape(-1, 3) / 255.0
         plane = pyrsc.Plane()
         # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
         best_eq, best_inliers = plane.fit(points, thresh=0.05, maxIteration=1000)
-        # denormalize the points back
-        # points = np.stack((np.divide(points[:,0], z.flatten()), np.divide(points[:,1], z.flatten()), points[:,2]), axis=-1)
-
         normal_vec = np.array(best_eq[:-1])
         
         #normal_vec = np.array([normal_vec[1], normal_vec[0], normal_vec[2]])
@@ -473,15 +469,14 @@ class ROIHeads_Boxer(StandardROIHeads):
         y_up = np.array([0,1,0])
         z_up = np.array([0,0,1])
         # make sure normal vector is consistent with y-up
-        
         if abs(normal_vec @ z_up) > abs(normal_vec @ y_up):
             # this means the plane has been found as the back wall
             # to rectify this we can turn the vector 90 degrees around the local x-axis
             # note that this assumes that the walls are perpendicular to the floor
             normal_vec = np.array([normal_vec[0], normal_vec[2], -normal_vec[1]])
         if abs(normal_vec @ x_up) > abs(normal_vec @ y_up):
-            # this means the plane has been found as the back wall
-            # to rectify this we can turn the vector 90 degrees around the local x-axis
+            # this means the plane has been found as the side wall
+            # to rectify this we can turn the vector 90 degrees around the local y-axis
             # note that this assumes that the walls are perpendicular to the floor
             normal_vec = np.array([-normal_vec[2], normal_vec[0], normal_vec[1]])
         if normal_vec @ y_up < 0:
@@ -499,6 +494,8 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_combined = np.zeros((n_gt, number_of_proposals))
         score_random   = np.zeros((n_gt, number_of_proposals))
         stats_image    = torch.zeros(n_gt, 9)
+        stats_off      = np.zeros((n_gt, 10))
+        stats_off_impro= np.zeros((n_gt, 9))
         # it is important that the zip is exhaustedd at the shortest length
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
         for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
@@ -508,10 +505,10 @@ class ROIHeads_Boxer(StandardROIHeads):
             reference_box = Box(gt_2d)
             reference_box = reference_box.to_device('cpu')
             priors = [prior_dims_mean[i].cpu().numpy(), prior_dims_std[i].cpu().numpy()]
-
             # ## end cpu region
+
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
-            pred_cubes, stats_instance = propose(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_cube, ground_normal=normal_vec)
+            pred_cubes, stats_instance, stats_ranges = propose(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_cube, ground_normal=normal_vec)
             
             # transfer pred_cubes to device
             pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
@@ -536,6 +533,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             score_random[i,:] = accumulate_scores(random_score, IoU3D)
 
             highest_score = np.argmax(IoU3D)
+            highest_3DIoU = IoU3D[highest_score]
             pred_cube = pred_cubes[highest_score]
             pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
             gt_cube_meshes.append(gt_cube.get_cube().__getitem__(0).detach())
@@ -543,7 +541,27 @@ class ROIHeads_Boxer(StandardROIHeads):
             # stats
             sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
             stats_image[i] = stats_instance
+            nested_list = [[highest_3DIoU],abs(gt_cube.center.numpy()-pred_cube.center.numpy())/stats_ranges[:3],abs(gt_cube.dimensions.numpy()-pred_cube.dimensions.numpy())/stats_ranges[3:6],abs(util.mat2euler(gt_cube.rotation)-util.mat2euler(pred_cube.rotation))/stats_ranges[6:]]
+            stats_off[i] = [item for sublist in nested_list for item in sublist]
+            stats_improv_tmp = []
+            for j in range(3):
+                pred_cube_copy = pred_cube
+                pred_cube_copy.center[j] = gt_cube.center[j]
+                stats_improv_tmp.append(iou_3d(gt_cube, [pred_cube_copy]).cpu().numpy() - highest_3DIoU)
+            for j in range(3):
+                pred_cube_copy = pred_cube
+                pred_cube_copy.dimensions[j] = gt_cube.dimensions[j]
+                stats_improv_tmp.append(iou_3d(gt_cube, [pred_cube_copy]).cpu().numpy() - highest_3DIoU)
+            gt_angles = util.mat2euler(gt_cube.rotation)
+            for j in range(3):
+                pred_cube_copy = pred_cube
+                angles = util.mat2euler(pred_cube_copy.rotation)
+                angles[j] = gt_angles[j]
+                pred_cube_copy.rotation = torch.tensor(util.euler2mat(angles))
+                stats_improv_tmp.append(iou_3d(gt_cube, [pred_cube_copy]).cpu().numpy() - highest_3DIoU)
+            stats_off_impro[i] = np.array(stats_improv_tmp).reshape((9,))
 
+        
         # ################
         
         score_IoU2D    = np.mean(score_IoU2D, axis=0)
@@ -560,7 +578,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             return pred_cube_meshes, None
         else:
             if output_recall_scores:
-                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes, stats_image
+                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes, stats_image, stats_off, stats_off_impro
             return pred_cube_meshes
         
     def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, features, instances, Ks, im_current_dims, im_scales_ratio, output_recall_scores, targets):
