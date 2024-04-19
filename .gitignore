@@ -1,4 +1,5 @@
 # folders or files
+detectron2/
 datasets/*
 testing/image_2
 training/image_2
