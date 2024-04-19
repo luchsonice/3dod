@@ -56,9 +56,9 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     x *= 1.3
     y *= 1.4
     x_width = torch.max(x) - torch.min(x)
-    x = sample_normal_greater_than_para(torch.min(x) + x_width/2, torch.std(x), torch.min(x),torch.max(x), number_of_proposals) # TODO Run without limits
+    x = sample_normal_greater_than_para(torch.min(x) + x_width/2, torch.std(x)*1.3, torch.tensor(-10),torch.tensor(10), number_of_proposals) # TODO Run without limits
     y_width = torch.max(y) - torch.min(y)
-    y = sample_normal_greater_than_para(torch.min(y) + y_width/2, torch.std(y), torch.min(y),torch.max(y), number_of_proposals)
+    y = sample_normal_greater_than_para(torch.min(y) + y_width/2, torch.std(y)*1.2, torch.min(y),torch.tensor(10), number_of_proposals)
     xyz = torch.stack([x, y, z], 1)
     
     """
@@ -74,11 +74,13 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     """
     
     # Pose
+    rotation_matrix = []
     if ground_normal is None:
         rotation_matrix = utils.randn_orthobasis_torch(1).squeeze(0)
     else:
-        angles = np.linspace(0, 2*np.pi, 72) # 5 degree steps
-        rotation_matrix = torch.from_numpy(utils.orthobasis_from_normal(ground_normal, np.random.choice(angles)).astype(np.float32))
+        angles = np.linspace(0, np.pi, 36) # 5 degree steps
+        for i in range(number_of_proposals):
+            rotation_matrix.append(torch.from_numpy(utils.orthobasis_from_normal(ground_normal, np.random.choice(angles)).astype(np.float32)))
 
     # Check whether it is possible to find gt
     # if not (gt_cube == None) and not is_gt_included(gt_cube,x_range, y_range, z_range, w_prior, h_prior, l_prior):
@@ -88,7 +90,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     list_of_cubes = []
 
     for i in range(number_of_proposals):
-        pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrix)
+        pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrix[i])
         list_of_cubes.append(pred_cube)
     
     # Statistics
@@ -104,5 +106,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     stat_rz = gt_in_norm_range(torch.tensor([-np.pi,np.pi]),torch.tensor(angles[2]))
 
     stats = torch.tensor([stat_x,stat_y,stat_z,stat_w,stat_h,stat_l,stat_rx,stat_ry,stat_rz])
+    
+    ranges = np.array([torch.std(x)*1.3,torch.std(y)*1.2,torch.std(z)*1.2,w_prior[1],h_prior[1],l_prior[1],np.pi,np.pi,np.pi])
 
-    return list_of_cubes, stats
+    return list_of_cubes, stats, ranges

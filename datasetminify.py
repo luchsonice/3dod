@@ -17,9 +17,10 @@ def minify_dataset(path, num_images=10):
     with open(path.replace('.json', '_mini.json'), 'w') as f:
         json.dump(new_file, f)
 
-minify_dataset('datasets/Omni3D/SUNRGBD_test.json', 15)
-minify_dataset('datasets/Omni3D/SUNRGBD_train.json', 15)
-minify_dataset('datasets/Omni3D/SUNRGBD_val.json', 15)
+n_images = 10
+minify_dataset('datasets/Omni3D/SUNRGBD_test.json', n_images)
+minify_dataset('datasets/Omni3D/SUNRGBD_train.json', n_images)
+minify_dataset('datasets/Omni3D/SUNRGBD_val.json', n_images)
 
 # def minify_dataset_idx(path, idx):
 #     with open(path, 'r') as f:

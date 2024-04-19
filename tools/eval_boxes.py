@@ -121,8 +121,9 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
 
         outputs = []
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
+            #if i>0:break
             output = model(inputs, segmentor, output_recall_scores)
-            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes, stats
+            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes, stats_im, stats_off, stats_off_impro
             if output is not None:
                 outputs.append(output)
 
@@ -169,11 +170,33 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.figure(figsize=(15, 15))
         for i,title in enumerate(titles):
             plt.subplot(3, 3, 1+i)
-            plt.hist(stats[:,i].numpy(), bins=num_bins, color='darkslategrey', density=True)
+            plt.hist(stats[:,i].numpy(), bins=num_bins, color='darkslategrey')
             plt.axvline(x=0, color='red')
             plt.axvline(x=1, color='red')
             plt.title(title)
         f_name = os.path.join('ProposalNetwork/output/MABO', 'stats.png')
+        plt.savefig(f_name, dpi=300, bbox_inches='tight')
+        plt.close()
+        print('saved to ', f_name)
+
+        stats_off = np.concatenate([np.array(sublist) for sublist in (x[9] for x in outputs)])
+        plt.figure(figsize=(15, 15))
+        for i,title in enumerate(titles):
+            plt.subplot(3, 3, 1+i)
+            plt.scatter(stats_off[:,1+i],stats_off[:,0])
+            plt.title(title)
+        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_off.png')
+        plt.savefig(f_name, dpi=300, bbox_inches='tight')
+        plt.close()
+        print('saved to ', f_name)
+
+        stats_off_impro = np.concatenate([np.array(sublist) for sublist in (x[10] for x in outputs)])
+        plt.figure(figsize=(15, 15))
+        for i,title in enumerate(titles):
+            plt.subplot(3, 3, 1+i)
+            plt.scatter(stats_off[:,1+i],stats_off_impro[:,i])
+            plt.title(title)
+        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_off_impro.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         print('saved to ', f_name)
@@ -183,7 +206,9 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         for i , _ in enumerate(outputs):
             p_info = outputs[i][0]
             pred_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[i] for i in p_info.gt_box_classes[:len(p_info.gt_boxes3D)]]
-            box_size = p_info.gt_boxes3D.shape[0]
+            box_size = len(p_info.pred_cube_meshes)
+            for _ in range(box_size-len(pred_box_classes_names)):
+                pred_box_classes_names.append('')
             colors = [np.concatenate([np.random.random(3), np.array([0.6])], axis=0) for _ in range(box_size)]
             fig, (ax, ax1) = plt.subplots(2,1, figsize=(14, 10))
             input = next(d_iter)[0]
@@ -199,11 +224,12 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
             img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, p_info.K, p_info.pred_cube_meshes,text=pred_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
             vis_img_3d = img_3DPR.astype(np.uint8)
             vis_img_3d = show_mask2(p_info.mask_per_image.cpu().numpy(), vis_img_3d, random_color=colors)
+            
             ax.set_title('Predicted')
             # expand_img_novel to have alpha channel
             img_novel = np.concatenate((img_novel, np.ones_like(img_novel[:,:,0:1])*255), axis=-1)/255
             ax.imshow(np.concatenate((vis_img_3d, img_novel), axis=1))
-
+            box_size = len(p_info.gt_cube_meshes)
             gt_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[i] for i in p_info.gt_box_classes]
             img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, p_info.K, p_info.gt_cube_meshes,text=gt_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
             vis_img_3d = img_3DPR.astype(np.uint8)
