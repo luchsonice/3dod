@@ -1,7 +1,7 @@
 import os
 from detectron2.data.catalog import MetadataCatalog
 import numpy as np
-from ProposalNetwork.proposals.proposals import setup_depth_model, depth_of_images
+from ProposalNetwork.proposals.playground import setup_depth_model, depth_of_images
 from PIL import Image
 
 from cubercnn import data
