@@ -2,6 +2,7 @@ from matplotlib import pyplot as plt
 import pyransac3d as pyrsc
 #import open3d as o3d
 from ProposalNetwork.utils import utils
+import copy
 
 from dataclasses import dataclass
 import logging
@@ -456,7 +457,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         z = np.array(dp_map)
         # normalise the points
         points = np.stack((np.multiply(x, z/2), np.multiply(y, z/2), z), axis=-1).reshape(-1, 3)
-        colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth]).reshape(-1, 3) / 255.0
+        #colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth]).reshape(-1, 3) / 255.0
         plane = pyrsc.Plane()
         # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
         best_eq, best_inliers = plane.fit(points, thresh=0.05, maxIteration=1000)
@@ -542,21 +543,21 @@ class ROIHeads_Boxer(StandardROIHeads):
             stats_off[i] = [item for sublist in nested_list for item in sublist]
             stats_improv_tmp = []
             for j in range(3):
-                pred_cube_copy = pred_cube
+                pred_cube_copy = copy.deepcopy(pred_cube)
                 pred_cube_copy.center[j] = gt_cube.center[j]
                 stats_improv_tmp.append(iou_3d(gt_cube, [pred_cube_copy]).cpu().numpy() - highest_3DIoU)
             for j in range(3):
-                pred_cube_copy = pred_cube
+                pred_cube_copy = copy.deepcopy(pred_cube)
                 pred_cube_copy.dimensions[j] = gt_cube.dimensions[j]
                 stats_improv_tmp.append(iou_3d(gt_cube, [pred_cube_copy]).cpu().numpy() - highest_3DIoU)
             gt_angles = util.mat2euler(gt_cube.rotation)
             for j in range(3):
-                pred_cube_copy = pred_cube
+                pred_cube_copy = copy.deepcopy(pred_cube)
                 angles = util.mat2euler(pred_cube_copy.rotation)
                 angles[j] = gt_angles[j]
                 pred_cube_copy.rotation = torch.tensor(util.euler2mat(angles))
                 stats_improv_tmp.append(iou_3d(gt_cube, [pred_cube_copy]).cpu().numpy() - highest_3DIoU)
-            stats_off_impro[i] = np.array(stats_improv_tmp).reshape((9,))
+            stats_off_impro[i] = np.squeeze(np.array(stats_improv_tmp))
 
         
         # ################
