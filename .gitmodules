@@ -3,4 +3,4 @@
 	url = https://github.com/facebookresearch/segment-anything.git
 [submodule "GroundingDINO"]
 	path = GroundingDINO
-	url = https://github.com/IDEA-Research/GroundingDINO.git
+	url = https://github.com/AndreasLH/GroundingDINO
