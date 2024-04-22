@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import pandas as pd
 import torch
 import torchvision.transforms as T2
 from matplotlib import pyplot as plt
@@ -134,6 +135,8 @@ BOX_TRESHOLD = 0.35
 TEXT_TRESHOLD = 0.25
 
 noground = 0
+no_ground_idx = []
+
 
 for img_id, img_info in track(datasets.imgs.items()):
     file_path = img_info['file_path']
@@ -154,7 +157,7 @@ for img_id, img_info in track(datasets.imgs.items()):
         print(f"No ground found for {img_id}")
         noground += 1
         # save a ground map that is all zeros
-        np.savez_compressed(f'datasets/ground_maps/{img_id}.npz', mask=np.zeros((height, width)))
+        no_ground_idx.append(img_id)
         continue
     # only want box corresponding to max logit
     max_logit_idx = torch.argmax(logits)
@@ -177,3 +180,7 @@ for img_id, img_info in track(datasets.imgs.items()):
     np.savez_compressed(f'datasets/ground_maps/{img_id}.npz', mask=mask_per_image.cpu()[0,0,:,:].numpy())
 
 print(f"Could not find ground for {noground} images")
+
+
+df = pd.DataFrame(no_ground_idx, columns=['img_id'])
+df.to_csv('datasets/no_ground_idx.csv', index=False)
