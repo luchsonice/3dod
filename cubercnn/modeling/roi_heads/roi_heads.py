@@ -26,7 +26,7 @@ from detectron2.modeling.roi_heads import (
 )
 from detectron2.modeling.poolers import ROIPooler
 from ProposalNetwork.proposals.proposals import propose
-from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_segmentation
+from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation
 from ProposalNetwork.utils.conversions import cube_to_box
 from ProposalNetwork.utils.spaces import Box, Cube
 from ProposalNetwork.utils.utils import iou_3d
@@ -272,11 +272,16 @@ class ROIHeads_Boxer(StandardROIHeads):
             #     pred_classes = instances_i.pred_classes[keep]
 
             def object_masks(img):
-                img = img / 255.0
-                height, width = img.shape[1:]
-                im_in = segmentor.transform.apply_image_torch(img.unsqueeze(0))
-                segmentor.set_torch_image(im_in, (height, width))
-                transformed_boxes = segmentor.transform.apply_boxes_torch(instance.gt_boxes.tensor, (height, width))      
+
+                img = np.array(img.permute(1, 2, 0).cpu())
+                segmentor.set_image(img)
+                transformed_boxes = segmentor.transform.apply_boxes_torch(instance.gt_boxes.tensor, images_raw.tensor.shape[2:])
+                    
+                # img = img / 255.0
+                # height, width = img.shape[1:]
+                # im_in = segmentor.transform.apply_image_torch(img.unsqueeze(0))
+                # segmentor.set_torch_image(im_in, (height, width))
+                # transformed_boxes = segmentor.transform.apply_boxes_torch(instance.gt_boxes.tensor, (height, width))      
                 mask_per_image, _, _ = segmentor.predict_torch(
                     point_coords=None, point_labels=None, boxes=transformed_boxes, multimask_output=False,)
                 return mask_per_image
@@ -456,13 +461,16 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         if ground_maps is not None:
         # select only the points in x,y,z that are part of the ground map
-            z = z[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
-            x = x[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
-            y = y[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
+            zg = z[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
+            xg = x[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
+            yg = y[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
             # im = images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu().numpy()[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
+        else:
+            zg = z; xg = x; yg = y
 
         # normalise the points
-        points = np.stack((np.multiply(x, z/2), np.multiply(y, z/2), z), axis=-1).reshape(-1, 3)
+        points_all = np.stack((np.multiply(x, z/2), np.multiply(y, z/2), z), axis=-1).reshape(-1, 3)
+        points = np.stack((np.multiply(xg, zg/2), np.multiply(yg, zg/2), zg), axis=-1).reshape(-1, 3)
         # colors = im.reshape(-1, 3) / 255.0
         #colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth]).reshape(-1, 3) / 255.0
         plane = pyrsc.Plane()
@@ -527,12 +535,13 @@ class ROIHeads_Boxer(StandardROIHeads):
             
             # scoring
             IoU2D_scores = score_iou(cube_to_box(gt_cube, Ks_scaled_per_box), pred_boxes)
+            point_cloud_scores = score_point_cloud(torch.from_numpy(points_all), pred_cubes)
             #segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), bube_corners)
             #dim_scores = score_dimensions(priors, dimensions)
             #combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
             random_score = np.random.rand(number_of_proposals)
             
-            score_IoU2D[i,:] = accumulate_scores(IoU2D_scores, IoU3D)
+            score_IoU2D[i,:] = accumulate_scores(IoU2D_scores.numpy(), IoU3D)
             #score_seg[i,:] = accumulate_scores(segment_scores, IoU3D)
             #score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
             #score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
