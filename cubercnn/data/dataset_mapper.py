@@ -119,6 +119,14 @@ class DatasetMapper3D(DatasetMapper):
         dataset_dict["depth_map"] = torch.as_tensor(np.ascontiguousarray(dp_img))
         image_shape = image.shape[:2]  # h, w
 
+        # ground image
+        if 'ground_image_path' in dataset_dict:
+            ground_img = Image.fromarray(np.load(dataset_dict["ground_image_path"])['mask'])
+            ground_img = np.array(ground_img.resize(image.shape[:2][::-1], Image.NEAREST))
+            dataset_dict["ground_map"] = torch.as_tensor(np.ascontiguousarray(ground_img))
+        else:
+            dataset_dict["ground_map"] = None
+
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
         # Therefore it's important to use torch.Tensor.

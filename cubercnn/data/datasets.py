@@ -6,6 +6,7 @@ import contextlib
 import io
 import logging
 import numpy as np
+import pandas as pd
 from pycocotools.coco import COCO
 from collections import defaultdict
 from fvcore.common.timer import Timer
@@ -148,6 +149,8 @@ class Omni3D(COCO):
         # load dataset
         self.dataset,self.anns,self.cats,self.imgs = dict(),dict(),dict(),dict()
         self.imgToAnns, self.catToImgs = defaultdict(list), defaultdict(list)
+
+        self.idx_without_ground = set(pd.read_csv('datasets/no_ground_idx.csv')['img_id'].values)
        
         if isinstance(annotation_files, str):
             annotation_files = [annotation_files,]
@@ -279,6 +282,8 @@ class Omni3D(COCO):
             for img in self.dataset['images']:
                 img_id = img['id']
                 img['depth_image_path'] = f'datasets/depth_maps/{img_id}.npz'
+                if not img_id in self.idx_without_ground:
+                    img['ground_image_path'] = f'datasets/ground_maps/{img_id}.npz'
 
         self.createIndex()
 
@@ -403,6 +408,7 @@ def load_omni3d_json(json_file, image_root, dataset_name, filter_settings, filte
         image_id = record["image_id"] = img_dict["id"]
 
         record["depth_image_path"] = f'datasets/depth_maps/{image_id}.npz'
+        record["ground_image_path"] = f'datasets/ground_maps/{image_id}.npz'
         objs = []
         # where invalid annotations are removed
         for anno in anno_dict_list:
