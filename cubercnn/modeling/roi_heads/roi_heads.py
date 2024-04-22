@@ -272,6 +272,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             #     pred_classes = instances_i.pred_classes[keep]
 
             def object_masks(img):
+                img = img / 255.0
                 height, width = img.shape[1:]
                 im_in = segmentor.transform.apply_image_torch(img.unsqueeze(0))
                 segmentor.set_torch_image(im_in, (height, width))
@@ -393,6 +394,16 @@ class ROIHeads_Boxer(StandardROIHeads):
         return proposal_boxes_scaled
     
     def _forward_cube_as_mesh(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, output_recall_scores, targets):
+
+        # send all objects to cpu
+        images_raw = images_raw.to('cpu')
+        mask_per_image = [mask.to('cpu') for mask in mask_per_image]
+        depth_maps = depth_maps.to('cpu')
+        if ground_maps is not None:
+            ground_maps = ground_maps.to('cpu')
+        Ks = [K.to('cpu') for K in Ks]
+        targets = [target.to('cpu') for target in targets]
+
         
         def accumulate_scores(scores, IoU3D):
             idx = np.argsort(scores)[::-1]
@@ -403,7 +414,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         @dataclass
         class Plotinfo:
             '''simple dataclass to store plot information access as Plotinfo.x
-            fields: pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image'''
+            fields: pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, K'''
             pred_cube_meshes: List
             gt_cube_meshes: List
             gt_boxes3D: List
@@ -448,7 +459,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             z = z[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
             x = x[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
             y = y[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
-            im = images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu().numpy()[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
+            # im = images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu().numpy()[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
 
         # normalise the points
         points = np.stack((np.multiply(x, z/2), np.multiply(y, z/2), z), axis=-1).reshape(-1, 3)
@@ -458,7 +469,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
         best_eq, best_inliers = plane.fit(points, thresh=0.05, maxIteration=1000)
         normal_vec = np.array(best_eq[:-1])
-        
+
         #normal_vec = np.array([normal_vec[1], normal_vec[0], normal_vec[2]])
         x_up = np.array([1,0,0])
         y_up = np.array([0,1,0])
@@ -506,7 +517,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             
             # transfer pred_cubes to device
             pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
-            pred_boxes = [cube_to_box(pred_cube, Ks_scaled_per_box) for pred_cube in pred_cubes]
+            pred_boxes = Boxes(torch.cat([cube_to_box(pred_cube, Ks_scaled_per_box).box.tensor for pred_cube in pred_cubes]))
             # iou
             IoU3D = iou_3d(gt_cube, pred_cubes).cpu().numpy()
             pred_cubes = [pred_cube.to_device('cpu') for pred_cube in pred_cubes]
@@ -515,13 +526,13 @@ class ROIHeads_Boxer(StandardROIHeads):
             
             # scoring
             IoU2D_scores = score_iou(cube_to_box(gt_cube, Ks_scaled_per_box), pred_boxes)
-            segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), bube_corners)
+            # segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), bube_corners)
             dim_scores = score_dimensions(priors, dimensions)
-            combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
+            combined_score = np.array(IoU2D_scores)*np.array(dim_scores) # * np.array(segment_scores)*
             random_score = np.random.rand(number_of_proposals)
             
-            score_IoU2D[i,:] = accumulate_scores(IoU2D_scores, IoU3D)
-            score_seg[i,:] = accumulate_scores(segment_scores, IoU3D)
+            score_IoU2D[i,:] = accumulate_scores(IoU2D_scores.numpy(), IoU3D)
+            # score_seg[i,:] = accumulate_scores(segment_scores, IoU3D)
             score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
             score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
             score_random[i,:] = accumulate_scores(random_score, IoU3D)
@@ -557,7 +568,6 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         
         # ################
-        
         score_IoU2D    = np.mean(score_IoU2D, axis=0)
         score_seg      = np.mean(score_seg, axis=0)
         score_dim      = np.mean(score_dim, axis=0)

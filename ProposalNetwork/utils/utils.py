@@ -201,10 +201,7 @@ def iou_2d(gt_box, proposal_boxes):
     gt_box: Box
     proposal_box: list of Box
     '''
-    IoU = []
-    for i in range(len(proposal_boxes)):
-        proposal_box = proposal_boxes[i]
-        IoU.append(pairwise_iou(gt_box.box,proposal_box.box)[0][0].item())
+    IoU = pairwise_iou(gt_box.box,proposal_boxes).flatten()
     return IoU
 
 def iou_3d(gt_cube, proposal_cubes):

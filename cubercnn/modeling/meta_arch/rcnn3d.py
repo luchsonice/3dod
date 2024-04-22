@@ -269,7 +269,7 @@ class BoxNet(RCNN3D):
         """
         Normalize, pad and batch the input images.
         """
-        images = [self._move_to_current_device(x[img_type]) for x in batched_inputs if img_type in x]
+        images = [self._move_to_current_device(x[img_type]) for x in batched_inputs]
         if normalise:
             images = [(x - self.pixel_mean) / self.pixel_std for x in images]
         else:
@@ -340,7 +340,10 @@ class BoxNet(RCNN3D):
         images = self.preprocess_image(batched_inputs)
         images_raw = self.preprocess_image(batched_inputs, img_type='image', normalise=False, NoOp=True)
         depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False, NoOp=True)
-        ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
+        if batched_inputs[0]['ground_map'] is not None:
+            ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
+        else:
+            ground_maps = None
 
         # scaling factor for the sample relative to its original scale
         # e.g., how much has the image been upsampled by? or downsampled?

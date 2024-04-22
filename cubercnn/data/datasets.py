@@ -343,6 +343,7 @@ def load_omni3d_json(json_file, image_root, dataset_name, filter_settings, filte
     json_file = PathManager.get_local_path(json_file)
     with contextlib.redirect_stdout(io.StringIO()):
         coco_api = COCO(json_file)
+    no_ground_idx = set(pd.read_csv('datasets/no_ground_idx.csv')['img_id'].values)
     if timer.seconds() > 1:
         logger.info("Loading {} takes {:.2f} seconds.".format(json_file, timer.seconds()))
 
@@ -408,7 +409,8 @@ def load_omni3d_json(json_file, image_root, dataset_name, filter_settings, filte
         image_id = record["image_id"] = img_dict["id"]
 
         record["depth_image_path"] = f'datasets/depth_maps/{image_id}.npz'
-        record["ground_image_path"] = f'datasets/ground_maps/{image_id}.npz'
+        if not image_id in no_ground_idx:
+            record["ground_image_path"] = f'datasets/ground_maps/{image_id}.npz'
         objs = []
         # where invalid annotations are removed
         for anno in anno_dict_list:
