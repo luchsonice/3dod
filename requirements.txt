@@ -12,3 +12,8 @@ wheel
 ninja
 pytorch3d -f https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/py310_cu121_pyt210/download.html
 'git+https://github.com/facebookresearch/detectron2.git'
+
+rich
+scipy
+pandas
+pyransac3d
