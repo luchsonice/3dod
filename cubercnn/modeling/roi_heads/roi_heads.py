@@ -496,6 +496,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         stats_off      = np.zeros((n_gt, 10))
         stats_off_impro= np.zeros((n_gt, 9))
         # it is important that the zip is exhaustedd at the shortest length
+        
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
         for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
             # NOTE: the instance_i (the predicted 2D box) might not correspond to the correct gt_3d, gt_pose
@@ -519,15 +520,15 @@ class ROIHeads_Boxer(StandardROIHeads):
             
             # scoring
             IoU2D_scores = score_iou(cube_to_box(gt_cube, Ks_scaled_per_box), pred_boxes)
-            segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), bube_corners)
-            dim_scores = score_dimensions(priors, dimensions)
-            combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
+            #segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), bube_corners)
+            #dim_scores = score_dimensions(priors, dimensions)
+            #combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
             random_score = np.random.rand(number_of_proposals)
             
             score_IoU2D[i,:] = accumulate_scores(IoU2D_scores, IoU3D)
-            score_seg[i,:] = accumulate_scores(segment_scores, IoU3D)
-            score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
-            score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
+            #score_seg[i,:] = accumulate_scores(segment_scores, IoU3D)
+            #score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
+            #score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
             score_random[i,:] = accumulate_scores(random_score, IoU3D)
 
             highest_score = np.argmax(IoU3D)
@@ -558,14 +559,16 @@ class ROIHeads_Boxer(StandardROIHeads):
                 pred_cube_copy.rotation = torch.tensor(util.euler2mat(angles))
                 stats_improv_tmp.append(iou_3d(gt_cube, [pred_cube_copy]).cpu().numpy() - highest_3DIoU)
             stats_off_impro[i] = np.squeeze(np.array(stats_improv_tmp))
-
+        import os
+        f_name = os.path.join('ProposalNetwork/output/MABO', 'tmp.png')
+        plt.savefig(f_name, dpi=300, bbox_inches='tight')
         
         # ################
         
         score_IoU2D    = np.mean(score_IoU2D, axis=0)
-        score_seg      = np.mean(score_seg, axis=0)
-        score_dim      = np.mean(score_dim, axis=0)
-        score_combined = np.mean(score_combined, axis=0)
+        #score_seg      = np.mean(score_seg, axis=0)
+        #score_dim      = np.mean(score_dim, axis=0)
+        #score_combined = np.mean(score_combined, axis=0)
         score_random   = np.mean(score_random, axis=0)
 
         stat_empty_boxes = sum_percentage_empty_boxes/n_gt
