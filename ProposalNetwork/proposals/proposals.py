@@ -45,7 +45,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     h_prior = torch.tensor([priors[0][1], priors[1][1]], device=depth_image.device)
     l_prior = torch.tensor([priors[0][2], priors[1][2]], device=depth_image.device)
     w = sample_normal_greater_than_para(w_prior[0], w_prior[1], torch.tensor(0.05), w_prior[0] + 2 * w_prior[1], number_of_proposals)
-    h = sample_normal_greater_than_para(h_prior[0], h_prior[1], torch.tensor(0.05), h_prior[0] + 2 * h_prior[1], number_of_proposals)
+    h = sample_normal_greater_than_para(h_prior[0], h_prior[1]*1.1, torch.tensor(0.05), h_prior[0] + 2.2 * h_prior[1], number_of_proposals)
     l = sample_normal_greater_than_para(l_prior[0], l_prior[1], torch.tensor(0.05), l_prior[0] + 2 * l_prior[1], number_of_proposals)
     whl = torch.stack([w, h, l], 1)
 
@@ -53,12 +53,19 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     z = z_tmp+l
     z = sample_normal_greater_than_para(torch.median(z), torch.std(z) * 1.2, torch.tensor(-0.3),torch.tensor(100), number_of_proposals)
 
-    x *= 1.3
-    y *= 1.4
+    x *= 1.2
+    y *= 1.3
     x_width = torch.max(x) - torch.min(x)
-    x = sample_normal_greater_than_para(torch.min(x) + x_width/2, torch.std(x)*1.3, torch.tensor(-10),torch.tensor(10), number_of_proposals) # TODO Run without limits
+    x = sample_normal_greater_than_para(torch.min(x) + x_width/2, torch.std(x)*1.2, torch.tensor(-10),torch.tensor(10), number_of_proposals) # TODO Run without limits
     y_width = torch.max(y) - torch.min(y)
-    y = sample_normal_greater_than_para(torch.min(y) + y_width/2, torch.std(y)*1.2, torch.min(y),torch.tensor(10), number_of_proposals)
+
+    if y_range_px[1] > 400:
+        y = sample_normal_greater_than_para(torch.min(y) + 0.2 * y_width, torch.std(y)*0.7, torch.tensor(0),torch.tensor(3), number_of_proposals)
+    elif y_range_px[1] < 270:
+        y = sample_normal_greater_than_para(torch.min(y) + 0.75 * y_width, torch.std(y)*0.7, torch.min(y),torch.tensor(0), number_of_proposals)
+    else:
+        y = sample_normal_greater_than_para(torch.min(y) + y_width/2, torch.std(y), torch.min(y),torch.tensor(3), number_of_proposals)
+
     xyz = torch.stack([x, y, z], 1)
     
     """
@@ -92,21 +99,23 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     for i in range(number_of_proposals):
         pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrix[i])
         list_of_cubes.append(pred_cube)
-    
+
     # Statistics
     stat_x = gt_in_norm_range([torch.min(x),torch.max(x)],gt_cube.center[0])
     stat_y = gt_in_norm_range([torch.min(y),torch.max(y)],gt_cube.center[1])
+    #print([gt_cube.center[1].numpy()>=0,stat_y.item()])
+    #print([gt_cube.center[1].numpy()>=0,torch.mean(y).item(),gt_cube.center[1].item()])
     stat_z = gt_in_norm_range([torch.min(z),torch.max(z)],gt_cube.center[2])
     stat_w = gt_in_norm_range([torch.min(w),torch.max(w)],gt_cube.dimensions[0])
     stat_h = gt_in_norm_range([torch.min(h),torch.max(h)],gt_cube.dimensions[1])
     stat_l = gt_in_norm_range([torch.min(l),torch.max(l)],gt_cube.dimensions[2])
     angles = util.mat2euler(gt_cube.rotation)
-    stat_rx = gt_in_norm_range(torch.tensor([-np.pi,np.pi]),torch.tensor(angles[0]))
-    stat_ry = gt_in_norm_range(torch.tensor([-np.pi,np.pi]),torch.tensor(angles[1]))
-    stat_rz = gt_in_norm_range(torch.tensor([-np.pi,np.pi]),torch.tensor(angles[2]))
+    stat_rx = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[0]))
+    stat_ry = gt_in_norm_range(torch.tensor([0,np.pi/2]),torch.tensor(angles[1]))
+    stat_rz = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[2]))
 
     stats = torch.tensor([stat_x,stat_y,stat_z,stat_w,stat_h,stat_l,stat_rx,stat_ry,stat_rz])
     
-    ranges = np.array([torch.std(x)*1.3,torch.std(y)*1.2,torch.std(z)*1.2,w_prior[1],h_prior[1],l_prior[1],np.pi,np.pi,np.pi])
+    ranges = np.array([torch.std(x)*1.2,torch.std(y),torch.std(z)*1.2,w_prior[1],h_prior[1]*1.1,l_prior[1],np.pi,np.pi,np.pi])
 
     return list_of_cubes, stats, ranges
