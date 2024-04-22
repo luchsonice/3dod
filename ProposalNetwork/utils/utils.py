@@ -114,6 +114,7 @@ def is_box_included_in_other_box(reference_box, proposed_box):
 
 """
 # plotting
+import open3d as o3d
 def draw_vector(vector, color=(0, 0, 1)):
     # Create a LineSet object
     line_set = o3d.geometry.LineSet()
@@ -127,6 +128,21 @@ def draw_vector(vector, color=(0, 0, 1)):
 
     # Draw the LineSet
     return line_set
+
+pcd = o3d.geometry.PointCloud()
+pcd.points = o3d.utility.Vector3dVector(points)
+pcd.colors = o3d.utility.Vector3dVector(colors)
+# display normal vector in point cloud 
+plane = pcd.select_by_index(best_inliers).paint_uniform_color([1, 0, 0])
+not_plane = pcd.select_by_index(best_inliers, invert=True)
+mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(origin=[0, 0, 0])
+# X-axis : Red arrow
+# Y-axis : Green arrow
+# Z-axis : Blue arrow
+obb = plane.get_oriented_bounding_box()
+obb.color = [0, 0, 1]
+objs = [plane, not_plane, mesh, obb, utils.draw_vector(normal_vec)]
+o3d.visualization.draw_geometries(objs)
 """
 
 # ##things for making rotations
