@@ -572,9 +572,9 @@ class ROIHeads_Boxer(StandardROIHeads):
         
         # ################
         score_IoU2D    = np.mean(score_IoU2D, axis=0)
-        #score_seg      = np.mean(score_seg, axis=0)
-        #score_dim      = np.mean(score_dim, axis=0)
-        #score_combined = np.mean(score_combined, axis=0)
+        score_seg      = np.mean(score_seg, axis=0)
+        score_dim      = np.mean(score_dim, axis=0)
+        score_combined = np.mean(score_combined, axis=0)
         score_random   = np.mean(score_random, axis=0)
 
         stat_empty_boxes = sum_percentage_empty_boxes/n_gt
