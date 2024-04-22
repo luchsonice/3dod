@@ -202,7 +202,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             'scale_roi_boxes': cfg.MODEL.ROI_CUBE_HEAD.SCALE_ROI_BOXES,
         }
 
-    def forward(self, images, images_raw, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, output_recall_scores, targets=None):
+    def forward(self, images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, output_recall_scores, targets=None):
 
         im_dims = [image.shape[1:] for image in images]
 
@@ -301,7 +301,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             
             #filter out some invalid targets, TODO: this logic is already somewhere else, but I dont know where
             if output_recall_scores:
-                pred_instances = self._forward_cube_as_mesh(images, images_raw, masks, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets)
+                pred_instances = self._forward_cube_as_mesh(images, images_raw, masks, depth_maps, ground_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets)
                 # with ProcessPoolExecutor() as executor:
                 #     futures = [executor.submit(self._forward_cube_as_mesh, images, images_raw, mask, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets) for mask in masks]
                 #     pred_instances = [future.result() for future in futures]
@@ -392,7 +392,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         return proposal_boxes_scaled
     
-    def _forward_cube_as_mesh(self, images, images_raw, mask_per_image, depth_maps, features, instances, Ks, im_current_dims, im_scales_ratio, output_recall_scores, targets):
+    def _forward_cube_as_mesh(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, output_recall_scores, targets):
         
         def accumulate_scores(scores, IoU3D):
             idx = np.argsort(scores)[::-1]
@@ -442,8 +442,17 @@ class ROIHeads_Boxer(StandardROIHeads):
         x = (x - FINAL_WIDTH / 2) / focal_length_x
         y = (y - FINAL_HEIGHT / 2) / focal_length_y
         z = np.array(dp_map)
+
+        if ground_maps is not None:
+        # select only the points in x,y,z that are part of the ground map
+            z = z[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
+            x = x[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
+            y = y[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
+            im = images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu().numpy()[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
+
         # normalise the points
         points = np.stack((np.multiply(x, z/2), np.multiply(y, z/2), z), axis=-1).reshape(-1, 3)
+        # colors = im.reshape(-1, 3) / 255.0
         #colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth]).reshape(-1, 3) / 255.0
         plane = pyrsc.Plane()
         # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0

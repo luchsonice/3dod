@@ -269,7 +269,7 @@ class BoxNet(RCNN3D):
         """
         Normalize, pad and batch the input images.
         """
-        images = [self._move_to_current_device(x[img_type]) for x in batched_inputs]
+        images = [self._move_to_current_device(x[img_type]) for x in batched_inputs if img_type in x]
         if normalise:
             images = [(x - self.pixel_mean) / self.pixel_std for x in images]
         else:
@@ -340,6 +340,7 @@ class BoxNet(RCNN3D):
         images = self.preprocess_image(batched_inputs)
         images_raw = self.preprocess_image(batched_inputs, img_type='image', normalise=False, NoOp=True)
         depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False, NoOp=True)
+        ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
 
         # scaling factor for the sample relative to its original scale
         # e.g., how much has the image been upsampled by? or downsampled?
@@ -358,7 +359,7 @@ class BoxNet(RCNN3D):
         # proposals, _ = self.proposal_generator(images, features, gt_instances)
         features, proposals = None, None
         # use the mask and the 2D box to predict the 3D box
-        results = self.roi_heads(images, images_raw, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, output_recall_scores, gt_instances)
+        results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, output_recall_scores, gt_instances)
         return results
         
     def prediction(self,
@@ -371,6 +372,7 @@ class BoxNet(RCNN3D):
         images = self.preprocess_image(batched_inputs)
         images_raw = self.preprocess_image(batched_inputs, img_type='image', normalise=False, NoOp=True)
         depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False)
+        ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False)
 
         # scaling factor for the sample relative to its original scale
         # e.g., how much has the image been upsampled by? or downsampled?
@@ -388,7 +390,7 @@ class BoxNet(RCNN3D):
         # normal inference
         proposals, _ = self.proposal_generator(images, features, gt_instances)
         # use the mask and the 2D box to predict the 3D box
-        results = self.roi_heads(images, images_raw, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, output_recall_scores, gt_instances)
+        results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, output_recall_scores, gt_instances)
         
         # postprocess the images to be the same shape as the original
         if do_postprocess:
