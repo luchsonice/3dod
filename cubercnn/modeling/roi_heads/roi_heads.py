@@ -271,6 +271,14 @@ class ROIHeads_Boxer(StandardROIHeads):
             #     pred_scores = instances_i.scores[keep]
             #     pred_classes = instances_i.pred_classes[keep]
 
+            def object_masks(img):
+                height, width = img.shape[1:]
+                im_in = segmentor.transform.apply_image_torch(img.unsqueeze(0))
+                segmentor.set_torch_image(im_in, (height, width))
+                transformed_boxes = segmentor.transform.apply_boxes_torch(instance.gt_boxes.tensor, (height, width))      
+                mask_per_image, _, _ = segmentor.predict_torch(
+                    point_coords=None, point_labels=None, boxes=transformed_boxes, multimask_output=False,)
+                return mask_per_image
 
             # mask for each proposal
             # NOTE: at the the moment the this assumes a batch size of 1, since the test loader has it hardcoded
@@ -280,36 +288,15 @@ class ROIHeads_Boxer(StandardROIHeads):
                 pred_instances = None
                 masks = []
                 for img, instance in zip(images_raw.tensor, targets): # over all images in batch
-                    mask_per_image = torch.zeros((len(instance), 1, images_raw.tensor.shape[2], images_raw.tensor.shape[3]))
-                    img = np.array(img.permute(1, 2, 0).cpu())
-
-                    # shrink boxes width and heigth by x %
-                    # x = 0.05
-                    # boxes = instance.gt_boxes.tensor
-                    # boxes[:, 0] += x * (boxes[:, 2] - boxes[:, 0])
-                    # boxes[:, 1] += x * (boxes[:, 3] - boxes[:, 1])
-                    # boxes[:, 2] -= x * (boxes[:, 2] - boxes[:, 0])
-                    # boxes[:, 3] -= x * (boxes[:, 3] - boxes[:, 1])           
-
-                    segmentor.set_image(img)
-                    transformed_boxes = segmentor.transform.apply_boxes_torch(instance.gt_boxes.tensor, images_raw.tensor.shape[2:])
-                    mask_per_image, _, _ = segmentor.predict_torch(
-                        point_coords=None, point_labels=None, boxes=transformed_boxes, multimask_output=False,)
+                    mask_per_image = object_masks(img)
                     masks.append(mask_per_image)
             else:
                 pred_instances = None # TODO: remove
                 masks = []
-                # TODO: change back to use the pred_instances
                 for img, instance in zip(images_raw.tensor, targets): # over all images in batch
+                # TODO: change back to use the pred_instances instead of targets
                 # for img, instance in zip(images_raw.tensor, pred_instances): # over all images in batch
-                    mask_per_image = torch.zeros((len(instance), 1, images_raw.tensor.shape[2], images_raw.tensor.shape[3]))
-                    img = np.array(img.permute(1, 2, 0).cpu())
-
-                    segmentor.set_image(img)
-                    transformed_boxes = segmentor.transform.apply_boxes_torch(instance.gt_boxes.tensor, images_raw.tensor.shape[2:])
-                    # transformed_boxes = segmentor.transform.apply_boxes_torch(instance.pred_boxes.tensor, images_raw.tensor.shape[2:])
-                    mask_per_image, _, _ = segmentor.predict_torch(
-                        point_coords=None, point_labels=None, boxes=transformed_boxes, multimask_output=False,)
+                    mask_per_image = object_masks(img)
                     masks.append(mask_per_image)
             
             #filter out some invalid targets, TODO: this logic is already somewhere else, but I dont know where
