@@ -541,7 +541,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             #combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
             random_score = np.random.rand(number_of_proposals)
             
-            score_IoU2D[i,:] = accumulate_scores(IoU2D_scores.numpy(), IoU3D)
+            score_IoU2D[i,:] = accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)
             #score_seg[i,:] = accumulate_scores(segment_scores, IoU3D)
             #score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
             #score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
@@ -581,9 +581,9 @@ class ROIHeads_Boxer(StandardROIHeads):
         
         # ################
         score_IoU2D    = np.mean(score_IoU2D, axis=0)
-        #score_seg      = np.mean(score_seg, axis=0)
-        #score_dim      = np.mean(score_dim, axis=0)
-        #score_combined = np.mean(score_combined, axis=0)
+        score_seg      = np.mean(score_seg, axis=0)
+        score_dim      = np.mean(score_dim, axis=0)
+        score_combined = np.mean(score_combined, axis=0)
         score_random   = np.mean(score_random, axis=0)
 
         stat_empty_boxes = sum_percentage_empty_boxes/n_gt
