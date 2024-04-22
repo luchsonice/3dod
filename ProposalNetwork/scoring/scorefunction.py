@@ -3,8 +3,32 @@ import numpy as np
 import cv2
 import pickle
 from scipy.stats import pearsonr 
+import ProposalNetwork.utils.spaces as spaces
 
 from ProposalNetwork.utils.utils import iou_2d, mask_iou, euler_to_unit_vector
+
+def score_point_cloud(point_cloud:torch.Tensor, cubes:list[spaces.Cube]):
+    '''
+    score the cube according to the density (number of points) of the point cloud in the cube
+    '''
+    # must normalise the point cloud to have the same density for the entire depth
+
+    for cube in cubes:
+        verts = cube.get_all_corners()
+        min_x, max_x = verts[:,0].min(), verts[:,0].max()
+        min_y, max_y = verts[:,1].min(), verts[:,1].max()
+        min_z, max_z = verts[:,2].min(), verts[:,2].max()
+        point_cloud_dens = (
+                            (point_cloud[:,0] > min_x) & 
+                            (point_cloud[:,0] < max_x) & 
+                            (point_cloud[:,1] > min_y) & 
+                            (point_cloud[:,1] < max_y) & 
+                            (point_cloud[:,2] > min_z) & 
+                            (point_cloud[:,2] < max_z))
+        score = point_cloud_dens.sum()
+    return score
+
+
 
 def score_iou(gt_box, proposal_box):
     IoU = iou_2d(gt_box,proposal_box)

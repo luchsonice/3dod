@@ -120,7 +120,10 @@ class Cube:
         return util.mesh_cuboid(torch.cat((self.center,self.dimensions)), self.rotation, color=color)
     
     def get_all_corners(self):
-        '''wrap ``util.get_cuboid_verts_faces``'''
+        '''wrap ``util.get_cuboid_verts_faces``
+        
+        Returns:
+            verts: the 3D vertices of the cuboid in camera space'''
         verts, _ = util.get_cuboid_verts_faces(torch.cat((self.center,self.dimensions)), self.rotation)
         return verts
     
