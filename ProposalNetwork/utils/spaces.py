@@ -132,6 +132,23 @@ class Cube:
         cube_corners = torch.mm(K, cube_corners.t()).t()
         return cube_corners[:,:2]/cube_corners[:,2].unsqueeze(1)
     
+    def get_volume(self) -> float:
+        return self.dimensions.prod().item()
+    
+    def get_projected_2d_area(self, K) -> float:
+        def cube_to_box(cube, K):
+            bube_corners = cube.get_bube_corners(K)
+    
+            min_x = torch.min(bube_corners[:,0])
+            max_x = torch.max(bube_corners[:,0])
+            min_y = torch.min(bube_corners[:,1])
+            max_y = torch.max(bube_corners[:,1])
+            
+            return Box(torch.tensor([min_x, min_y, max_x, max_y], device=cube.tensor.device))
+        area = cube_to_box(self, K).box.area()
+        return area
+
+    
     def __repr__(self) -> str:
         return f'Cube({self.center}, {self.dimensions}, {self.rotation})'
     

@@ -271,19 +271,24 @@ class ROIHeads_Boxer(StandardROIHeads):
             #     pred_scores = instances_i.scores[keep]
             #     pred_classes = instances_i.pred_classes[keep]
 
-            def object_masks(img):
-
+            def object_masks(img, instance):
+                img_org = img
                 img = np.array(img.permute(1, 2, 0).cpu())
                 segmentor.set_image(img)
-                transformed_boxes = segmentor.transform.apply_boxes_torch(instance.gt_boxes.tensor, images_raw.tensor.shape[2:])
-                    
+                transformed_boxes = segmentor.transform.apply_boxes_torch(instance.gt_boxes.tensor, img_org.shape[1:]) # Bx4
+                
                 # img = img / 255.0
                 # height, width = img.shape[1:]
                 # im_in = segmentor.transform.apply_image_torch(img.unsqueeze(0))
                 # segmentor.set_torch_image(im_in, (height, width))
-                # transformed_boxes = segmentor.transform.apply_boxes_torch(instance.gt_boxes.tensor, (height, width))      
+                # transformed_boxes = segmentor.transform.apply_boxes_torch(instance.gt_boxes.tensor, (height, width))
+                point_coords = Boxes(transformed_boxes).get_centers()
+                # reshape center to (B, N, 2)
+                point_coords = point_coords.unsqueeze(0).repeat(transformed_boxes.shape[0],1,1)
+                point_labels = torch.ones(point_coords.shape[:-1], dtype=torch.int64) # BxN
+
                 mask_per_image, _, _ = segmentor.predict_torch(
-                    point_coords=None, point_labels=None, boxes=transformed_boxes, multimask_output=False,)
+                    point_coords=point_coords, point_labels=point_labels, boxes=transformed_boxes, multimask_output=False,)
                 return mask_per_image
 
             # mask for each proposal
@@ -294,7 +299,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 pred_instances = None
                 masks = []
                 for img, instance in zip(images_raw.tensor, targets): # over all images in batch
-                    mask_per_image = object_masks(img)
+                    mask_per_image = object_masks(img, instance)
                     masks.append(mask_per_image)
             else:
                 pred_instances = None # TODO: remove
@@ -461,15 +466,18 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         if ground_maps is not None:
         # select only the points in x,y,z that are part of the ground map
-            zg = z[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
-            xg = x[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
-            yg = y[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
-            # im = images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu().numpy()[ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth] > 0]
+            ground = ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth]
+            zg = z[ground > 0]
+            xg = x[ground > 0]
+            yg = y[ground > 0]
+            # im = images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu().numpy()[ground > 0]
+            z_no_g = z[ground == 0]
+            x_no_g = x[ground == 0]
+            y_no_g = y[ground == 0]
         else:
             zg = z; xg = x; yg = y
 
         # normalise the points
-        points_all = np.stack((np.multiply(x, z/2), np.multiply(y, z/2), z), axis=-1).reshape(-1, 3)
         points = np.stack((np.multiply(xg, zg/2), np.multiply(yg, zg/2), zg), axis=-1).reshape(-1, 3)
         # colors = im.reshape(-1, 3) / 255.0
         #colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth]).reshape(-1, 3) / 255.0
@@ -477,6 +485,13 @@ class ROIHeads_Boxer(StandardROIHeads):
         # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
         best_eq, best_inliers = plane.fit(points, thresh=0.05, maxIteration=1000)
         normal_vec = np.array(best_eq[:-1])
+
+        # remove ground plane from the points that are fed to the scoring function
+        points_all = np.stack((np.multiply(x, z), np.multiply(y, z), z), axis=-1).reshape(-1, 3)
+        if ground_maps is not None:
+            points_no_ground = np.stack((np.multiply(x_no_g, z_no_g), np.multiply(y_no_g, z_no_g), z_no_g), axis=-1).reshape(-1, 3)
+        else:
+            points_no_ground = points_all
 
         #normal_vec = np.array([normal_vec[1], normal_vec[0], normal_vec[2]])
         x_up = np.array([1,0,0])
@@ -507,6 +522,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_dim      = np.zeros((n_gt, number_of_proposals))
         score_combined = np.zeros((n_gt, number_of_proposals))
         score_random   = np.zeros((n_gt, number_of_proposals))
+        score_point_c  = np.zeros((n_gt, number_of_proposals))
         stats_image    = torch.zeros(n_gt, 9)
         stats_off      = np.zeros((n_gt, 10))
         stats_off_impro= np.zeros((n_gt, 9))
@@ -535,20 +551,21 @@ class ROIHeads_Boxer(StandardROIHeads):
             
             # scoring
             IoU2D_scores = score_iou(cube_to_box(gt_cube, Ks_scaled_per_box), pred_boxes)
-            point_cloud_scores = score_point_cloud(torch.from_numpy(points_all), pred_cubes)
+            point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground), pred_cubes, Ks_scaled_per_box, mask_per_image[i][0])
             #segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), bube_corners)
             #dim_scores = score_dimensions(priors, dimensions)
             #combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
             random_score = np.random.rand(number_of_proposals)
             
             score_IoU2D[i,:] = accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)
-            #score_seg[i,:] = accumulate_scores(segment_scores, IoU3D)
-            #score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
-            #score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
+            score_point_c[i,:] = accumulate_scores(point_cloud_scores, IoU3D)
+            # score_seg[i,:] = accumulate_scores(segment_scores, IoU3D)
+            # score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
+            # score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
             score_random[i,:] = accumulate_scores(random_score, IoU3D)
 
-            highest_score = np.argmax(IoU3D)
-            highest_3DIoU = IoU3D[highest_score]
+            highest_score = np.argmax(IoU2D_scores)
+            highest_3DIoU = IoU3D.max()
             pred_cube = pred_cubes[highest_score]
             pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
             gt_cube_meshes.append(gt_cube.get_cube().__getitem__(0).detach())
@@ -575,9 +592,6 @@ class ROIHeads_Boxer(StandardROIHeads):
                 pred_cube_copy.rotation = torch.tensor(util.euler2mat(angles))
                 stats_improv_tmp.append(iou_3d(gt_cube, [pred_cube_copy]).cpu().numpy() - highest_3DIoU)
             stats_off_impro[i] = np.squeeze(np.array(stats_improv_tmp))
-        import os
-        f_name = os.path.join('ProposalNetwork/output/MABO', 'tmp.png')
-        plt.savefig(f_name, dpi=300, bbox_inches='tight')
         
         # ################
         score_IoU2D    = np.mean(score_IoU2D, axis=0)
@@ -585,6 +599,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_dim      = np.mean(score_dim, axis=0)
         score_combined = np.mean(score_combined, axis=0)
         score_random   = np.mean(score_random, axis=0)
+        score_point_c  = np.mean(score_point_c, axis=0)
 
         stat_empty_boxes = sum_percentage_empty_boxes/n_gt
 
@@ -594,7 +609,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             return pred_cube_meshes, None
         else:
             if output_recall_scores:
-                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes, stats_image, stats_off, stats_off_impro
+                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off, stats_off_impro
             return pred_cube_meshes
         
     def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, features, instances, Ks, im_current_dims, im_scales_ratio, output_recall_scores, targets):
