@@ -49,8 +49,8 @@ def init_segmentation(device='cpu'):
     # 2) chmod +x download_model.sh && ./download_model.sh
     # the largest model: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
     # this is the smallest model
-    sam_checkpoint = "segment-anything/sam_vit_b_01ec64.pth"
-    model_type = "vit_b"
+    sam_checkpoint = "sam-hq/sam_hq_vit_tiny.pth"
+    model_type = "vit_tiny"
     logger.info(f'SAM device: {device}')
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
@@ -121,7 +121,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
 
         outputs = []
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
-            #if i>0:break
+            #if i>9:break
             output = model(inputs, segmentor, output_recall_scores)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes, stats_im, stats_off, stats_off_impro
             if output is not None:
@@ -178,6 +178,21 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         print('saved to ', f_name)
+
+
+
+
+        tmp = np.concatenate([np.array(sublist) for sublist in (x[11] for x in outputs)])
+        print('x_stat mean',np.mean(tmp[:,0]))
+        plt.figure(figsize=(15, 15))
+        plt.scatter(tmp[:,1],tmp[:,0])
+        f_name = os.path.join('ProposalNetwork/output/MABO', 'tmp.png')
+        plt.savefig(f_name, dpi=300, bbox_inches='tight')
+        plt.close()
+        print('saved to ', f_name)
+
+
+
 
         stats_off = np.concatenate([np.array(sublist) for sublist in (x[9] for x in outputs)])
         plt.figure(figsize=(15, 15))
