@@ -51,21 +51,25 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
 
     # Finish z
     z = z_tmp+l
-    z = sample_normal_greater_than_para(torch.median(z), torch.std(z) * 1.2, torch.tensor(-0.3),torch.tensor(100), number_of_proposals)
+    z = sample_normal_greater_than_para(torch.median(z), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
 
-    x *= 1.2
+    x *= 1.1
     y *= 1.3
+
+    #print(f"{torch.min(x).item():.2f},{gt_cube.center[0].item():.2f},{torch.max(x).item():.2f}")
+    
     x_width = torch.max(x) - torch.min(x)
-    x = sample_normal_greater_than_para(torch.min(x) + x_width/2, torch.std(x)*1.2, torch.tensor(-10),torch.tensor(10), number_of_proposals) # TODO Run without limits
+    x = sample_normal_greater_than_para(torch.min(x) + 0.65 * x_width, torch.std(x)*0.8, torch.tensor(-10),torch.tensor(10), number_of_proposals) # TODO Run without limits
     y_width = torch.max(y) - torch.min(y)
 
     if y_range_px[1] > 400:
-        y = sample_normal_greater_than_para(torch.min(y) + 0.2 * y_width, torch.std(y)*0.7, torch.tensor(0),torch.tensor(3), number_of_proposals)
+        #print('400')
+        y = sample_normal_greater_than_para(torch.min(y) + 0.25 * y_width, torch.std(y)*0.7, torch.tensor(0),torch.tensor(3), number_of_proposals)
     elif y_range_px[1] < 270:
-        y = sample_normal_greater_than_para(torch.min(y) + 0.75 * y_width, torch.std(y)*0.7, torch.min(y),torch.tensor(0), number_of_proposals)
+        #print('270')
+        y = sample_normal_greater_than_para(torch.min(y) + 0.8 * y_width, torch.std(y)*0.7, torch.min(y),torch.tensor(0), number_of_proposals)
     else:
         y = sample_normal_greater_than_para(torch.min(y) + y_width/2, torch.std(y), torch.min(y),torch.tensor(3), number_of_proposals)
-
     xyz = torch.stack([x, y, z], 1)
     
     """
@@ -103,8 +107,6 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     # Statistics
     stat_x = gt_in_norm_range([torch.min(x),torch.max(x)],gt_cube.center[0])
     stat_y = gt_in_norm_range([torch.min(y),torch.max(y)],gt_cube.center[1])
-    #print([gt_cube.center[1].numpy()>=0,stat_y.item()])
-    #print([gt_cube.center[1].numpy()>=0,torch.mean(y).item(),gt_cube.center[1].item()])
     stat_z = gt_in_norm_range([torch.min(z),torch.max(z)],gt_cube.center[2])
     stat_w = gt_in_norm_range([torch.min(w),torch.max(w)],gt_cube.dimensions[0])
     stat_h = gt_in_norm_range([torch.min(h),torch.max(h)],gt_cube.dimensions[1])
@@ -118,4 +120,4 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     
     ranges = np.array([torch.std(x)*1.2,torch.std(y),torch.std(z)*1.2,w_prior[1],h_prior[1]*1.1,l_prior[1],np.pi,np.pi,np.pi])
 
-    return list_of_cubes, stats, ranges
+    return list_of_cubes, stats, ranges, [stat_x,gt_cube.center[0].item()]
