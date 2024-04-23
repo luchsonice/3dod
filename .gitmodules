@@ -4,3 +4,6 @@
 [submodule "GroundingDINO"]
 	path = GroundingDINO
 	url = https://github.com/AndreasLH/GroundingDINO
+[submodule "sam-hq"]
+	path = sam-hq
+	url = https://github.com/SysCV/sam-hq.git
