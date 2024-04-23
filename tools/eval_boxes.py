@@ -123,18 +123,20 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
             #if i>9:break
             output = model(inputs, segmentor, output_recall_scores)
-            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes, stats_im, stats_off, stats_off_impro
+            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off, stats_off_impro
             if output is not None:
                 outputs.append(output)
 
         # mean over all the outputs
-        Iou3D           = np.array([x[1] for x in outputs])
-        Iou2D           = np.array([x[2] for x in outputs])
-        score_seg       = np.array([x[3] for x in outputs])
-        score_dim       = np.array([x[4] for x in outputs])
-        score_combined  = np.array([x[5] for x in outputs])
-        score_random    = np.array([x[6] for x in outputs])
-        stat_empty_boxes= np.array([x[7] for x in outputs])
+        Iou3D             = np.array([x[1] for x in outputs])
+        Iou2D             = np.array([x[2] for x in outputs])
+        score_seg         = np.array([x[3] for x in outputs])
+        score_dim         = np.array([x[4] for x in outputs])
+        score_combined    = np.array([x[5] for x in outputs])
+        score_random      = np.array([x[6] for x in outputs])
+        score_point_cloud = np.array([x[7] for x in outputs])
+        stat_empty_boxes  = np.array([x[8] for x in outputs])
+
         print('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
 
         Iou3D = Iou3D.mean(axis=0)
@@ -143,6 +145,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         score_dim = score_dim.mean(axis=0)
         score_combined = score_combined.mean(axis=0)
         score_random = score_random.mean(axis=0)
+        score_point_cloud = score_point_cloud.mean(axis=0)
         total_num_instances = np.sum([x[0].gt_boxes3D.shape[0] for x in outputs])
                 
         plt.figure(figsize=(8,5))
@@ -151,6 +154,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.plot(score_seg, linestyle='-',c='purple',label='segment')
         plt.plot(Iou2D, linestyle='-',c='orange',label='2d IoU') 
         plt.plot(score_random, linestyle='-',c='grey',label='random') 
+        plt.plot(score_point_cloud, linestyle='-',c='green',label='point cloud')
         plt.grid(True)
         plt.xscale('log')
         plt.xlim(left=1)
@@ -164,7 +168,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         print('saved to ', f_name)
 
         # Statistics
-        stats = torch.cat([x[8] for x in outputs],dim=0)
+        stats = torch.cat([x[9] for x in outputs],dim=0)
         num_bins = 40
         titles = ['x','y','z','w','h','l','rx','ry','rz']
         plt.figure(figsize=(15, 15))
@@ -191,10 +195,15 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.close()
         print('saved to ', f_name)
 
-
-
-
-        stats_off = np.concatenate([np.array(sublist) for sublist in (x[9] for x in outputs)])
+        tmp = np.concatenate([np.array(sublist) for sublist in (x[11] for x in outputs)])
+        print('x_stat mean',np.mean(tmp[:,0]))
+        plt.figure(figsize=(15, 15))
+        plt.scatter(tmp[:,1],tmp[:,0])
+        f_name = os.path.join('ProposalNetwork/output/MABO', 'tmp.png')
+        plt.savefig(f_name, dpi=300, bbox_inches='tight')
+        plt.close()
+        print('saved to ', f_name)
+        stats_off = np.concatenate([np.array(sublist) for sublist in (x[10] for x in outputs)])
         plt.figure(figsize=(15, 15))
         for i,title in enumerate(titles):
             plt.subplot(3, 3, 1+i)
