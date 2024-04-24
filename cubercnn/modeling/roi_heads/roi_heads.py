@@ -510,6 +510,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         stats_image    = torch.zeros(n_gt, 9)
         stats_off      = np.zeros((n_gt, 10))
         stats_off_impro= np.zeros((n_gt, 9))
+        tmp = np.zeros((n_gt, 2))
         # it is important that the zip is exhaustedd at the shortest length
         
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
@@ -522,8 +523,9 @@ class ROIHeads_Boxer(StandardROIHeads):
             # ## end cpu region
 
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
-            pred_cubes, stats_instance, stats_ranges = propose(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_cube, ground_normal=normal_vec)
-            
+            pred_cubes, stats_instance, stats_ranges, tmps = propose(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_cube, ground_normal=normal_vec)
+            tmp[i] = [gt_cube.center[0],reference_box.center[0]]#tmps
+
             # transfer pred_cubes to device
             pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
             pred_boxes = Boxes(torch.cat([cube_to_box(pred_cube, Ks_scaled_per_box).box.tensor for pred_cube in pred_cubes]))
@@ -575,9 +577,6 @@ class ROIHeads_Boxer(StandardROIHeads):
                 pred_cube_copy.rotation = torch.tensor(util.euler2mat(angles))
                 stats_improv_tmp.append(iou_3d(gt_cube, [pred_cube_copy]).cpu().numpy() - highest_3DIoU)
             stats_off_impro[i] = np.squeeze(np.array(stats_improv_tmp))
-        import os
-        f_name = os.path.join('ProposalNetwork/output/MABO', 'tmp.png')
-        plt.savefig(f_name, dpi=300, bbox_inches='tight')
         
         # ################
         score_IoU2D    = np.mean(score_IoU2D, axis=0)
@@ -594,7 +593,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             return pred_cube_meshes, None
         else:
             if output_recall_scores:
-                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes, stats_image, stats_off, stats_off_impro
+                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes, stats_image, stats_off, stats_off_impro, tmp
             return pred_cube_meshes
         
     def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, features, instances, Ks, im_current_dims, im_scales_ratio, output_recall_scores, targets):
