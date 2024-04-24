@@ -49,19 +49,15 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     l = sample_normal_greater_than_para(l_prior[0], l_prior[1], torch.tensor(0.05), l_prior[0] + 2 * l_prior[1], number_of_proposals)
     whl = torch.stack([w, h, l], 1)
 
-    # Finish z
-    z = z_tmp+l
-    z = sample_normal_greater_than_para(torch.median(z), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
-
-    x *= 1.1
-    y *= 1.3
-
-    #print(f"{torch.min(x).item():.2f},{gt_cube.center[0].item():.2f},{torch.max(x).item():.2f}")
-    
+    # Finish center
+    # x
+    x *= 1.2
     x_width = torch.max(x) - torch.min(x)
-    x = sample_normal_greater_than_para(torch.min(x) + 0.65 * x_width, torch.std(x)*0.8, torch.tensor(-10),torch.tensor(10), number_of_proposals) # TODO Run without limits
+    x = sample_normal_greater_than_para(torch.min(x) + 0.6 * x_width, torch.std(x), torch.tensor(-10),torch.tensor(10), number_of_proposals) # TODO Run without limits
+    
+    # y
+    y *= 1.3
     y_width = torch.max(y) - torch.min(y)
-
     if y_range_px[1] > 400:
         #print('400')
         y = sample_normal_greater_than_para(torch.min(y) + 0.25 * y_width, torch.std(y)*0.7, torch.tensor(0),torch.tensor(3), number_of_proposals)
@@ -70,19 +66,12 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
         y = sample_normal_greater_than_para(torch.min(y) + 0.8 * y_width, torch.std(y)*0.7, torch.min(y),torch.tensor(0), number_of_proposals)
     else:
         y = sample_normal_greater_than_para(torch.min(y) + y_width/2, torch.std(y), torch.min(y),torch.tensor(3), number_of_proposals)
-    xyz = torch.stack([x, y, z], 1)
     
-    """
-    print(f"{torch.min(x).item():.2f},{torch.max(x).item():.2f},{torch.median(x).item():.2f}\033[1m,{gt_cube.center[0].item():.2f}\033[0m,{torch.mean(x).item():.2f}")
-    import matplotlib.pyplot as plt
-    import os
-    num_bins = 40
-    plt.figure(figsize=(15, 15))
-    plt.hist(x.numpy(), bins=num_bins, color='darkslategrey')
-    plt.axvline(x=gt_cube.center[0].item(), color='red')
-    plt.savefig(os.path.join('ProposalNetwork/output/MABO', 'tmp.png'), dpi=300, bbox_inches='tight')
-    plt.close()
-    """
+    # z
+    z = z_tmp+l
+    z = sample_normal_greater_than_para(torch.median(z), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
+
+    xyz = torch.stack([x, y, z], 1)
     
     # Pose
     rotation_matrix = []
@@ -99,7 +88,6 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
 
 
     list_of_cubes = []
-
     for i in range(number_of_proposals):
         pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrix[i])
         list_of_cubes.append(pred_cube)

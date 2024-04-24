@@ -1,3 +1,10 @@
+import warnings
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_512 in registry")
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_384 in registry")
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_224 in registry")
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_11m_224 in registry")
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_5m_224 in registry")
+
 # Copyright (c) Meta Platforms, Inc. and affiliates
 from contextlib import ExitStack
 import logging
@@ -121,7 +128,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
 
         outputs = []
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
-            #if i>9:break
+            #if i>2:break
             output = model(inputs, segmentor, output_recall_scores)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off, stats_off_impro
             if output is not None:
@@ -183,26 +190,6 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.close()
         print('saved to ', f_name)
 
-
-
-
-        tmp = np.concatenate([np.array(sublist) for sublist in (x[11] for x in outputs)])
-        print('x_stat mean',np.mean(tmp[:,0]))
-        plt.figure(figsize=(15, 15))
-        plt.scatter(tmp[:,1],tmp[:,0])
-        f_name = os.path.join('ProposalNetwork/output/MABO', 'tmp.png')
-        plt.savefig(f_name, dpi=300, bbox_inches='tight')
-        plt.close()
-        print('saved to ', f_name)
-
-        tmp = np.concatenate([np.array(sublist) for sublist in (x[11] for x in outputs)])
-        print('x_stat mean',np.mean(tmp[:,0]))
-        plt.figure(figsize=(15, 15))
-        plt.scatter(tmp[:,1],tmp[:,0])
-        f_name = os.path.join('ProposalNetwork/output/MABO', 'tmp.png')
-        plt.savefig(f_name, dpi=300, bbox_inches='tight')
-        plt.close()
-        print('saved to ', f_name)
         stats_off = np.concatenate([np.array(sublist) for sublist in (x[10] for x in outputs)])
         plt.figure(figsize=(15, 15))
         for i,title in enumerate(titles):
@@ -214,13 +201,22 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.close()
         print('saved to ', f_name)
 
-        stats_off_impro = np.concatenate([np.array(sublist) for sublist in (x[10] for x in outputs)])
+        stats_off_impro = np.concatenate([np.array(sublist) for sublist in (x[11] for x in outputs)])
         plt.figure(figsize=(15, 15))
         for i,title in enumerate(titles):
             plt.subplot(3, 3, 1+i)
             plt.scatter(stats_off[:,1+i],stats_off_impro[:,i])
             plt.title(title)
         f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_off_impro.png')
+        plt.savefig(f_name, dpi=300, bbox_inches='tight')
+        plt.close()
+        print('saved to ', f_name)
+
+        tmp = np.concatenate([np.array(sublist) for sublist in (x[12] for x in outputs)])
+        print('x_stat mean',np.mean(tmp[:,0]))
+        plt.figure(figsize=(15, 15))
+        plt.scatter(tmp[:,1],tmp[:,0])
+        f_name = os.path.join('ProposalNetwork/output/MABO', 'tmp.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         print('saved to ', f_name)

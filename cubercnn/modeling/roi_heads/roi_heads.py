@@ -548,8 +548,8 @@ class ROIHeads_Boxer(StandardROIHeads):
             # iou
             IoU3D = iou_3d(gt_cube, pred_cubes).cpu().numpy()
             pred_cubes = [pred_cube.to_device('cpu') for pred_cube in pred_cubes]
-            bube_corners = [pred_cubes[j].get_bube_corners(Ks_scaled_per_box.cpu()) for j in range(number_of_proposals)]
-            dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
+            #bube_corners = [pred_cubes[j].get_bube_corners(Ks_scaled_per_box.cpu()) for j in range(number_of_proposals)]
+            #dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
             
             # scoring
             IoU2D_scores = score_iou(cube_to_box(gt_cube, Ks_scaled_per_box), pred_boxes)
@@ -611,7 +611,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             return pred_cube_meshes, None
         else:
             if output_recall_scores:
-                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, stat_empty_boxes, stats_image, stats_off, stats_off_impro, tmp
+                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off, stats_off_impro, tmp
             return pred_cube_meshes
         
     def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, features, instances, Ks, im_current_dims, im_scales_ratio, output_recall_scores, targets):
