@@ -55,16 +55,16 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
         return coef[0] * x + coef[1]
     
     # x
-    x_coefficients = np.array([1.18312167, 0.0056523])
+    x_coefficients = np.array([1.15, 0])
     x = sample_normal_greater_than_para(fun(torch.median(x),x_coefficients), torch.std(x)*0.7, torch.tensor(-8),torch.tensor(8), number_of_proposals) # TODO Run without limits
     
     # y
-    y_coefficients  = np.array([1.14174714, -0.01602377])
+    y_coefficients  = np.array([1.1, 0])
     y = sample_normal_greater_than_para(fun(torch.median(y),y_coefficients), torch.std(y)*0.7, torch.tensor(-3),torch.tensor(3), number_of_proposals)
     
     # z
-    z = z_tmp+l
-    z_coefficients = np.array([0.82269712, 0.30410975])
+    z = z_tmp+l/2
+    z_coefficients = np.array([0.85, 0.35])
     z = sample_normal_greater_than_para(fun(torch.median(z),z_coefficients), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
 
     xyz = torch.stack([x, y, z], 1)

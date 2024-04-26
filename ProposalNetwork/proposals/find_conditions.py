@@ -4,11 +4,11 @@ import matplotlib.pyplot as plt
 
 # To find txt files , needs to be run in proposal before final center point is found
 """
-with open("conditions.txt", "a") as f:
+with open("ProposalNetwork/proposals/conditions.txt", "a") as f:
     # Redirect the standard output to the file
     sys.stdout = f
     # Your print statements here
-    print(f"{int(y_range_px[1].item())},{((gt_cube.center[1].item()-torch.min(y).item())/y_width.item()):.2f}")
+    print(f"{torch.median(z)},{gt_cube.center[2].item()}")
 # Reset the standard output
 sys.stdout = sys.__stdout__
 """
@@ -18,7 +18,7 @@ x_cond = []
 y_cond = []
 
 # Read data from the file
-with open("conditions_z.txt", "r") as file:
+with open("ProposalNetwork/proposals/conditions_x.txt", "r") as file:
     for line in file:
         # Split each line by comma
         parts = line.strip().split(",")
@@ -43,7 +43,7 @@ sys.stdout = sys.__stdout__
 
 plt.figure()
 plt.scatter(x_cond,y_cond)
-plt.savefig("z_values_to_find.png", dpi=300, bbox_inches='tight')
+plt.savefig("ProposalNetwork/proposals/x_values_to_find.png", dpi=300, bbox_inches='tight')
 plt.close()
 
 

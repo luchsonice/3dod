@@ -200,7 +200,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         plt.figure(figsize=(15, 15))
         for i,title in enumerate(titles):
             plt.subplot(3, 3, 1+i)
-            plt.hist(stats[:,i].numpy(), bins=num_bins, color='darkslategrey')
+            plt.hist(stats[:,i].numpy(), bins=num_bins, color='darkslategrey',density=True)
             plt.axvline(x=0, color='red')
             plt.axvline(x=1, color='red')
             plt.title(title)
