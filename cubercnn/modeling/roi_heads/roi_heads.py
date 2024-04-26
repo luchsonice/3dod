@@ -286,7 +286,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 point_labels = torch.ones(point_coords.shape[:-1], dtype=torch.int64) # BxN
 
                 mask_per_image, _, _ = segmentor.predict_torch(
-                    point_coords=point_coords, point_labels=point_labels, boxes=transformed_boxes, multimask_output=False,)
+                    point_coords=None, point_labels=None, boxes=transformed_boxes, multimask_output=False,)
                 return mask_per_image
 
             # mask for each proposal
