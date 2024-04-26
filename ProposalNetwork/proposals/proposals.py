@@ -4,6 +4,7 @@ from ProposalNetwork.utils.utils import gt_in_norm_range, sample_normal_greater_
 import torch
 import numpy as np
 from cubercnn import util
+import sys
 
 def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal=None):
     '''
@@ -50,26 +51,21 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     whl = torch.stack([w, h, l], 1)
 
     # Finish center
+    def fun(x,coef):
+        return coef[0] * x + coef[1]
+    
     # x
-    x *= 1.2
-    x_width = torch.max(x) - torch.min(x)
-    x = sample_normal_greater_than_para(torch.min(x) + 0.6 * x_width, torch.std(x), torch.tensor(-10),torch.tensor(10), number_of_proposals) # TODO Run without limits
+    x_coefficients = np.array([1.18312167, 0.0056523])
+    x = sample_normal_greater_than_para(fun(torch.median(x),x_coefficients), torch.std(x)*0.7, torch.tensor(-8),torch.tensor(8), number_of_proposals) # TODO Run without limits
     
     # y
-    y *= 1.3
-    y_width = torch.max(y) - torch.min(y)
-    if y_range_px[1] > 400:
-        #print('400')
-        y = sample_normal_greater_than_para(torch.min(y) + 0.25 * y_width, torch.std(y)*0.7, torch.tensor(0),torch.tensor(3), number_of_proposals)
-    elif y_range_px[1] < 270:
-        #print('270')
-        y = sample_normal_greater_than_para(torch.min(y) + 0.8 * y_width, torch.std(y)*0.7, torch.min(y),torch.tensor(0), number_of_proposals)
-    else:
-        y = sample_normal_greater_than_para(torch.min(y) + y_width/2, torch.std(y), torch.min(y),torch.tensor(3), number_of_proposals)
+    y_coefficients  = np.array([1.14174714, -0.01602377])
+    y = sample_normal_greater_than_para(fun(torch.median(y),y_coefficients), torch.std(y)*0.7, torch.tensor(-3),torch.tensor(3), number_of_proposals)
     
     # z
     z = z_tmp+l
-    z = sample_normal_greater_than_para(torch.median(z), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
+    z_coefficients = np.array([0.82269712, 0.30410975])
+    z = sample_normal_greater_than_para(fun(torch.median(z),z_coefficients), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
 
     xyz = torch.stack([x, y, z], 1)
     
@@ -92,20 +88,23 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
         pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrix[i])
         list_of_cubes.append(pred_cube)
 
-    # Statistics
-    stat_x = gt_in_norm_range([torch.min(x),torch.max(x)],gt_cube.center[0])
-    stat_y = gt_in_norm_range([torch.min(y),torch.max(y)],gt_cube.center[1])
-    stat_z = gt_in_norm_range([torch.min(z),torch.max(z)],gt_cube.center[2])
-    stat_w = gt_in_norm_range([torch.min(w),torch.max(w)],gt_cube.dimensions[0])
-    stat_h = gt_in_norm_range([torch.min(h),torch.max(h)],gt_cube.dimensions[1])
-    stat_l = gt_in_norm_range([torch.min(l),torch.max(l)],gt_cube.dimensions[2])
-    angles = util.mat2euler(gt_cube.rotation)
-    stat_rx = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[0]))
-    stat_ry = gt_in_norm_range(torch.tensor([0,np.pi/2]),torch.tensor(angles[1]))
-    stat_rz = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[2]))
+    if gt_cube is None:
+        return list_of_cubes
+    else:
+        # Statistics
+        stat_x = gt_in_norm_range([torch.min(x),torch.max(x)],gt_cube.center[0])
+        stat_y = gt_in_norm_range([torch.min(y),torch.max(y)],gt_cube.center[1])
+        stat_z = gt_in_norm_range([torch.min(z),torch.max(z)],gt_cube.center[2])
+        stat_w = gt_in_norm_range([torch.min(w),torch.max(w)],gt_cube.dimensions[0])
+        stat_h = gt_in_norm_range([torch.min(h),torch.max(h)],gt_cube.dimensions[1])
+        stat_l = gt_in_norm_range([torch.min(l),torch.max(l)],gt_cube.dimensions[2])
+        angles = util.mat2euler(gt_cube.rotation)
+        stat_rx = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[0]))
+        stat_ry = gt_in_norm_range(torch.tensor([0,np.pi/2]),torch.tensor(angles[1]))
+        stat_rz = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[2]))
 
-    stats = torch.tensor([stat_x,stat_y,stat_z,stat_w,stat_h,stat_l,stat_rx,stat_ry,stat_rz])
-    
-    ranges = np.array([torch.std(x)*1.2,torch.std(y),torch.std(z)*1.2,w_prior[1],h_prior[1]*1.1,l_prior[1],np.pi,np.pi,np.pi])
+        stats = torch.tensor([stat_x,stat_y,stat_z,stat_w,stat_h,stat_l,stat_rx,stat_ry,stat_rz])
+        
+        ranges = np.array([torch.std(x)*0.8,torch.std(y)*0.8,torch.std(z)*1.2,w_prior[1],h_prior[1]*1.1,l_prior[1],np.pi,np.pi,np.pi])
 
-    return list_of_cubes, stats, ranges, [stat_x,gt_cube.center[0].item()]
+        return list_of_cubes, stats, ranges
