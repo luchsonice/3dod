@@ -1,7 +1,5 @@
-from matplotlib import pyplot as plt
 import pyransac3d as pyrsc
 #import open3d as o3d
-from ProposalNetwork.utils import utils
 import copy
 
 from dataclasses import dataclass
@@ -307,7 +305,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 for img, instance in zip(images_raw.tensor, targets): # over all images in batch
                 # TODO: change back to use the pred_instances instead of targets
                 # for img, instance in zip(images_raw.tensor, pred_instances): # over all images in batch
-                    mask_per_image = object_masks(img)
+                    mask_per_image = object_masks(img, instance)
                     masks.append(mask_per_image)
             
             #filter out some invalid targets, TODO: this logic is already somewhere else, but I dont know where
@@ -317,7 +315,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 #     futures = [executor.submit(self._forward_cube_as_mesh, images, images_raw, mask, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets) for mask in masks]
                 #     pred_instances = [future.result() for future in futures]
             else:
-                pred_instances =         self._forward_cube(images, images_raw, masks, depth_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets)
+                pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, pred_instances, Ks, im_dims, im_scales_ratio, output_recall_scores, targets)
             return pred_instances
     
 
@@ -413,7 +411,6 @@ class ROIHeads_Boxer(StandardROIHeads):
             ground_maps = ground_maps.to('cpu')
         Ks = [K.to('cpu') for K in Ks]
         targets = [target.to('cpu') for target in targets]
-
         
         def accumulate_scores(scores, IoU3D):
             idx = np.argsort(scores)[::-1]
@@ -525,8 +522,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_point_c  = np.zeros((n_gt, number_of_proposals))
         stats_image    = torch.zeros(n_gt, 9)
         stats_off      = np.zeros((n_gt, 10))
-        stats_off_impro= np.zeros((n_gt, 9))
-        tmp = np.zeros((n_gt, 2))
         # it is important that the zip is exhaustedd at the shortest length
         
         assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
@@ -539,9 +534,163 @@ class ROIHeads_Boxer(StandardROIHeads):
             # ## end cpu region
 
             gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
-            pred_cubes, stats_instance, stats_ranges, tmps = propose(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_cube, ground_normal=normal_vec)
-            tmp[i] = [gt_cube.center[0],reference_box.center[0]]#tmps
+            pred_cubes, stats_instance, stats_ranges = propose(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_cube, ground_normal=normal_vec)
 
+            # transfer pred_cubes to device
+            pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
+            pred_boxes = Boxes(torch.cat([cube_to_box(pred_cube, Ks_scaled_per_box).box.tensor for pred_cube in pred_cubes]))
+            # iou
+            IoU3D = iou_3d(gt_cube, pred_cubes).cpu().numpy()
+            pred_cubes = [pred_cube.to_device('cpu') for pred_cube in pred_cubes]
+            bube_corners = [pred_cubes[j].get_bube_corners(Ks_scaled_per_box.cpu()) for j in range(number_of_proposals)]
+            dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
+            
+            # scoring
+            IoU2D_scores = score_iou(cube_to_box(gt_cube, Ks_scaled_per_box), pred_boxes)
+            point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground), pred_cubes, Ks_scaled_per_box, mask_per_image[i][0])
+            segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), bube_corners)
+            dim_scores = score_dimensions(priors, dimensions)
+            combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
+            random_score = np.random.rand(number_of_proposals)
+            
+            score_IoU2D[i,:] = accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)
+            score_point_c[i,:] = accumulate_scores(point_cloud_scores, IoU3D)
+            score_seg[i,:] = accumulate_scores(segment_scores, IoU3D)
+            score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
+            score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
+            score_random[i,:] = accumulate_scores(random_score, IoU3D)
+
+            highest_score = np.argmax(combined_score)
+            highest_3DIoU = IoU3D.max()
+            pred_cube = pred_cubes[highest_score]
+            pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
+            gt_cube_meshes.append(gt_cube.get_cube().__getitem__(0).detach())
+
+            # stats
+            sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
+            stats_image[i] = stats_instance
+            nested_list = [[highest_3DIoU],abs(gt_cube.center.numpy()-pred_cube.center.numpy())/stats_ranges[:3],abs(gt_cube.dimensions.numpy()-pred_cube.dimensions.numpy())/stats_ranges[3:6],abs(util.mat2euler(gt_cube.rotation)-util.mat2euler(pred_cube.rotation))/stats_ranges[6:]]
+            stats_off[i] = [item for sublist in nested_list for item in sublist]
+        
+        # ################
+
+        stat_empty_boxes = sum_percentage_empty_boxes/n_gt
+
+        p_info = Plotinfo(pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
+
+        if self.training:
+            return pred_cube_meshes, None
+        else:
+            if output_recall_scores:
+                return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off
+            return pred_cube_meshes
+        
+    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, output_recall_scores, targets):
+              
+        # send all objects to cpu
+        images_raw = images_raw.to('cpu')
+        mask_per_image = [mask.to('cpu') for mask in mask_per_image]
+        depth_maps = depth_maps.to('cpu')
+        if ground_maps is not None:
+            ground_maps = ground_maps.to('cpu')
+        Ks = [K.to('cpu') for K in Ks]
+        targets = [target.to('cpu') for target in targets]
+
+        gt_box_classes = (torch.cat([p.gt_classes for p in targets], dim=0) if len(targets) else torch.empty(0))
+        gt_boxes3D = torch.cat([p.gt_boxes3D for p in targets], dim=0,)
+        gt_boxes = torch.cat([p.gt_boxes for p in targets], dim=0,) if len(targets) > 1 else targets[0].gt_boxes
+        gt_poses = torch.cat([p.gt_poses for p in targets], dim=0,)
+
+        n_gt = len(gt_boxes)
+        
+        # nothing to do..
+        if n_gt == 0:
+            return instances if not self.training else (instances, {})
+        
+        Ks_scaled_per_box = Ks[0]/im_scales_ratio[0]
+        Ks_scaled_per_box[-1, -1] = 1
+
+        if self.dims_priors_enabled:
+            # gather prior dimensions
+            prior_dims = self.priors_dims_per_cat.detach()
+            prior_dims = prior_dims[:, gt_box_classes, :, :].squeeze(0)
+            prior_dims_mean = prior_dims[:, 0, :]
+            prior_dims_std = prior_dims[:, 1, :]
+        
+        # ### point cloud
+        use_nth = 5
+        dp_map = depth_maps.tensor.cpu().squeeze()[::use_nth,::use_nth]
+        focal_length_x, focal_length_y = dp_map.shape[1] / 2, dp_map.shape[0] / 2
+        FINAL_WIDTH, FINAL_HEIGHT = dp_map.shape[1], dp_map.shape[0]
+        x, y = np.meshgrid(np.arange(FINAL_WIDTH), np.arange(FINAL_HEIGHT))
+        x = (x - FINAL_WIDTH / 2) / focal_length_x
+        y = (y - FINAL_HEIGHT / 2) / focal_length_y
+        z = np.array(dp_map)
+
+        if ground_maps is not None:
+        # select only the points in x,y,z that are part of the ground map
+            ground = ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth]
+            zg = z[ground > 0]
+            xg = x[ground > 0]
+            yg = y[ground > 0]
+            # im = images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu().numpy()[ground > 0]
+            z_no_g = z[ground == 0]
+            x_no_g = x[ground == 0]
+            y_no_g = y[ground == 0]
+        else:
+            zg = z; xg = x; yg = y
+
+        # normalise the points
+        points = np.stack((np.multiply(xg, zg/2), np.multiply(yg, zg/2), zg), axis=-1).reshape(-1, 3)
+        # colors = im.reshape(-1, 3) / 255.0
+        #colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth]).reshape(-1, 3) / 255.0
+        plane = pyrsc.Plane()
+        # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
+        best_eq, _ = plane.fit(points, thresh=0.05, maxIteration=1000)
+        normal_vec = np.array(best_eq[:-1])
+
+        # remove ground plane from the points that are fed to the scoring function
+        points_all = np.stack((np.multiply(x, z), np.multiply(y, z), z), axis=-1).reshape(-1, 3)
+        if ground_maps is not None:
+            points_no_ground = np.stack((np.multiply(x_no_g, z_no_g), np.multiply(y_no_g, z_no_g), z_no_g), axis=-1).reshape(-1, 3)
+        else:
+            points_no_ground = points_all
+
+        x_up = np.array([1,0,0])
+        y_up = np.array([0,1,0])
+        z_up = np.array([0,0,1])
+        # make sure normal vector is consistent with y-up
+        if abs(normal_vec @ z_up) > abs(normal_vec @ y_up):
+            # this means the plane has been found as the back wall
+            # to rectify this we can turn the vector 90 degrees around the local x-axis
+            # note that this assumes that the walls are perpendicular to the floor
+            normal_vec = np.array([normal_vec[0], normal_vec[2], -normal_vec[1]])
+        if abs(normal_vec @ x_up) > abs(normal_vec @ y_up):
+            # this means the plane has been found as the side wall
+            # to rectify this we can turn the vector 90 degrees around the local y-axis
+            # note that this assumes that the walls are perpendicular to the floor
+            normal_vec = np.array([-normal_vec[2], normal_vec[0], normal_vec[1]])
+        if normal_vec @ y_up < 0:
+            normal_vec *= -1
+
+        number_of_proposals = 1000
+        pred_cubes_out = []
+        mask_per_image = mask_per_image[0] # this should be looped over
+        im_shape = images_raw.tensor.shape[2:][::-1] # im shape should be (x,y)
+        n_gt = len(gt_boxes3D)
+        # it is important that the zip is exhaustedd at the shortest length
+        assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
+        for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
+            # ## cpu region
+            # NOTE: the instance_i (the predicted 2D box) might not correspond to the correct gt_3d, gt_pose
+            # so therefore we use the GT 2D box to propose 3D boxes for now
+            reference_box = Box(gt_2d)
+            reference_box = reference_box.to_device('cpu')
+            priors = [prior_dims_mean[i].cpu().numpy(), prior_dims_std[i].cpu().numpy()]
+            pred_cubes = propose(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=None, ground_normal=normal_vec)
+            # ## end cpu region
+
+            gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
             # transfer pred_cubes to device
             pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
             pred_boxes = Boxes(torch.cat([cube_to_box(pred_cube, Ks_scaled_per_box).box.tensor for pred_cube in pred_cubes]))
@@ -553,165 +702,10 @@ class ROIHeads_Boxer(StandardROIHeads):
             
             # scoring
             IoU2D_scores = score_iou(cube_to_box(gt_cube, Ks_scaled_per_box), pred_boxes)
-            point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground), pred_cubes, Ks_scaled_per_box, mask_per_image[i][0])
             #segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), bube_corners)
+            #point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground), pred_cubes, Ks_scaled_per_box, mask_per_image[i][0])
             #dim_scores = score_dimensions(priors, dimensions)
             #combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
-            random_score = np.random.rand(number_of_proposals)
-            
-            score_IoU2D[i,:] = accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)
-            score_point_c[i,:] = accumulate_scores(point_cloud_scores, IoU3D)
-            # score_seg[i,:] = accumulate_scores(segment_scores, IoU3D)
-            # score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
-            # score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
-            score_random[i,:] = accumulate_scores(random_score, IoU3D)
-
-            highest_score = np.argmax(IoU2D_scores)
-            highest_3DIoU = IoU3D.max()
-            pred_cube = pred_cubes[highest_score]
-            pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
-            gt_cube_meshes.append(gt_cube.get_cube().__getitem__(0).detach())
-
-            # stats
-            sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
-            stats_image[i] = stats_instance
-            nested_list = [[highest_3DIoU],abs(gt_cube.center.numpy()-pred_cube.center.numpy())/stats_ranges[:3],abs(gt_cube.dimensions.numpy()-pred_cube.dimensions.numpy())/stats_ranges[3:6],abs(util.mat2euler(gt_cube.rotation)-util.mat2euler(pred_cube.rotation))/stats_ranges[6:]]
-            stats_off[i] = [item for sublist in nested_list for item in sublist]
-            stats_improv_tmp = []
-            for j in range(3):
-                pred_cube_copy = copy.deepcopy(pred_cube)
-                pred_cube_copy.center[j] = gt_cube.center[j]
-                stats_improv_tmp.append(iou_3d(gt_cube, [pred_cube_copy]).cpu().numpy() - highest_3DIoU)
-            for j in range(3):
-                pred_cube_copy = copy.deepcopy(pred_cube)
-                pred_cube_copy.dimensions[j] = gt_cube.dimensions[j]
-                stats_improv_tmp.append(iou_3d(gt_cube, [pred_cube_copy]).cpu().numpy() - highest_3DIoU)
-            gt_angles = util.mat2euler(gt_cube.rotation)
-            for j in range(3):
-                pred_cube_copy = copy.deepcopy(pred_cube)
-                angles = util.mat2euler(pred_cube_copy.rotation)
-                angles[j] = gt_angles[j]
-                pred_cube_copy.rotation = torch.tensor(util.euler2mat(angles))
-                stats_improv_tmp.append(iou_3d(gt_cube, [pred_cube_copy]).cpu().numpy() - highest_3DIoU)
-            stats_off_impro[i] = np.squeeze(np.array(stats_improv_tmp))
-        
-        # ################
-        score_IoU2D    = np.mean(score_IoU2D, axis=0)
-        score_seg      = np.mean(score_seg, axis=0)
-        score_dim      = np.mean(score_dim, axis=0)
-        score_combined = np.mean(score_combined, axis=0)
-        score_random   = np.mean(score_random, axis=0)
-        score_point_c  = np.mean(score_point_c, axis=0)
-
-        stat_empty_boxes = sum_percentage_empty_boxes/n_gt
-
-        p_info = Plotinfo(pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
-
-        if self.training:
-            return pred_cube_meshes, None
-        else:
-            if output_recall_scores:
-                return p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off, stats_off_impro, tmp
-            return pred_cube_meshes
-        
-    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, features, instances, Ks, im_current_dims, im_scales_ratio, output_recall_scores, targets):
-              
-        if True:
-            # pred_boxes = [x.pred_boxes for x in instances]
-            # proposal_boxes = pred_boxes
-            # box_classes = torch.cat([x.pred_classes for x in instances])
-            # filter out targets with gt_classes -1
-            # targets = [target for target in targets[0] if target.gt_classes != -1]
-
-            gt_box_classes = (torch.cat([p.gt_classes for p in targets], dim=0) if len(targets) else torch.empty(0))
-            gt_boxes3D = torch.cat([p.gt_boxes3D for p in targets], dim=0,)
-            gt_boxes = torch.cat([p.gt_boxes for p in targets], dim=0,) if len(targets) > 1 else targets[0].gt_boxes
-            gt_poses = torch.cat([p.gt_poses for p in targets], dim=0,)
-        # eval on all instances
-        else:
-            proposals = instances
-            pred_boxes = [x.pred_boxes for x in instances]
-            proposal_boxes = pred_boxes
-            box_classes = torch.cat([x.pred_classes for x in instances])
-
-        # the boxes don't actually get scaled currently for some reason
-        # proposal_boxes_scaled = self.scale_proposals(proposal_boxes)
-        # gt_boxes_scaled = self.scale_proposals([targets[0].gt_boxes])
-
-        # forward features
-        # we might want to look into how to use the cube_features in the future.
-        # cube_features = self.cube_pooler(features, proposal_boxes_scaled).flatten(1)
-
-        # n = cube_features.shape[0]
-        n = len(gt_boxes)
-        
-        # nothing to do..
-        if n == 0:
-            return instances if not self.training else (instances, {})
-        
-        num_boxes_per_image = [len(i) for i in gt_boxes]
-
-        # num_boxes_per_image = [len(i) for i in proposal_boxes]
-
-        # scale the intrinsics according to the ratio the image has been scaled. 
-        # this means the projections at the current scale are in sync.
-        # Ks_scaled_per_box = torch.cat([
-        #     (Ks[i]/im_scales_ratio[i]).unsqueeze(0).repeat([num, 1, 1]) 
-        #     for (i, num) in enumerate(num_boxes_per_image)
-        # ]).to(gt_boxes3D.device)
-        # Ks_scaled_per_box[:, -1, -1] = 1
-
-        Ks_scaled_per_box = (Ks[0]/im_scales_ratio[0]).to(gt_boxes3D.device)
-
-        if self.dims_priors_enabled:
-            # gather prior dimensions
-            # prior_dims = self.priors_dims_per_cat.detach().repeat([n, 1, 1, 1])[fg_inds, box_classes]
-            prior_dims = self.priors_dims_per_cat.detach()
-            prior_dims = prior_dims[:, gt_box_classes, :, :].squeeze(0)
-            prior_dims_mean = prior_dims[:, 0, :]
-            prior_dims_std = prior_dims[:, 1, :]
-        
-        # forward predictions
-        # implement all actual 3D cube prediction in the CubeHead_vanilla class
-        # cube_2d_deltas, cube_z, cube_dims, cube_pose, cube_uncert = self.cube_head(cube_features)
-
-        # ###### this functionality should prob be implemented in the self.cube_head.forward() ######
-
-        number_of_proposals = 1000
-        pred_cubes_out = []
-        mask_per_image = mask_per_image[0] # this should be looped over
-        im_shape = images_raw.tensor.shape[2:][::-1] # im shape should be (x,y)
-        n_gt = len(gt_boxes3D)
-        sum_percentage_empty_boxes = 0
-        # it is important that the zip is exhaustedd at the shortest length
-        assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
-        for i, (gt_2d, gt_3d, gt_pose) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses)): ## NOTE:this works assuming batch_size=1
-            # ## cpu region
-            # NOTE: the instance_i (the predicted 2D box) might not correspond to the correct gt_3d, gt_pose
-            # so therefore we use the GT 2D box to propose 3D boxes for now
-            reference_box = Box(gt_2d)
-            reference_box = reference_box.to_device('cpu')
-            priors = [prior_dims_mean[i].cpu().numpy(), prior_dims_std[i].cpu().numpy()]
-            depth_patch = depth_maps.tensor.cpu().squeeze()[int(reference_box.y1):int(reference_box.y2),int(reference_box.x1):int(reference_box.x2)]            
-            pred_cubes = propose(reference_box, depth_patch, priors, im_shape, number_of_proposals=number_of_proposals)
-            # ## end cpu region
-
-            gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
-            # transfer pred_cubes to device
-            pred_cubes = [pred_cube.to_device(gt_boxes3D.device) for pred_cube in pred_cubes]
-            pred_boxes = [cube_to_box(pred_cube, Ks_scaled_per_box) for pred_cube in pred_cubes]
-            # iou
-            IoU3D = iou_3d(gt_cube, pred_cubes).cpu().numpy()
-            sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
-            pred_cubes = [pred_cube.to_device('cpu') for pred_cube in pred_cubes]
-            bube_corners = [pred_cubes[j].get_bube_corners(Ks_scaled_per_box.cpu()) for j in range(number_of_proposals)]
-            dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
-            
-            # scoring
-            IoU2D_scores = score_iou(cube_to_box(gt_cube, Ks_scaled_per_box), pred_boxes)
-            segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), bube_corners)
-            dim_scores = score_dimensions(priors, dimensions)
-            combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
             
             highest_score = np.argmax(IoU2D_scores)
             pred_cube = pred_cubes[highest_score]
