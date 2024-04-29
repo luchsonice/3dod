@@ -25,7 +25,7 @@ from detectron2.modeling.roi_heads import (
     StandardROIHeads, ROI_HEADS_REGISTRY, select_foreground_proposals,
 )
 from detectron2.modeling.poolers import ROIPooler
-from ProposalNetwork.proposals.proposals import propose, propose_random_xy
+from ProposalNetwork.proposals.proposals import propose, propose_random_xy, propose_random_xy_patch
 from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation
 from ProposalNetwork.utils.conversions import cube_to_box
 from ProposalNetwork.utils.spaces import Box, Cube
@@ -385,8 +385,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_point_c  = np.zeros((n_gt, number_of_proposals))
         stats_image    = torch.zeros(n_gt, 9)
         stats_off      = np.zeros((n_gt, 10))
-        stats_off_impro= np.zeros((n_gt, 9))
-        tmp = np.zeros((n_gt, 2))
 
         def predict_cubes(gt_box, priors, gt_3d=None):
             '''wrap propose'''
