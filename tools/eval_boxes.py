@@ -134,25 +134,43 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
 
         outputs = []
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
-            if i>1: break
             output = model(inputs, segmentor, experiment_type)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off, stats_off_impro
             if output is not None:
                 outputs.append(output)
+            """      
+            Iou2D = np.concatenate([np.array(sublist) for sublist in (x[2] for x in outputs)])
+            Iou2D = Iou2D.mean(axis=0)
+            score_random = np.concatenate([np.array(sublist) for sublist in (x[6] for x in outputs)])
+            score_random = score_random.mean(axis=0)
+            total_num_instances = np.sum([x[0].gt_boxes3D.shape[0] for x in outputs])
+            plt.figure(figsize=(8,5))
+            plt.plot(Iou2D, linestyle='-',c='orange',label='2d IoU') 
+            plt.plot(score_random, linestyle='-',c='grey',label='random') 
+            plt.grid(True)
+            plt.xscale('log')
+            plt.xlim(left=1)
+            plt.xlabel('Number of Proposals')
+            plt.ylabel('3D IoU')
+            plt.legend()
+            plt.title('Mean Average Best Overlap vs Number of Proposals ({} images, {} instances)'.format(1+i,total_num_instances))
+            f_name = os.path.join('ProposalNetwork/output/MABO', 'MABO.png')
+            plt.savefig(f_name, dpi=300, bbox_inches='tight')
+            plt.close()
+            """
+            
 
         # mean over all the outputs
-        Iou3D             = np.array([x[1] for x in outputs])
-        Iou2D             = np.array([x[2] for x in outputs])
-        score_seg         = np.array([x[3] for x in outputs])
-        score_dim         = np.array([x[4] for x in outputs])
-        score_combined    = np.array([x[5] for x in outputs])
-        score_random      = np.array([x[6] for x in outputs])
-        score_point_cloud = np.array([x[7] for x in outputs])
-        stat_empty_boxes  = np.array([x[8] for x in outputs])
+        Iou2D             = np.concatenate([np.array(sublist) for sublist in (x[1] for x in outputs)])
+        score_seg         = np.concatenate([np.array(sublist) for sublist in (x[2] for x in outputs)])
+        score_dim         = np.concatenate([np.array(sublist) for sublist in (x[3] for x in outputs)])
+        score_combined    = np.concatenate([np.array(sublist) for sublist in (x[4] for x in outputs)])
+        score_random      = np.concatenate([np.array(sublist) for sublist in (x[5] for x in outputs)])
+        score_point_cloud = np.concatenate([np.array(sublist) for sublist in (x[6] for x in outputs)])
+        stat_empty_boxes  = np.array([x[7] for x in outputs])
 
         print('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
 
-        Iou3D = Iou3D.mean(axis=0)
         Iou2D = Iou2D.mean(axis=0)
         score_seg = score_seg.mean(axis=0)
         score_dim = score_dim.mean(axis=0)
@@ -181,13 +199,13 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         print('saved to ', f_name)
 
         # Statistics
-        stats = torch.cat([x[9] for x in outputs],dim=0)
+        stats = torch.cat([x[8] for x in outputs],dim=0)
         num_bins = 40
         titles = ['x','y','z','w','h','l','rx','ry','rz']
         plt.figure(figsize=(15, 15))
         for i,title in enumerate(titles):
             plt.subplot(3, 3, 1+i)
-            plt.hist(stats[:,i].numpy(), bins=num_bins, color='darkslategrey')
+            plt.hist(stats[:,i].numpy(), bins=num_bins, color='darkslategrey',density=True)
             plt.axvline(x=0, color='red')
             plt.axvline(x=1, color='red')
             plt.title(title)
@@ -196,7 +214,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         plt.close()
         print('saved to ', f_name)
 
-        stats_off = np.concatenate([np.array(sublist) for sublist in (x[10] for x in outputs)])
+        stats_off = np.concatenate([np.array(sublist) for sublist in (x[9] for x in outputs)])
         plt.figure(figsize=(15, 15))
         for i,title in enumerate(titles):
             plt.subplot(3, 3, 1+i)
@@ -207,29 +225,21 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         plt.close()
         print('saved to ', f_name)
 
-        stats_off_impro = np.concatenate([np.array(sublist) for sublist in (x[11] for x in outputs)])
         plt.figure(figsize=(15, 15))
         for i,title in enumerate(titles):
             plt.subplot(3, 3, 1+i)
-            plt.scatter(stats_off[:,1+i],stats_off_impro[:,i])
+            plt.scatter(stats_off[:,1+i],stats_off[:,0])
             plt.title(title)
-        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_off_impro.png')
-        plt.savefig(f_name, dpi=300, bbox_inches='tight')
-        plt.close()
-        print('saved to ', f_name)
-
-        tmp = np.concatenate([np.array(sublist) for sublist in (x[12] for x in outputs)])
-        print('x_stat mean',np.mean(tmp[:,0]))
-        plt.figure(figsize=(15, 15))
-        plt.scatter(tmp[:,1],tmp[:,0])
-        f_name = os.path.join('ProposalNetwork/output/MABO', 'tmp.png')
+            plt.xlim([0,2])
+            plt.ylim([0,1])
+        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_off_zoom.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         print('saved to ', f_name)
         
         # ## for vis
         d_iter = iter(data_loader)
-        for i , _ in enumerate(outputs):
+        for i , _ in track(enumerate(outputs), description="Plotting every single image", total=len(outputs)):
             p_info = outputs[i][0]
             pred_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[i] for i in p_info.gt_box_classes[:len(p_info.gt_boxes3D)]]
             box_size = len(p_info.pred_cube_meshes)
@@ -249,8 +259,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
             prop_img = v_pred.get_image()
             img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, p_info.K, p_info.pred_cube_meshes,text=pred_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
             vis_img_3d = img_3DPR.astype(np.uint8)
-            vis_img_3d = show_mask2(p_info.mask_per_image.cpu().numpy(), vis_img_3d, random_color=colors)
-            
+            vis_img_3d = show_mask2(p_info.mask_per_image.cpu().numpy(), vis_img_3d, random_color=colors) # NOTE Uncomment to add segmentation mask to pred image
+            #vis_img_3d = np.concatenate((vis_img_3d, np.zeros((vis_img_3d.shape[0],vis_img_3d.shape[1],1))), axis=-1)
             ax.set_title('Predicted')
             # expand_img_novel to have alpha channel
             img_novel = np.concatenate((img_novel, np.ones_like(img_novel[:,:,0:1])*255), axis=-1)/255
