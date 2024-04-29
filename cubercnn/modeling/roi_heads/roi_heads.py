@@ -132,18 +132,22 @@ class ROIHeads_Boxer(StandardROIHeads):
                 # as a logit of 0 indicates that the odds of the event occurring are equal to the odds of the event not occurring
                 # https://deepai.org/machine-learning-glossary-and-terms/logit
                 # we can utilise the fact that the objectness_logits are sorted
-                for instance in pred_instances:
-                    for i, score in enumerate(instance.scores):
-                        if score < 0.2: 
-                            pred_boxes = instance.pred_boxes[:i]
-                            scores = instance.scores[:i]
-                            scores_full = instance.scores_full[:i]
-                            pred_classes = instance.pred_classes[:i]
+                def filter_proposals(pred_instances, score_threshold=0.2):
+                    for instance in pred_instances:
+                        for i, score in enumerate(instance.scores):
+                            if score < score_threshold: 
+                                pred_boxes = instance.pred_boxes[:i]
+                                scores = instance.scores[:i]
+                                scores_full = instance.scores_full[:i]
+                                pred_classes = instance.pred_classes[:i]
 
-                            instance.remove('pred_boxes'); instance.remove('scores'); instance.remove('scores_full'); instance.remove('pred_classes')
-                            instance.pred_boxes = pred_boxes; instance.scores = scores; instance.scores_full = scores_full; instance.pred_classes = pred_classes
-                            break
-            
+                                instance.remove('pred_boxes'); instance.remove('scores'); instance.remove('scores_full'); instance.remove('pred_classes')
+                                instance.pred_boxes = pred_boxes; instance.scores = scores; instance.scores_full = scores_full; instance.pred_classes = pred_classes
+                                break
+                    return pred_instances
+
+                # pred_instances = filter_proposals(pred_instances)
+
                 ## NMS
                 max_vis_prop = min(len(pred_instances[0]), len(proposals[0]))
                 for instances_i in pred_instances:
@@ -199,10 +203,10 @@ class ROIHeads_Boxer(StandardROIHeads):
         # im_in = segmentor.transform.apply_image_torch(img.unsqueeze(0))
         # segmentor.set_torch_image(im_in, (height, width))
         # transformed_boxes = segmentor.transform.apply_boxes_torch(instance.gt_boxes.tensor, (height, width))
-        point_coords = Boxes(transformed_boxes).get_centers()
-        # reshape center to (B, N, 2)
-        point_coords = point_coords.unsqueeze(0).repeat(transformed_boxes.shape[0],1,1)
-        point_labels = torch.ones(point_coords.shape[:-1], dtype=torch.int64) # BxN
+        # point_coords = Boxes(transformed_boxes).get_centers()
+        # # reshape center to (B, N, 2)
+        # point_coords = point_coords.unsqueeze(0).repeat(transformed_boxes.shape[0],1,1)
+        # point_labels = torch.ones(point_coords.shape[:-1], dtype=torch.int64) # BxN
 
         mask_per_image, _, _ = segmentor.predict_torch(
             point_coords=None, point_labels=None, boxes=transformed_boxes, multimask_output=False,)
@@ -280,8 +284,8 @@ class ROIHeads_Boxer(StandardROIHeads):
         @dataclass
         class Plotinfo:
             '''simple dataclass to store plot information access as Plotinfo.x
-            fields: pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, K'''
-            pred_cube_meshes: List
+            fields: pred_cubes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, K'''
+            pred_cubes: List[Cube]
             gt_cube_meshes: List
             gt_boxes3D: List
             gt_boxes: List
@@ -434,7 +438,6 @@ class ROIHeads_Boxer(StandardROIHeads):
                 highest_score = np.argmax(IoU2D_scores)
                 highest_3DIoU = IoU3D.max()
                 pred_cube = pred_cubes[highest_score]
-                pred_cube_meshes.append(pred_cube.get_cube().__getitem__(0).detach())
                 gt_cube_meshes.append(gt_cube.get_cube().__getitem__(0).detach())
                 pred_cube.label = gt_box_class; pred_cube.score = IoU2D_scores[highest_score]
                 pred_cubes_out.append(pred_cube)
@@ -447,32 +450,27 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             stat_empty_boxes = sum_percentage_empty_boxes/n_gt
 
-            p_info = Plotinfo(pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
+            p_info = Plotinfo(pred_cubes_out, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
 
-        if self.training:
-            return pred_cube_meshes, None
-        else:
-            if experiment_type['output_recall_scores']: # MABO
-                return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off
-           
-            elif not experiment_type['output_recall_scores']: # AP
-                # list of Instances with the fields: pred_boxes, scores, pred_classes, pred_bbox3D, pred_center_cam, pred_center_2D, pred_dimensions, pred_pose
-                pred_instances = [Instances(size) for size in images_raw.image_sizes] # each instance object contains all boxes in one image, the list is for each image
-                for instances_i in pred_instances:
-                    instances_i.pred_boxes = Boxes.cat([cube_to_box(pred_cube, Ks_scaled_per_box.to('cpu')).box for pred_cube in pred_cubes_out])
-                    instances_i.scores = torch.tensor([pred_cube.score for pred_cube in pred_cubes_out])
-                    instances_i.pred_classes = torch.tensor([pred_cube.label for pred_cube in pred_cubes_out])
-                    instances_i.pred_bbox3D = torch.stack([pred_cube.get_all_corners() for pred_cube in pred_cubes_out])
-                    instances_i.pred_center_cam = torch.stack([pred_cube.center for pred_cube in pred_cubes_out])
-                    instances_i.pred_dimensions = torch.stack([pred_cube.dimensions for pred_cube in pred_cubes_out])
-                    instances_i.pred_pose = torch.stack([pred_cube.rotation for pred_cube in pred_cubes_out])
 
-                    instances_i.pred_center_2D = instances_i.pred_boxes.get_centers()  
-
-                return pred_instances   
-
-            return pred_cube_meshes
+        if experiment_type['output_recall_scores']: # MABO
+            return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off
         
+        elif not experiment_type['output_recall_scores']: # AP
+            # list of Instances with the fields: pred_boxes, scores, pred_classes, pred_bbox3D, pred_center_cam, pred_center_2D, pred_dimensions, pred_pose
+            pred_instances = [Instances(size) for size in images_raw.image_sizes] # each instance object contains all boxes in one image, the list is for each image
+            for instances_i in pred_instances:
+                instances_i.pred_boxes = Boxes.cat([cube_to_box(pred_cube, Ks_scaled_per_box.to('cpu')).box for pred_cube in pred_cubes_out])
+                instances_i.scores = torch.tensor([pred_cube.score for pred_cube in pred_cubes_out])
+                instances_i.pred_classes = torch.tensor([pred_cube.label for pred_cube in pred_cubes_out])
+                instances_i.pred_bbox3D = torch.stack([pred_cube.get_all_corners() for pred_cube in pred_cubes_out])
+                instances_i.pred_center_cam = torch.stack([pred_cube.center for pred_cube in pred_cubes_out])
+                instances_i.pred_dimensions = torch.stack([pred_cube.dimensions for pred_cube in pred_cubes_out])
+                instances_i.pred_pose = torch.stack([pred_cube.rotation for pred_cube in pred_cubes_out])
+
+                instances_i.pred_center_2D = instances_i.pred_boxes.get_centers()  
+
+            return pred_instances   
 
     def _sample_proposals(
         self, matched_idxs: torch.Tensor, matched_labels: torch.Tensor, gt_classes: torch.Tensor, matched_ious=None
