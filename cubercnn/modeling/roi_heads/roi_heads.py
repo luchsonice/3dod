@@ -447,15 +447,6 @@ class ROIHeads_Boxer(StandardROIHeads):
                 nested_list = [[highest_3DIoU],abs(gt_cube.center.numpy()-pred_cube.center.numpy())/stats_ranges[:3],abs(gt_cube.dimensions.numpy()-pred_cube.dimensions.numpy())/stats_ranges[3:6],abs(util.mat2euler(gt_cube.rotation)-util.mat2euler(pred_cube.rotation))/stats_ranges[6:]]
                 stats_off[i] = [item for sublist in nested_list for item in sublist]
 
-            
-            # ################
-            score_IoU2D    = np.mean(score_IoU2D, axis=0)
-            score_seg      = np.mean(score_seg, axis=0)
-            score_dim      = np.mean(score_dim, axis=0)
-            score_combined = np.mean(score_combined, axis=0)
-            score_random   = np.mean(score_random, axis=0)
-            score_point_c  = np.mean(score_point_c, axis=0)
-
             stat_empty_boxes = sum_percentage_empty_boxes/n_gt
 
             p_info = Plotinfo(pred_cube_meshes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
@@ -473,8 +464,6 @@ class ROIHeads_Boxer(StandardROIHeads):
                     instances_i.pred_boxes = Boxes.cat([cube_to_box(pred_cube, Ks_scaled_per_box.to('cpu')).box for pred_cube in pred_cubes_out])
                     instances_i.scores = torch.tensor([pred_cube.score for pred_cube in pred_cubes_out])
                     instances_i.pred_classes = torch.tensor([pred_cube.label for pred_cube in pred_cubes_out])
-                    # instances_i.scores = torch.tensor([1.0 for _ in pred_cubes_out]) #DUMMY
-                    # instances_i.pred_classes = target.gt_classes #DUMMY
                     instances_i.pred_bbox3D = torch.stack([pred_cube.get_all_corners() for pred_cube in pred_cubes_out])
                     instances_i.pred_center_cam = torch.stack([pred_cube.center for pred_cube in pred_cubes_out])
                     instances_i.pred_dimensions = torch.stack([pred_cube.dimensions for pred_cube in pred_cubes_out])
