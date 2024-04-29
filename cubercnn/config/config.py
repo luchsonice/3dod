@@ -165,3 +165,4 @@ def get_cfg_defaults(cfg):
     cfg.PLOT = CN(new_allowed=True)
     cfg.PLOT.OUTPUT_DIR = ''
     cfg.PLOT.EVAL = ''
+    cfg.PLOT.MODE2D = '' #either GT or PRED

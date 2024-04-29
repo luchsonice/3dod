@@ -93,6 +93,9 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
         list_of_cubes.append(pred_cube)
 
     # Statistics
+    if gt_cube is None:
+        return list_of_cubes, None, None, None
+    
     stat_x = gt_in_norm_range([torch.min(x),torch.max(x)],gt_cube.center[0])
     stat_y = gt_in_norm_range([torch.min(y),torch.max(y)],gt_cube.center[1])
     stat_z = gt_in_norm_range([torch.min(z),torch.max(z)],gt_cube.center[2])

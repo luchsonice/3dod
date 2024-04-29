@@ -109,11 +109,15 @@ class Cube:
                             w             
     ```
     '''
-    def __init__(self,tensor: torch.Tensor, R: torch.Tensor) -> None:
+    def __init__(self,tensor: torch.Tensor, R: torch.Tensor, score=None, label=None) -> None:
         self.tensor = tensor
         self.center = tensor[:3]
         self.dimensions = tensor[3:6]
         self.rotation = R
+
+        # score and label are meant as auxiliary information
+        self.score = score
+        self.label = label
 
     def get_cube(self):
         color = [c/255.0 for c in util.get_color()]
