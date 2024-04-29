@@ -88,27 +88,28 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
         pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrix[i])
         list_of_cubes.append(pred_cube)
 
+    # Statistics
     if gt_cube is None:
-        return list_of_cubes
-    else:
-        # Statistics
-        stat_x = gt_in_norm_range([torch.min(x),torch.max(x)],gt_cube.center[0])
-        stat_y = gt_in_norm_range([torch.min(y),torch.max(y)],gt_cube.center[1])
-        stat_z = gt_in_norm_range([torch.min(z),torch.max(z)],gt_cube.center[2])
-        stat_w = gt_in_norm_range([torch.min(w),torch.max(w)],gt_cube.dimensions[0])
-        stat_h = gt_in_norm_range([torch.min(h),torch.max(h)],gt_cube.dimensions[1])
-        stat_l = gt_in_norm_range([torch.min(l),torch.max(l)],gt_cube.dimensions[2])
-        angles = util.mat2euler(gt_cube.rotation)
-        stat_rx = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[0]))
-        stat_ry = gt_in_norm_range(torch.tensor([0,np.pi/2]),torch.tensor(angles[1]))
-        stat_rz = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[2]))
+        return list_of_cubes, None, None
+    
+    stat_x = gt_in_norm_range([torch.min(x),torch.max(x)],gt_cube.center[0])
+    stat_y = gt_in_norm_range([torch.min(y),torch.max(y)],gt_cube.center[1])
+    stat_z = gt_in_norm_range([torch.min(z),torch.max(z)],gt_cube.center[2])
+    stat_w = gt_in_norm_range([torch.min(w),torch.max(w)],gt_cube.dimensions[0])
+    stat_h = gt_in_norm_range([torch.min(h),torch.max(h)],gt_cube.dimensions[1])
+    stat_l = gt_in_norm_range([torch.min(l),torch.max(l)],gt_cube.dimensions[2])
+    angles = util.mat2euler(gt_cube.rotation)
+    stat_rx = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[0]))
+    stat_ry = gt_in_norm_range(torch.tensor([0,np.pi/2]),torch.tensor(angles[1]))
+    stat_rz = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[2]))
 
-        stats = torch.tensor([stat_x,stat_y,stat_z,stat_w,stat_h,stat_l,stat_rx,stat_ry,stat_rz])
-        
-        ranges = np.array([torch.std(x)*0.8,torch.std(y)*0.8,torch.std(z)*1.2,w_prior[1],h_prior[1]*1.1,l_prior[1],np.pi,np.pi,np.pi])
+    stats = torch.tensor([stat_x,stat_y,stat_z,stat_w,stat_h,stat_l,stat_rx,stat_ry,stat_rz])
+    
+    ranges = np.array([torch.std(x)*0.8, torch.std(y)*0.8, torch.std(z)*1.2, w_prior[1], h_prior[1]*1.1, l_prior[1], np.pi,np.pi,np.pi])
 
         return list_of_cubes, stats, ranges
-    
+
+
 
 
 

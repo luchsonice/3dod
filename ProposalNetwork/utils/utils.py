@@ -195,10 +195,10 @@ def gt_in_norm_range(range,gt):
 ##### Scoring
 def iou_2d(gt_box, proposal_boxes):
     '''
-    gt_box: Box
-    proposal_box: list of Box
+    gt_box: Boxes
+    proposal_box: Boxes
     '''
-    IoU = pairwise_iou(gt_box.box,proposal_boxes).flatten()
+    IoU = pairwise_iou(gt_box,proposal_boxes).flatten()
     return IoU
 
 def iou_3d(gt_cube, proposal_cubes):

@@ -56,9 +56,13 @@ def init_segmentation(device='cpu'):
     # 2) chmod +x download_model.sh && ./download_model.sh
     # the largest model: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
     # this is the smallest model
-    sam_checkpoint = "sam-hq/sam_hq_vit_tiny.pth"
-    model_type = "vit_tiny"
-    logger.info(f'SAM device: {device}')
+    if os.path.exists('sam-hq/sam_hq_vit_b.pth'):
+        sam_checkpoint = "sam-hq/sam_hq_vit_b.pth"
+        model_type = "vit_b"
+    else:
+        sam_checkpoint = "sam-hq/sam_hq_vit_tiny.pth"
+        model_type = "vit_tiny"
+    logger.info(f'SAM device: {device}, model_type: {model_type}')
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
 
@@ -66,7 +70,7 @@ def init_segmentation(device='cpu'):
     return predictor
 
 
-def inference_on_dataset(model, data_loader, segmentor):
+def inference_on_dataset(model, data_loader, segmentor, experiment_type):
     """
     Run model on the data_loader. 
     Also benchmark the inference speed of `model.__call__` accurately.
@@ -97,8 +101,9 @@ def inference_on_dataset(model, data_loader, segmentor):
             stack.enter_context(inference_context(model))
         stack.enter_context(torch.no_grad())
 
-        for idx, inputs in track(enumerate(data_loader), description="Inference", total=total):
-            outputs = model(inputs, segmentor, output_recall_scores=False)
+        for idx, inputs in track(enumerate(data_loader), description="Average Precision", total=total):
+            if idx > 1: break
+            outputs = model(inputs, segmentor, experiment_type)
             for input, output in zip(inputs, outputs):
 
                 prediction = {
@@ -109,7 +114,8 @@ def inference_on_dataset(model, data_loader, segmentor):
                 }
 
                 # convert to json format
-                instances = output["instances"].to('cpu')
+                instances = output.to('cpu')
+                # instances = output["instances"].to('cpu')
                 prediction["instances"] = instances_to_coco_json(instances, input["image_id"])
 
                 # store in overall predictions
@@ -117,7 +123,7 @@ def inference_on_dataset(model, data_loader, segmentor):
 
     return inference_json
 
-def mean_average_best_overlap(model, data_loader, segmentor, output_recall_scores:bool):
+def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         
     total = len(data_loader)  # inference data loader must have a fixed length
 
@@ -128,9 +134,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
 
         outputs = []
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
-            #if i>2:break
-            output = model(inputs, segmentor, output_recall_scores)
-            # p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off
+            output = model(inputs, segmentor, experiment_type)
+            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off, stats_off_impro
             if output is not None:
                 outputs.append(output)
             """      
@@ -345,15 +350,22 @@ def do_test(cfg, model, iteration='final', storage=None):
         data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
 
         data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, filter_empty=True, num_workers=1)
-        if cfg.PLOT.EVAL == 'MABO': output_recall_scores = True
-        else: output_recall_scores = False
-        if output_recall_scores:
-            mean_average_best_overlap_scores = mean_average_best_overlap(model, data_loader, segmentor, output_recall_scores)
+
+        experiment_type = {}
+
+        if cfg.PLOT.EVAL == 'MABO': experiment_type['output_recall_scores'] = True
+        else: experiment_type['output_recall_scores'] = False
+        # either use pred_boxes or GT boxes
+        if cfg.PLOT.MODE2D == 'PRED': experiment_type['use_pred_boxes'] = True
+        else: experiment_type['use_pred_boxes'] = False
+        if experiment_type['output_recall_scores']:
+            _ = mean_average_best_overlap(model, data_loader, segmentor, experiment_type)
+        
 
         # TODO: code can only run to here at the moment
         # exit()
         else:
-            results_json = inference_on_dataset(model, data_loader, segmentor)
+            results_json = inference_on_dataset(model, data_loader, segmentor, experiment_type)
 
             eval_helper = Omni3DEvaluationHelper(
                 dataset_names_test, 
@@ -429,6 +441,11 @@ def setup(args):
 def main(args):
     
     cfg = setup(args)
+
+    assert cfg.PLOT.MODE2D in ['GT', 'PRED'], 'MODE2D must be either GT or PRED'
+    assert cfg.PLOT.EVAL in ['AP', 'MABO'], 'EVAL must be either AP or MABO'
+    if cfg.PLOT.EVAL == 'MABO':
+        assert cfg.PLOT.MODE2D == 'GT', 'MABO only works with GT boxes'
     
     name = f'cube {datetime.datetime.now().isoformat()}'
     # wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
@@ -456,8 +473,10 @@ def main(args):
     # build the  model.
     model = build_model(cfg, priors=priors)
 
+
     # skip straight to eval mode
-    if cfg.PLOT.EVAL != 'MABO':
+    # load the saved model if using eval boxes
+    if cfg.PLOT.MODE2D == 'PRED':
         DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
             cfg.MODEL.WEIGHTS, resume=False)
     return do_test(cfg, model)

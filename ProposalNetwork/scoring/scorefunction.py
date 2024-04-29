@@ -80,11 +80,13 @@ def score_dimensions(category, dimensions):
     '''
     score = []
     [prior_mean, prior_std] = category
+    prior_mean = prior_mean.numpy()
+    prior_std = prior_std.numpy()
     for i in range(len(dimensions)):
         #category_name = Metadatacatalog.thing_classes[category] # for printing and checking that correct
         dimension = dimensions[i]
         dimensions_scores = np.exp(-1/2 * ((dimension - prior_mean)/prior_std)**2)
-        score.append(np.mean(dimensions_scores))
+        score.append(dimensions_scores.mean())
 
     return score
 
