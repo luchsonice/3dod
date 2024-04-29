@@ -102,7 +102,6 @@ def inference_on_dataset(model, data_loader, segmentor, experiment_type):
         stack.enter_context(torch.no_grad())
 
         for idx, inputs in track(enumerate(data_loader), description="Average Precision", total=total):
-            if idx > 1: break
             outputs = model(inputs, segmentor, experiment_type)
             for input, output in zip(inputs, outputs):
 
