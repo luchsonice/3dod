@@ -176,7 +176,7 @@ def propose_random_xy(reference_box, depth_image, priors, im_shape, K, number_of
         pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrix[i])
         list_of_cubes.append(pred_cube)
 
-    return list_of_cubes
+    return list_of_cubes, torch.zeros(9), np.ones(9)
 
 
 
@@ -245,4 +245,4 @@ def propose_random_xy_patch(reference_box, depth_image, priors, im_shape, K, num
         pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrix[i])
         list_of_cubes.append(pred_cube)
 
-    return list_of_cubes
+    return list_of_cubes, torch.zeros(9), np.ones(9)
