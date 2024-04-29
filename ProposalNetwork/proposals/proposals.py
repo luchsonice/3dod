@@ -108,3 +108,141 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     ranges = np.array([torch.std(x)*0.8, torch.std(y)*0.8, torch.std(z)*1.2, w_prior[1], h_prior[1]*1.1, l_prior[1], np.pi,np.pi,np.pi])
 
     return list_of_cubes, stats, ranges
+
+
+
+
+
+#### Other versions that were worse
+    
+def propose_random_xy(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal=None):
+    ####### Center
+    # Removing the outer % on each side of range for center point
+    m = 4
+    x_range_px = torch.tensor([reference_box.x1+reference_box.width/m,reference_box.x2-reference_box.width/m],device=depth_image.device)
+    y_range_px = torch.tensor([reference_box.y1+reference_box.height/m,reference_box.y2-reference_box.height/m],device=depth_image.device)
+    # Find depths
+    x_grid_px = torch.linspace(x_range_px[0],x_range_px[1],number_of_proposals, device=depth_image.device).long()
+    y_grid_px = torch.linspace(y_range_px[0],y_range_px[1],number_of_proposals, device=depth_image.device).long()
+    x_indices = x_grid_px.round()
+    y_indices = y_grid_px.round()
+    d = depth_image[y_indices, x_indices]
+    # Calculate x and y and temporary z
+    opposite_side_x = x_grid_px-K[0,2].repeat(number_of_proposals) # x-directional distance in px between image center and object center
+    opposite_side_y = y_grid_px-K[1,2].repeat(number_of_proposals) # y-directional distance in px between image center and object center
+    adjacent_side = K[0,0].repeat(number_of_proposals) # depth in px to image plane
+    angle_x = torch.atan2(opposite_side_x,adjacent_side)
+    dx_inside_camera = torch.sqrt(opposite_side_x**2 + adjacent_side**2)
+    angle_d = torch.atan2(opposite_side_y,dx_inside_camera)
+    y = d * torch.sin(angle_d)
+    dx = torch.sqrt(d**2 - y**2)
+    x = dx * torch.sin(angle_x)
+    z_tmp = torch.sqrt(dx**2 - x**2)
+
+    # Dimensions
+    w_prior = torch.tensor([priors[0][0], priors[1][0]], device=depth_image.device)
+    h_prior = torch.tensor([priors[0][1], priors[1][1]], device=depth_image.device)
+    l_prior = torch.tensor([priors[0][2], priors[1][2]], device=depth_image.device)
+    w = sample_normal_greater_than_para(w_prior[0], w_prior[1], torch.tensor(0.05), w_prior[0] + 2 * w_prior[1], number_of_proposals)
+    h = sample_normal_greater_than_para(h_prior[0], h_prior[1]*1.1, torch.tensor(0.05), h_prior[0] + 2.2 * h_prior[1], number_of_proposals)
+    l = sample_normal_greater_than_para(l_prior[0], l_prior[1], torch.tensor(0.05), l_prior[0] + 2 * l_prior[1], number_of_proposals)
+    whl = torch.stack([w, h, l], 1)
+
+    # Finish center
+    def fun(x,coef):
+        return coef[0] * x + coef[1]
+    
+    # xy
+    x = torch.rand(1000) * 2 - 1
+    y = torch.rand(1000) * 2 - 1
+    # z
+    z = z_tmp+l/2
+    z_coefficients = np.array([0.85, 0.35])
+    z = sample_normal_greater_than_para(fun(torch.median(z),z_coefficients), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
+
+    xyz = torch.stack([x, y, z], 1)
+    
+    # Pose
+    rotation_matrix = []
+    if ground_normal is None:
+        rotation_matrix = utils.randn_orthobasis_torch(1).squeeze(0)
+    else:
+        angles = np.linspace(0, np.pi, 36) # 5 degree steps
+        for i in range(number_of_proposals):
+            rotation_matrix.append(torch.from_numpy(utils.orthobasis_from_normal(ground_normal, np.random.choice(angles)).astype(np.float32)))
+
+    list_of_cubes = []
+    for i in range(number_of_proposals):
+        pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrix[i])
+        list_of_cubes.append(pred_cube)
+
+    return list_of_cubes
+
+
+
+def propose_random_xy_patch(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal=None):
+    ####### Center
+    # Removing the outer % on each side of range for center point
+    m = 4
+    x_range_px = torch.tensor([reference_box.x1+reference_box.width/m,reference_box.x2-reference_box.width/m],device=depth_image.device)
+    y_range_px = torch.tensor([reference_box.y1+reference_box.height/m,reference_box.y2-reference_box.height/m],device=depth_image.device)
+    # Find depths
+    x_grid_px = torch.linspace(x_range_px[0],x_range_px[1],number_of_proposals, device=depth_image.device).long()
+    y_grid_px = torch.linspace(y_range_px[0],y_range_px[1],number_of_proposals, device=depth_image.device).long()
+    x_indices = x_grid_px.round()
+    y_indices = y_grid_px.round()
+    d = depth_image[y_indices, x_indices]
+    # Calculate x and y and temporary z
+    opposite_side_x = x_grid_px-K[0,2].repeat(number_of_proposals) # x-directional distance in px between image center and object center
+    opposite_side_y = y_grid_px-K[1,2].repeat(number_of_proposals) # y-directional distance in px between image center and object center
+    adjacent_side = K[0,0].repeat(number_of_proposals) # depth in px to image plane
+    angle_x = torch.atan2(opposite_side_x,adjacent_side)
+    dx_inside_camera = torch.sqrt(opposite_side_x**2 + adjacent_side**2)
+    angle_d = torch.atan2(opposite_side_y,dx_inside_camera)
+    y = d * torch.sin(angle_d)
+    dx = torch.sqrt(d**2 - y**2)
+    x = dx * torch.sin(angle_x)
+    z_tmp = torch.sqrt(dx**2 - x**2)
+
+    # Dimensions
+    w_prior = torch.tensor([priors[0][0], priors[1][0]], device=depth_image.device)
+    h_prior = torch.tensor([priors[0][1], priors[1][1]], device=depth_image.device)
+    l_prior = torch.tensor([priors[0][2], priors[1][2]], device=depth_image.device)
+    w = sample_normal_greater_than_para(w_prior[0], w_prior[1], torch.tensor(0.05), w_prior[0] + 2 * w_prior[1], number_of_proposals)
+    h = sample_normal_greater_than_para(h_prior[0], h_prior[1]*1.1, torch.tensor(0.05), h_prior[0] + 2.2 * h_prior[1], number_of_proposals)
+    l = sample_normal_greater_than_para(l_prior[0], l_prior[1], torch.tensor(0.05), l_prior[0] + 2 * l_prior[1], number_of_proposals)
+    whl = torch.stack([w, h, l], 1)
+
+    # Finish center
+    def fun(x,coef):
+        return coef[0] * x + coef[1]
+    
+    # xy
+    l_x = reference_box.x1 / im_shape[0]/2 - 1
+    h_x = reference_box.x2 / im_shape[0]/2 - 1
+    l_y = reference_box.y1 / im_shape[1]/2 - 1
+    h_y = reference_box.y2 / im_shape[1]/2 - 1
+    x = torch.rand(1000) * (h_x - l_x) + l_x
+    y = torch.rand(1000) * (h_y - l_y) + l_y
+    # z
+    z = z_tmp+l/2
+    z_coefficients = np.array([0.85, 0.35])
+    z = sample_normal_greater_than_para(fun(torch.median(z),z_coefficients), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
+
+    xyz = torch.stack([x, y, z], 1)
+    
+    # Pose
+    rotation_matrix = []
+    if ground_normal is None:
+        rotation_matrix = utils.randn_orthobasis_torch(1).squeeze(0)
+    else:
+        angles = np.linspace(0, np.pi, 36) # 5 degree steps
+        for i in range(number_of_proposals):
+            rotation_matrix.append(torch.from_numpy(utils.orthobasis_from_normal(ground_normal, np.random.choice(angles)).astype(np.float32)))
+
+    list_of_cubes = []
+    for i in range(number_of_proposals):
+        pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrix[i])
+        list_of_cubes.append(pred_cube)
+
+    return list_of_cubes
