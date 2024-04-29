@@ -1,7 +1,6 @@
 import torch
 from ProposalNetwork.utils.spaces import Box
 import numpy as np
-from cubercnn import util
 import matplotlib.pyplot as plt
 #import open3d as o3d
 
@@ -191,9 +190,7 @@ def gt_in_norm_range(range,gt):
         tmp = range[1]-gt
         res = tmp / abs(range[1] - range[0])
 
-
     return res
-
 
 ##### Scoring
 def iou_2d(gt_box, proposal_boxes):

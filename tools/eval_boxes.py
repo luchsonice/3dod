@@ -134,9 +134,9 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
             if output is not None:
                 outputs.append(output)
             """      
-            Iou2D = np.concatenate([np.array(sublist) for sublist in (x[2] for x in outputs)])
+            Iou2D = np.concatenate([np.array(sublist) for sublist in (x[1] for x in outputs)])
             Iou2D = Iou2D.mean(axis=0)
-            score_random = np.concatenate([np.array(sublist) for sublist in (x[6] for x in outputs)])
+            score_random = np.concatenate([np.array(sublist) for sublist in (x[5] for x in outputs)])
             score_random = score_random.mean(axis=0)
             total_num_instances = np.sum([x[0].gt_boxes3D.shape[0] for x in outputs])
             plt.figure(figsize=(8,5))
@@ -198,6 +198,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, output_recall_score
         num_bins = 40
         titles = ['x','y','z','w','h','l','rx','ry','rz']
         plt.figure(figsize=(15, 15))
+        plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
         for i,title in enumerate(titles):
             plt.subplot(3, 3, 1+i)
             plt.hist(stats[:,i].numpy(), bins=num_bins, color='darkslategrey',density=True)
