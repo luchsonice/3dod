@@ -107,7 +107,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     
     ranges = np.array([torch.std(x)*0.8, torch.std(y)*0.8, torch.std(z)*1.2, w_prior[1], h_prior[1]*1.1, l_prior[1], np.pi,np.pi,np.pi])
 
-        return list_of_cubes, stats, ranges
+    return list_of_cubes, stats, ranges
 
 
 
