@@ -3,6 +3,8 @@ from matplotlib import pyplot as plt
 import pyransac3d as pyrsc
 #import open3d as o3d
 import copy
+from segment_anything.utils.transforms import ResizeLongestSide
+
 
 from dataclasses import dataclass
 import logging
@@ -181,35 +183,32 @@ class ROIHeads_Boxer(StandardROIHeads):
             # prop_img = v_pred.get_image()
             # plt.imshow(prop_img)
 
-            masks = []
-            for img, instance in zip(images_raw.tensor, target_instances): # over all images in batch
-                mask_per_image = self.object_masks(img, instance, segmentor, experiment_type)
-                masks.append(mask_per_image)
+            masks = self.object_masks(images_raw.tensor, target_instances, segmentor, experiment_type) # over all images in batch
 
             pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type)
             return pred_instances
         
-    def object_masks(self, img, instance, segmentor, ex):
-        img_org = img
-        img = np.array(img.permute(1, 2, 0).cpu())
-        segmentor.set_image(img)
-        if ex['use_pred_boxes']:
-            transformed_boxes = segmentor.transform.apply_boxes_torch(instance.pred_boxes.tensor, img_org.shape[1:]) # Bx4
-        else:
-            transformed_boxes = segmentor.transform.apply_boxes_torch(instance.gt_boxes.tensor, img_org.shape[1:]) # Bx4
-        
-        # img = img / 255.0
-        # height, width = img.shape[1:]
-        # im_in = segmentor.transform.apply_image_torch(img.unsqueeze(0))
-        # segmentor.set_torch_image(im_in, (height, width))
-        # transformed_boxes = segmentor.transform.apply_boxes_torch(instance.gt_boxes.tensor, (height, width))
-        # point_coords = Boxes(transformed_boxes).get_centers()
-        # # reshape center to (B, N, 2)
-        # point_coords = point_coords.unsqueeze(0).repeat(transformed_boxes.shape[0],1,1)
-        # point_labels = torch.ones(point_coords.shape[:-1], dtype=torch.int64) # BxN
+    def object_masks(self, images, instances, segmentor, ex):
+        '''list of masks for each object in the image.
+        Returns
+        ------
+        mask_per_image: List of torch.Tensor of shape (N_instance, 1, H, W)
+        '''
+        org_shape = images.shape[-2:]
+        resize_transform = ResizeLongestSide(segmentor.image_encoder.img_size)
+        batched_input = []
+        images = resize_transform.apply_image_torch(images / 255.0)# .permute(2, 0, 1).contiguous()
+        for image, instance in zip(images, instances):
+            if ex['use_pred_boxes']:
+                boxes = instance.pred_boxes.tensor
+            else:
+                boxes = instance.gt_boxes.tensor
+            transformed_boxes = resize_transform.apply_boxes_torch(boxes, org_shape) # Bx4
+            batched_input.append({'image': image, 'boxes': transformed_boxes, 'original_size':org_shape})
 
-        mask_per_image, _, _ = segmentor.predict_torch(
-            point_coords=None, point_labels=None, boxes=transformed_boxes, multimask_output=False,)
+        seg_out = segmentor(batched_input, multimask_output=False)
+
+        mask_per_image = [i['masks'] for i in seg_out]
         return mask_per_image
 
     def _forward_box(self, features: Dict[str, torch.Tensor], proposals: List[Instances]):
