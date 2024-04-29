@@ -349,7 +349,7 @@ def do_test(cfg, model, iteration='final', storage=None):
         data_mapper = DatasetMapper3D(cfg, is_train=False, mode='eval_with_gt')
         data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
 
-        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, batch_size=2, filter_empty=True, num_workers=1)
+        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, batch_size=1, filter_empty=True, num_workers=1)
 
         experiment_type = {}
 
