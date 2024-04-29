@@ -241,10 +241,11 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         d_iter = iter(data_loader)
         for i , _ in track(enumerate(outputs), description="Plotting every single image", total=len(outputs)):
             p_info = outputs[i][0]
-            pred_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[i] for i in p_info.gt_box_classes[:len(p_info.gt_boxes3D)]]
-            box_size = len(p_info.pred_cube_meshes)
-            for _ in range(box_size-len(pred_box_classes_names)):
-                pred_box_classes_names.append('')
+
+            pred_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[cube.label] for cube in p_info.pred_cubes]
+            box_size = len(p_info.pred_cubes)
+            for x in range(box_size-len(pred_box_classes_names)):
+                pred_box_classes_names.append(f'z={p_info.pred_cubes[x].dimensions[2]}, s={p_info.pred_cubes[x].score}')
             colors = [np.concatenate([np.random.random(3), np.array([0.6])], axis=0) for _ in range(box_size)]
             fig, (ax, ax1) = plt.subplots(2,1, figsize=(14, 10))
             input = next(d_iter)[0]
@@ -257,7 +258,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
                 , assigned_colors=colors
             )
             prop_img = v_pred.get_image()
-            img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, p_info.K, p_info.pred_cube_meshes,text=pred_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
+            pred_cube_meshes = [cube.get_cube().__getitem__(0).detach() for cube in p_info.pred_cubes]
+            img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, p_info.K, pred_cube_meshes, text=pred_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
             vis_img_3d = img_3DPR.astype(np.uint8)
             vis_img_3d = show_mask2(p_info.mask_per_image.cpu().numpy(), vis_img_3d, random_color=colors) # NOTE Uncomment to add segmentation mask to pred image
             #vis_img_3d = np.concatenate((vis_img_3d, np.zeros((vis_img_3d.shape[0],vis_img_3d.shape[1],1))), axis=-1)
