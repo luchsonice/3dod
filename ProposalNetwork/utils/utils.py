@@ -43,17 +43,20 @@ def compute_rotation_matrix_from_ortho6d(poses):
 def sample_normal_in_range(means, stds, count, threshold_low=None, threshold_high=None):
     device = means.device
     # Generate samples from a normal distribution
-    if len(means.size()) == 0:
-        samples = torch.normal(means, stds, size=(count,))
-    else:
-        samples = torch.normal(means.unsqueeze(1).expand(-1,count), stds.unsqueeze(1).expand(-1,count))
+    samples = torch.normal(means.unsqueeze(1).expand(-1,count), stds.unsqueeze(1).expand(-1,count))
 
     # Ensure that all samples are greater than threshold_low and less than threshold_high
-    if not (threshold_high or threshold_low is None):
-        while torch.any((samples < threshold_low) | (samples > threshold_high)): # TODO stop argument in case of never sampling
+    if threshold_high is not None and threshold_low is not None:
+        tries = 0
+        threshold_high = threshold_high.unsqueeze(1).expand_as(samples)
+        while torch.any((samples < threshold_low) | (samples > threshold_high)):
             invalid_mask = (samples < threshold_low) | (samples > threshold_high)
-            # Replace invalid samples with new samples drawn from the normal distribution
-            samples[invalid_mask] = torch.normal(means, stds, size=(invalid_mask.sum(),))
+            # Replace invalid samples with new samples drawn from the normal distribution, could be done more optimal by sampling only sum(invalid mask) new samples, but matching of correct means is difficult then
+            samples[invalid_mask] = torch.normal(means.unsqueeze(1).expand(-1,count), stds.unsqueeze(1).expand(-1,count))[invalid_mask]
+            
+            tries += 1
+            if tries == 10000:
+                break
 
     return samples.to(device)
 

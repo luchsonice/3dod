@@ -399,7 +399,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         pred_cubes_out = []
         if experiment_type['use_pred_boxes']:
             for i, (gt_box, prior_dim_mean, prior_dim_std, gt_box_class) in enumerate(zip(gt_boxes, prior_dims_mean, prior_dims_std, gt_box_classes)):
-                pred_cubes, pred_boxes, _, _ = predict_cubes(gt_box, (prior_dim_mean, prior_dim_std))
+                pred_cubes, pred_boxes, _, _ = predict_cubes(gt_box, (prior_dims_mean, prior_dims_std))
                 IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes)
 
                 highest_score = np.argmax(IoU2D_scores)
@@ -410,7 +410,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
             for i, (gt_2d, gt_3d, gt_pose, prior_dim_mean, prior_dim_std, gt_box_class) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses, prior_dims_mean, prior_dims_std, gt_box_classes)): ## NOTE:this works assuming batch_size=1
                 gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
-                pred_cubes, pred_boxes, stats_instance, stats_ranges = predict_cubes(gt_2d, (prior_dim_mean, prior_dim_std), gt_cube)
+                pred_cubes, pred_boxes, stats_instance, stats_ranges = predict_cubes(gt_2d, (prior_dims_mean, prior_dims_std), gt_cube)
 
                 # iou
                 IoU3D = iou_3d(gt_cube, pred_cubes).cpu().numpy()
