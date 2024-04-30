@@ -14,7 +14,8 @@ from detectron2.evaluation.evaluator import inference_context
 from detectron2.utils.visualizer import Visualizer
 from matplotlib import pyplot as plt
 import numpy as np
-from segment_anything import sam_model_registry, SamPredictor
+from segment_anything import sam_model_registry
+from segment_anything.modeling import Sam
 import torch
 import datetime
 import detectron2.utils.comm as comm
@@ -50,7 +51,7 @@ from cubercnn import util, vis, data
 from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
 
 
-def init_segmentation(device='cpu'):
+def init_segmentation(device='cpu') -> Sam:
     # 1) first cd into the segment_anything and pip install -e .
     # to get the model stary in the root foler folder and run the download_model.sh 
     # 2) chmod +x download_model.sh && ./download_model.sh
@@ -65,9 +66,7 @@ def init_segmentation(device='cpu'):
     logger.info(f'SAM device: {device}, model_type: {model_type}')
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
-
-    predictor = SamPredictor(sam)
-    return predictor
+    return sam
 
 
 def inference_on_dataset(model, data_loader, segmentor, experiment_type):
@@ -350,7 +349,7 @@ def do_test(cfg, model, iteration='final', storage=None):
         data_mapper = DatasetMapper3D(cfg, is_train=False, mode='eval_with_gt')
         data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
 
-        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, filter_empty=True, num_workers=1)
+        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, batch_size=1, filter_empty=True, num_workers=1)
 
         experiment_type = {}
 

@@ -210,7 +210,7 @@ def build_detection_train_loader(dataset, *, mapper, sampler=None, total_batch_s
         dataset = MapDataset(dataset, mapper)
     if sampler is None:
         sampler = TrainingSampler(len(dataset))
-    assert isinstance(sampler, torch.utils.data.sampler.Sampler)
+    assert isinstance(sampler, torch.utils.data.Sampler)
     return build_batch_data_loader(
         dataset,
         sampler,
@@ -219,7 +219,7 @@ def build_detection_train_loader(dataset, *, mapper, sampler=None, total_batch_s
         num_workers=num_workers
     )
 
-def _test_loader_from_config(cfg, dataset_name, mapper=None, filter_empty=False):
+def _test_loader_from_config(cfg, dataset_name, batch_size=1, mapper=None, filter_empty=False):
     if isinstance(dataset_name, str):
         dataset_name = [dataset_name]
 
@@ -235,10 +235,10 @@ def _test_loader_from_config(cfg, dataset_name, mapper=None, filter_empty=False)
     if mapper is None:
         mapper = DatasetMapper(cfg, False)
 
-    return {"dataset": dataset, "mapper": mapper, "num_workers": cfg.DATALOADER.NUM_WORKERS}
+    return {"dataset": dataset, "mapper": mapper, 'batch_size':batch_size, "num_workers": cfg.DATALOADER.NUM_WORKERS}
 
 @configurable(from_config=_test_loader_from_config)
-def build_detection_test_loader(dataset, *, mapper, sampler=None, num_workers=0):
+def build_detection_test_loader(dataset, *, mapper, batch_size=1, sampler=None, num_workers=0):
     
     if isinstance(dataset, list):
         dataset = DatasetFromList(dataset, copy=False)
@@ -249,7 +249,7 @@ def build_detection_test_loader(dataset, *, mapper, sampler=None, num_workers=0)
 
     # Always use 1 image per worker during inference since this is the
     # standard when reporting inference time in papers.
-    batch_sampler = torch.utils.data.sampler.BatchSampler(sampler, 1, drop_last=False)
+    batch_sampler = torch.utils.data.BatchSampler(sampler, batch_size=batch_size, drop_last=False)
     data_loader = torch.utils.data.DataLoader(
         dataset,
         num_workers=num_workers,
