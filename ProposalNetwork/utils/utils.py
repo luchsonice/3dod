@@ -40,26 +40,33 @@ def compute_rotation_matrix_from_ortho6d(poses):
 
     return matrix
 
-def sample_normal_in_range(mean, std, threshold_low, threshold_high, count):
-    device = mean.device
+def sample_normal_in_range(means, stds, count, threshold_low=None, threshold_high=None):
+    device = means.device
     # Generate samples from a normal distribution
-    samples = torch.normal(mean, std, size=(count,))
+    samples = torch.normal(means.unsqueeze(1).expand(-1,count), stds.unsqueeze(1).expand(-1,count))
 
     # Ensure that all samples are greater than threshold_low and less than threshold_high
-    while torch.any((samples < threshold_low) | (samples > threshold_high)): # TODO stop argument in case of never sampling
-        invalid_mask = (samples < threshold_low) | (samples > threshold_high)
-        # Replace invalid samples with new samples drawn from the normal distribution
-        samples[invalid_mask] = torch.normal(mean, std, size=(invalid_mask.sum(),))
+    if threshold_high is not None and threshold_low is not None:
+        tries = 0
+        threshold_high = threshold_high.unsqueeze(1).expand_as(samples)
+        while torch.any((samples < threshold_low) | (samples > threshold_high)):
+            invalid_mask = (samples < threshold_low) | (samples > threshold_high)
+            # Replace invalid samples with new samples drawn from the normal distribution, could be done more optimal by sampling only sum(invalid mask) new samples, but matching of correct means is difficult then
+            samples[invalid_mask] = torch.normal(means.unsqueeze(1).expand(-1,count), stds.unsqueeze(1).expand(-1,count))[invalid_mask]
+            
+            tries += 1
+            if tries == 10000:
+                break
 
     return samples.to(device)
 
-def randn_orthobasis_torch(num_samples=1):
-    z = torch.randn(num_samples, 3, 3)
+def randn_orthobasis_torch(num_samples=1,num_instances=1):
+    z = torch.randn(num_instances, num_samples, 3, 3)
     z = z / torch.norm(z, p=2, dim=-1, keepdim=True)
-    z[:, 0] = torch.cross(z[:, 1], z[:, 2], dim=-1)
-    z[:, 0] = z[:, 0] / torch.norm(z[:, 0], dim=-1, keepdim=True)
-    z[:, 1] = torch.cross(z[:, 2], z[:, 0], dim=-1)
-    z[:, 1] = z[:, 1] / torch.norm(z[:, 1], dim=-1, keepdim=True)
+    z[:, :, 0] = torch.cross(z[:, :, 1], z[:, :, 2], dim=-1)
+    z[:, :, 0] = z[:, :, 0] / torch.norm(z[:, :, 0], dim=-1, keepdim=True)
+    z[:, :, 1] = torch.cross(z[:, :, 2], z[:, :, 0], dim=-1)
+    z[:, :, 1] = z[:, :, 1] / torch.norm(z[:, :, 1], dim=-1, keepdim=True)
     return z
 
 def randn_orthobasis(num_samples=1):
@@ -193,7 +200,9 @@ def vectorized_linspace(start_tensor, end_tensor, number_of_steps):
     # Calculate spacing
     spacing = (end_tensor - start_tensor) / (number_of_steps - 1)
     # Create linear spaces with arange
-    linear_spaces = torch.arange(start=0, end=number_of_steps, dtype=start_tensor.dtype) * spacing + start_tensor
+    linear_spaces = torch.arange(start=0, end=number_of_steps, dtype=start_tensor.dtype)
+    linear_spaces = linear_spaces.repeat(start_tensor.size(0),1)
+    linear_spaces = linear_spaces * spacing[:,None] + start_tensor[:,None]
     return linear_spaces
 
 

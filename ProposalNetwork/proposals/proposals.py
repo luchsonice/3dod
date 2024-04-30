@@ -19,6 +19,8 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     cubes : Cubes with (number of proposals) cubes
     stats         : tensor N x number_of_proposals
     '''
+    number_of_instances = len(reference_box)
+
     ####### Center
     # Removing the outer % on each side of range for center point
     m = 4
@@ -45,39 +47,40 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     z_tmp = torch.sqrt(dx**2 - x**2)
 
     # Dimensions
-    w_prior = torch.tensor([priors[0][0], priors[1][0]], device=depth_image.device)
-    h_prior = torch.tensor([priors[0][1], priors[1][1]], device=depth_image.device)
-    l_prior = torch.tensor([priors[0][2], priors[1][2]], device=depth_image.device)
-    w = sample_normal_in_range(w_prior[0], w_prior[1], torch.tensor(0.05), w_prior[0] + 2 * w_prior[1], number_of_proposals)
-    h = sample_normal_in_range(h_prior[0], h_prior[1]*1.1, torch.tensor(0.05), h_prior[0] + 2.2 * h_prior[1], number_of_proposals)
-    l = sample_normal_in_range(l_prior[0], l_prior[1], torch.tensor(0.05), l_prior[0] + 2 * l_prior[1], number_of_proposals)
+    w_prior = [priors[0][:,0], priors[1][:,0]]
+    h_prior = [priors[0][:,1], priors[1][:,1]]
+    l_prior = [priors[0][:,2], priors[1][:,2]]
+    w = sample_normal_in_range(w_prior[0], w_prior[1], number_of_proposals, 0.05, w_prior[0] + 2 * w_prior[1])
+    h = sample_normal_in_range(h_prior[0], h_prior[1]*1.1, number_of_proposals, 0.05, h_prior[0] + 2.2 * h_prior[1])
+    l = sample_normal_in_range(l_prior[0], l_prior[1], number_of_proposals, 0.05, l_prior[0] + 2 * l_prior[1])
+    whl = torch.stack([w, h, l], 1)
 
     # Finish center
     def fun(x,coef):
         return coef[0] * x + coef[1]
-    
     # x
-    x_coefficients = np.array([1.15, 0])
-    x = sample_normal_in_range(fun(torch.median(x),x_coefficients), torch.std(x)*0.7, torch.tensor(-8),torch.tensor(8), number_of_proposals) # TODO Run without limits
+    x_coefficients = torch.tensor([1.15, 0])
+    x = sample_normal_in_range(fun(torch.median(x,dim=1).values,x_coefficients), torch.std(x,dim=1)*0.7, torch.tensor(number_of_proposals))
     
     # y
-    y_coefficients  = np.array([1.1, 0])
-    y = sample_normal_in_range(fun(torch.median(y),y_coefficients), torch.std(y)*0.7, torch.tensor(-3),torch.tensor(3), number_of_proposals)
+    y_coefficients  = torch.tensor([1.1, 0])
+    y = sample_normal_in_range(fun(torch.median(y,dim=1).values,y_coefficients), torch.std(y,dim=1)*0.7, number_of_proposals)
     
     # z
     z = z_tmp+l/2
-    z_coefficients = np.array([0.85, 0.35])
-    z = sample_normal_in_range(fun(torch.median(z),z_coefficients), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
+    z_coefficients = torch.tensor([0.85, 0.35])
+    z = sample_normal_in_range(fun(torch.median(z,dim=1).values,z_coefficients), torch.std(z,dim=1) * 1.2, number_of_proposals)
 
     xyzwhl = torch.stack([x, y, z, w, h, l], 1)
     
     # Pose
     if ground_normal is None:
-        rotation_matrices = utils.randn_orthobasis_torch(number_of_proposals)
+        rotation_matrices = utils.randn_orthobasis_torch(number_of_proposals, number_of_instances)
     else:
         angles = torch.linspace(0, np.pi, 36)
         rotation_matrices_inner = utils.orthobasis_from_normal_t(torch.from_numpy(ground_normal), angles)
-        rotation_matrices = rotation_matrices_inner[torch.randint(len(rotation_matrices_inner), (number_of_proposals,))]  
+        rotation_matrices = rotation_matrices_inner[torch.randint(len(rotation_matrices_inner), (number_of_instances,number_of_proposals))]  
+    
     # Check whether it is possible to find gt
     # if not (gt_cube == None) and not is_gt_included(gt_cube,x_range, y_range, z_range, w_prior, h_prior, l_prior):
     #    pass
@@ -88,12 +91,12 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     if gt_cube is None:
         return cubes, None, None
     
-    stat_x = gt_in_norm_range([torch.min(x),torch.max(x)],gt_cube.center[0])
-    stat_y = gt_in_norm_range([torch.min(y),torch.max(y)],gt_cube.center[1])
-    stat_z = gt_in_norm_range([torch.min(z),torch.max(z)],gt_cube.center[2])
-    stat_w = gt_in_norm_range([torch.min(w),torch.max(w)],gt_cube.dimensions[0])
-    stat_h = gt_in_norm_range([torch.min(h),torch.max(h)],gt_cube.dimensions[1])
-    stat_l = gt_in_norm_range([torch.min(l),torch.max(l)],gt_cube.dimensions[2])
+    stat_x = gt_in_norm_range([torch.min(x,dim=1),torch.max(x,dim=1)],gt_cube.center[0])
+    stat_y = gt_in_norm_range([torch.min(y,dim=1),torch.max(y,dim=1)],gt_cube.center[1])
+    stat_z = gt_in_norm_range([torch.min(z,dim=1),torch.max(z,dim=1)],gt_cube.center[2])
+    stat_w = gt_in_norm_range([torch.min(w,dim=1),torch.max(w,dim=1)],gt_cube.dimensions[0])
+    stat_h = gt_in_norm_range([torch.min(h,dim=1),torch.max(h,dim=1)],gt_cube.dimensions[1])
+    stat_l = gt_in_norm_range([torch.min(l,dim=1),torch.max(l,dim=1)],gt_cube.dimensions[2])
     angles = util.mat2euler(gt_cube.rotation)
     stat_rx = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[0]))
     stat_ry = gt_in_norm_range(torch.tensor([0,np.pi/2]),torch.tensor(angles[1]))
@@ -101,13 +104,11 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
 
     stats = torch.tensor([stat_x,stat_y,stat_z,stat_w,stat_h,stat_l,stat_rx,stat_ry,stat_rz])
     
-    ranges = np.array([torch.std(x)*0.8, torch.std(y)*0.8, torch.std(z)*1.2, w_prior[1], h_prior[1]*1.1, l_prior[1], np.pi,np.pi,np.pi])
+    ranges = np.array([torch.std(x,dim=1)*0.8, torch.std(y,dim=1)*0.8, torch.std(z,dim=1)*1.2, w_prior[1], h_prior[1]*1.1, l_prior[1], np.pi,np.pi,np.pi])
 
     return cubes, stats, ranges
 
-
-
-
+"""
 
 #### Other versions that were worse
     
@@ -314,3 +315,4 @@ def propose_rand_rotation(reference_box, depth_image, priors, im_shape, K, numbe
         list_of_cubes.append(pred_cube)
 
     return list_of_cubes, torch.zeros(9), np.ones(9)
+"""

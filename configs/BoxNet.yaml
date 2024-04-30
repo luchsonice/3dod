@@ -1,7 +1,7 @@
 _BASE_: "Base.yaml"
 SOLVER:
   TYPE: "sgd"
-  IMS_PER_BATCH: 2 #196 -> r=5,6 -> because of dataset size r=5,6 * 10,335/233 = 0,248
+  IMS_PER_BATCH: 1 #196 -> r=5,6 -> because of dataset size r=5,6 * 10,335/233 = 0,248
   BASE_LR: 0.0214 #0.12
   STEPS: (17280, 23040)
   MAX_ITER: 100000 #116000

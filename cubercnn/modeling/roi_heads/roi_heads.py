@@ -26,7 +26,7 @@ from detectron2.modeling.roi_heads import (
     StandardROIHeads, ROI_HEADS_REGISTRY, select_foreground_proposals,
 )
 from detectron2.modeling.poolers import ROIPooler
-from ProposalNetwork.proposals.proposals import propose, propose_random_xy, propose_random_xy_patch, propose_rand_rotation
+from ProposalNetwork.proposals.proposals import propose#, propose_random_xy, propose_random_xy_patch, propose_rand_rotation
 from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation
 from ProposalNetwork.utils.conversions import cube_to_box, cubes_to_box
 from ProposalNetwork.utils.spaces import Cube
@@ -390,7 +390,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         
         def predict_cubes(gt_box, priors, gt_3d=None):
             '''wrap propose'''
-            reference_box = Boxes(gt_box.unsqueeze(0))
+            reference_box = Boxes(gt_boxes)
             pred_cubes, stats_instance, stats_ranges = propose(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
             pred_boxes = cubes_to_box(pred_cubes, Ks_scaled_per_box)
             return pred_cubes, pred_boxes, stats_instance, stats_ranges
@@ -399,7 +399,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         pred_cubes_out = []
         if experiment_type['use_pred_boxes']:
             for i, (gt_box, prior_dim_mean, prior_dim_std, gt_box_class) in enumerate(zip(gt_boxes, prior_dims_mean, prior_dims_std, gt_box_classes)):
-                pred_cubes, pred_boxes, _, _ = predict_cubes(gt_box, (prior_dim_mean, prior_dim_std))
+                pred_cubes, pred_boxes, _, _ = predict_cubes(gt_box, (prior_dims_mean, prior_dims_std))
                 IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes)
 
                 highest_score = np.argmax(IoU2D_scores)
@@ -410,7 +410,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
             for i, (gt_2d, gt_3d, gt_pose, prior_dim_mean, prior_dim_std, gt_box_class) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses, prior_dims_mean, prior_dims_std, gt_box_classes)): ## NOTE:this works assuming batch_size=1
                 gt_cube = Cube(torch.cat([gt_3d[6:],gt_3d[3:6]]), gt_pose)
-                pred_cubes, pred_boxes, stats_instance, stats_ranges = predict_cubes(gt_2d, (prior_dim_mean, prior_dim_std), gt_cube)
+                pred_cubes, pred_boxes, stats_instance, stats_ranges = predict_cubes(gt_2d, (prior_dims_mean, prior_dims_std), gt_cube)
 
                 # iou
                 IoU3D = iou_3d(gt_cube, pred_cubes).cpu().numpy()
