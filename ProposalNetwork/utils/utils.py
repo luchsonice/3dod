@@ -1,5 +1,5 @@
 import torch
-from ProposalNetwork.utils.spaces import Box
+from detectron2.structures import Boxes
 import numpy as np
 import matplotlib.pyplot as plt
 #import open3d as o3d
@@ -40,7 +40,7 @@ def compute_rotation_matrix_from_ortho6d(poses):
 
     return matrix
 
-def sample_normal_greater_than_para(mean, std, threshold_low, threshold_high, count):
+def sample_normal_in_range(mean, std, threshold_low, threshold_high, count):
     device = mean.device
     # Generate samples from a normal distribution
     samples = torch.normal(mean, std, size=(count,))
@@ -52,30 +52,6 @@ def sample_normal_greater_than_para(mean, std, threshold_low, threshold_high, co
         samples[invalid_mask] = torch.normal(mean, std, size=(invalid_mask.sum(),))
 
     return samples.to(device)
-
-
-def make_cubes_parallel(x_range, y_range, z, w_prior, h_prior, l_prior, number_of_proposals=1):
-    '''
-    need xyz, whl, and pose (R)
-    it does not run faster on cuda.
-    '''
-    # xyz
-    x_range = x_range.repeat(number_of_proposals,1)
-    y_range = y_range.repeat(number_of_proposals,1)
-    x = (x_range[:, 0]-x_range[:, 1]).t() * torch.rand(number_of_proposals) + x_range[:, 1]
-    y = (y_range[:, 0]-y_range[:, 1]).t() * torch.rand(number_of_proposals) + y_range[:, 1]
-    xyz = torch.stack([x, y, z], 1)
-
-    # whl
-    w = sample_normal_greater_than_para(w_prior[0], w_prior[1], 0.1, number_of_proposals)
-    h = sample_normal_greater_than_para(h_prior[0], h_prior[1], 0.1, number_of_proposals)
-    l = sample_normal_greater_than_para(l_prior[0], l_prior[1], 0.05, number_of_proposals)
-    whl = torch.stack([w, h, l], 1)
-
-    # R
-    rotation_matrix = randn_orthobasis_torch(number_of_proposals) 
-    
-    return xyz, whl, rotation_matrix
 
 def randn_orthobasis_torch(num_samples=1):
     z = torch.randn(num_samples, 3, 3)
@@ -94,22 +70,6 @@ def randn_orthobasis(num_samples=1):
     z[:, 1] = np.cross(z[:, 2], z[:, 0], axis=-1)
     z[:, 1] = z[:, 1] / np.linalg.norm(z[:, 1], axis=-1, keepdims=True)
     return z
-
-def is_box_included_in_other_box(reference_box, proposed_box):
-    reference_corners = reference_box.get_all_corners()
-    proposed_corners = proposed_box.get_all_corners()
-
-    reference_min_x = torch.min(reference_corners[:,0])
-    reference_max_x = torch.max(reference_corners[:,0])
-    reference_min_y = torch.min(reference_corners[:,1])
-    reference_max_y = torch.max(reference_corners[:,1])
-
-    proposed_min_x = torch.min(proposed_corners[:,0])
-    proposed_max_x = torch.max(proposed_corners[:,0])
-    proposed_min_y = torch.min(proposed_corners[:,1])
-    proposed_max_y = torch.max(proposed_corners[:,1])
-
-    return (reference_min_x <= proposed_min_x <= proposed_max_x <= reference_max_x and reference_min_y <= proposed_min_y <= proposed_max_y <= reference_max_y)
 
 """
 # plotting
@@ -229,6 +189,19 @@ def gt_in_norm_range(range,gt):
 
     return res
 
+def vectorized_linspace(start_tensor, end_tensor, number_of_steps):
+    # Calculate spacing
+    spacing = (end_tensor - start_tensor) / (number_of_steps - 1)
+    # Create linear spaces with arange
+    linear_spaces = torch.arange(start=0, end=number_of_steps, dtype=start_tensor.dtype) * spacing + start_tensor
+    return linear_spaces
+
+
+
+
+
+
+
 ##### Scoring
 def iou_2d(gt_box, proposal_boxes):
     '''
@@ -275,13 +248,6 @@ def custom_mapping(x,beta=1.7):
             mapped_list.append((1 / (1 + (x[i] / (1 - x[i])) ** (-beta))))
     
     return mapped_list
-
-def Boxes_to_list_of_Box(Boxes):
-    '''
-    Boxes: detectron2 Boxes
-    '''
-    detectron_boxes = Boxes.tensor
-    return [Box(detectron_boxes[i,:]) for i in range(detectron_boxes.shape[1])]
 
 def mask_iou(segmentation_mask, bube_mask):
     '''

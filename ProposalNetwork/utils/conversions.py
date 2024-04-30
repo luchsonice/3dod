@@ -1,6 +1,6 @@
-from ProposalNetwork.utils.spaces import Box
 import torch
 import numpy as np
+from detectron2.structures import Boxes
     
 def cube_to_box(cube,K):
     '''
@@ -20,14 +20,7 @@ def cube_to_box(cube,K):
     min_y = torch.min(bube_corners[:,1])
     max_y = torch.max(bube_corners[:,1])
     
-    return Box(torch.tensor([min_x, min_y, max_x, max_y], device=cube.tensor.device))
-
-def Boxes_to_list_of_Box(Boxes):
-    '''
-    Boxes: detectron2 Boxes
-    '''
-    detectron_boxes = Boxes.tensor
-    return [Box(detectron_boxes[i,:]) for i in range(detectron_boxes.shape[1])]
+    return Boxes(torch.tensor([[min_x, min_y, max_x, max_y]], device=cube.tensor.device))
 
 def pixel_to_normalised_space(pixel_coord, im_shape, norm_shape):
     '''

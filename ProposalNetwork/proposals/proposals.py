@@ -1,6 +1,7 @@
 from ProposalNetwork.utils import utils
 from ProposalNetwork.utils.spaces import Cube
-from ProposalNetwork.utils.utils import gt_in_norm_range, sample_normal_greater_than_para
+from ProposalNetwork.utils.utils import gt_in_norm_range, sample_normal_in_range, vectorized_linspace
+from ProposalNetwork.utils.conversions import pixel_to_normalised_space
 import torch
 import numpy as np
 from cubercnn import util
@@ -21,11 +22,13 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     ####### Center
     # Removing the outer % on each side of range for center point
     m = 4
-    x_range_px = torch.tensor([reference_box.x1+reference_box.width/m,reference_box.x2-reference_box.width/m],device=depth_image.device)
-    y_range_px = torch.tensor([reference_box.y1+reference_box.height/m,reference_box.y2-reference_box.height/m],device=depth_image.device)
+    widths = reference_box.tensor[:,2] - reference_box.tensor[:,0]
+    heights = reference_box.tensor[:,3] - reference_box.tensor[:,1]
+    x_range_px = torch.stack((reference_box.tensor[:,0]+widths/m,reference_box.tensor[:,2]-widths/m),dim=1)
+    y_range_px = torch.stack((reference_box.tensor[:,1]+heights/m,reference_box.tensor[:,3]-heights/m),dim=1)
     # Find depths
-    x_grid_px = torch.linspace(x_range_px[0],x_range_px[1],number_of_proposals, device=depth_image.device).long()
-    y_grid_px = torch.linspace(y_range_px[0],y_range_px[1],number_of_proposals, device=depth_image.device).long()
+    x_grid_px = vectorized_linspace(x_range_px[:,0],x_range_px[:,1],number_of_proposals).long()
+    y_grid_px = vectorized_linspace(y_range_px[:,0],y_range_px[:,1],number_of_proposals).long()
     x_indices = x_grid_px.round()
     y_indices = y_grid_px.round()
     d = depth_image[y_indices, x_indices]
@@ -45,9 +48,9 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     w_prior = torch.tensor([priors[0][0], priors[1][0]], device=depth_image.device)
     h_prior = torch.tensor([priors[0][1], priors[1][1]], device=depth_image.device)
     l_prior = torch.tensor([priors[0][2], priors[1][2]], device=depth_image.device)
-    w = sample_normal_greater_than_para(w_prior[0], w_prior[1], torch.tensor(0.05), w_prior[0] + 2 * w_prior[1], number_of_proposals)
-    h = sample_normal_greater_than_para(h_prior[0], h_prior[1]*1.1, torch.tensor(0.05), h_prior[0] + 2.2 * h_prior[1], number_of_proposals)
-    l = sample_normal_greater_than_para(l_prior[0], l_prior[1], torch.tensor(0.05), l_prior[0] + 2 * l_prior[1], number_of_proposals)
+    w = sample_normal_in_range(w_prior[0], w_prior[1], torch.tensor(0.05), w_prior[0] + 2 * w_prior[1], number_of_proposals)
+    h = sample_normal_in_range(h_prior[0], h_prior[1]*1.1, torch.tensor(0.05), h_prior[0] + 2.2 * h_prior[1], number_of_proposals)
+    l = sample_normal_in_range(l_prior[0], l_prior[1], torch.tensor(0.05), l_prior[0] + 2 * l_prior[1], number_of_proposals)
     whl = torch.stack([w, h, l], 1)
 
     # Finish center
@@ -56,16 +59,16 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     
     # x
     x_coefficients = np.array([1.15, 0])
-    x = sample_normal_greater_than_para(fun(torch.median(x),x_coefficients), torch.std(x)*0.7, torch.tensor(-8),torch.tensor(8), number_of_proposals) # TODO Run without limits
+    x = sample_normal_in_range(fun(torch.median(x),x_coefficients), torch.std(x)*0.7, torch.tensor(-8),torch.tensor(8), number_of_proposals) # TODO Run without limits
     
     # y
     y_coefficients  = np.array([1.1, 0])
-    y = sample_normal_greater_than_para(fun(torch.median(y),y_coefficients), torch.std(y)*0.7, torch.tensor(-3),torch.tensor(3), number_of_proposals)
+    y = sample_normal_in_range(fun(torch.median(y),y_coefficients), torch.std(y)*0.7, torch.tensor(-3),torch.tensor(3), number_of_proposals)
     
     # z
     z = z_tmp+l/2
     z_coefficients = np.array([0.85, 0.35])
-    z = sample_normal_greater_than_para(fun(torch.median(z),z_coefficients), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
+    z = sample_normal_in_range(fun(torch.median(z),z_coefficients), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
 
     xyz = torch.stack([x, y, z], 1)
     
@@ -116,8 +119,8 @@ def propose_random_xy(reference_box, depth_image, priors, im_shape, K, number_of
     ####### Center
     # Removing the outer % on each side of range for center point
     m = 4
-    x_range_px = torch.tensor([reference_box.x1+reference_box.width/m,reference_box.x2-reference_box.width/m],device=depth_image.device)
-    y_range_px = torch.tensor([reference_box.y1+reference_box.height/m,reference_box.y2-reference_box.height/m],device=depth_image.device)
+    x_range_px = torch.tensor([reference_box.tensor[:,0]+reference_box.width/m,reference_box.tensor[:,2]-reference_box.width/m],device=depth_image.device)
+    y_range_px = torch.tensor([reference_box.tensor[:,1]+reference_box.height/m,reference_box.tensor[:,3]-reference_box.height/m],device=depth_image.device)
     # Find depths
     x_grid_px = torch.linspace(x_range_px[0],x_range_px[1],number_of_proposals, device=depth_image.device).long()
     y_grid_px = torch.linspace(y_range_px[0],y_range_px[1],number_of_proposals, device=depth_image.device).long()
@@ -140,9 +143,9 @@ def propose_random_xy(reference_box, depth_image, priors, im_shape, K, number_of
     w_prior = torch.tensor([priors[0][0], priors[1][0]], device=depth_image.device)
     h_prior = torch.tensor([priors[0][1], priors[1][1]], device=depth_image.device)
     l_prior = torch.tensor([priors[0][2], priors[1][2]], device=depth_image.device)
-    w = sample_normal_greater_than_para(w_prior[0], w_prior[1], torch.tensor(0.05), w_prior[0] + 2 * w_prior[1], number_of_proposals)
-    h = sample_normal_greater_than_para(h_prior[0], h_prior[1]*1.1, torch.tensor(0.05), h_prior[0] + 2.2 * h_prior[1], number_of_proposals)
-    l = sample_normal_greater_than_para(l_prior[0], l_prior[1], torch.tensor(0.05), l_prior[0] + 2 * l_prior[1], number_of_proposals)
+    w = sample_normal_in_range(w_prior[0], w_prior[1], torch.tensor(0.05), w_prior[0] + 2 * w_prior[1], number_of_proposals)
+    h = sample_normal_in_range(h_prior[0], h_prior[1]*1.1, torch.tensor(0.05), h_prior[0] + 2.2 * h_prior[1], number_of_proposals)
+    l = sample_normal_in_range(l_prior[0], l_prior[1], torch.tensor(0.05), l_prior[0] + 2 * l_prior[1], number_of_proposals)
     whl = torch.stack([w, h, l], 1)
 
     # Finish center
@@ -155,14 +158,14 @@ def propose_random_xy(reference_box, depth_image, priors, im_shape, K, number_of
     # z
     z = z_tmp+l/2
     z_coefficients = np.array([0.85, 0.35])
-    z = sample_normal_greater_than_para(fun(torch.median(z),z_coefficients), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
+    z = sample_normal_in_range(fun(torch.median(z),z_coefficients), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
 
     xyz = torch.stack([x, y, z], 1)
     
     # Pose
     rotation_matrix = []
     if ground_normal is None:
-        rotation_matrix = utils.randn_orthobasis_torch(1).squeeze(0)
+        rotation_matrix = utils.randn_orthobasis_torch(number_of_proposals).squeeze(0)
     else:
         angles = np.linspace(0, np.pi, 36) # 5 degree steps
         for i in range(number_of_proposals):
@@ -181,8 +184,8 @@ def propose_random_xy_patch(reference_box, depth_image, priors, im_shape, K, num
     ####### Center
     # Removing the outer % on each side of range for center point
     m = 4
-    x_range_px = torch.tensor([reference_box.x1+reference_box.width/m,reference_box.x2-reference_box.width/m],device=depth_image.device)
-    y_range_px = torch.tensor([reference_box.y1+reference_box.height/m,reference_box.y2-reference_box.height/m],device=depth_image.device)
+    x_range_px = torch.tensor([reference_box.tensor[:,0]+reference_box.width/m,reference_box.tensor[:,2]-reference_box.width/m],device=depth_image.device)
+    y_range_px = torch.tensor([reference_box.tensor[:,1]+reference_box.height/m,reference_box.tensor[:,3]-reference_box.height/m],device=depth_image.device)
     # Find depths
     x_grid_px = torch.linspace(x_range_px[0],x_range_px[1],number_of_proposals, device=depth_image.device).long()
     y_grid_px = torch.linspace(y_range_px[0],y_range_px[1],number_of_proposals, device=depth_image.device).long()
@@ -205,9 +208,9 @@ def propose_random_xy_patch(reference_box, depth_image, priors, im_shape, K, num
     w_prior = torch.tensor([priors[0][0], priors[1][0]], device=depth_image.device)
     h_prior = torch.tensor([priors[0][1], priors[1][1]], device=depth_image.device)
     l_prior = torch.tensor([priors[0][2], priors[1][2]], device=depth_image.device)
-    w = sample_normal_greater_than_para(w_prior[0], w_prior[1], torch.tensor(0.05), w_prior[0] + 2 * w_prior[1], number_of_proposals)
-    h = sample_normal_greater_than_para(h_prior[0], h_prior[1]*1.1, torch.tensor(0.05), h_prior[0] + 2.2 * h_prior[1], number_of_proposals)
-    l = sample_normal_greater_than_para(l_prior[0], l_prior[1], torch.tensor(0.05), l_prior[0] + 2 * l_prior[1], number_of_proposals)
+    w = sample_normal_in_range(w_prior[0], w_prior[1], torch.tensor(0.05), w_prior[0] + 2 * w_prior[1], number_of_proposals)
+    h = sample_normal_in_range(h_prior[0], h_prior[1]*1.1, torch.tensor(0.05), h_prior[0] + 2.2 * h_prior[1], number_of_proposals)
+    l = sample_normal_in_range(l_prior[0], l_prior[1], torch.tensor(0.05), l_prior[0] + 2 * l_prior[1], number_of_proposals)
     whl = torch.stack([w, h, l], 1)
 
     # Finish center
@@ -215,28 +218,100 @@ def propose_random_xy_patch(reference_box, depth_image, priors, im_shape, K, num
         return coef[0] * x + coef[1]
     
     # xy
-    l_x = reference_box.x1 / im_shape[0]/2 - 1
-    h_x = reference_box.x2 / im_shape[0]/2 - 1
-    l_y = reference_box.y1 / im_shape[1]/2 - 1
-    h_y = reference_box.y2 / im_shape[1]/2 - 1
+    [l_x,h_x] = pixel_to_normalised_space([reference_box.tensor[:,0],reference_box.tensor[:,2]],[im_shape[0],im_shape[0]],[2,2])
+    [l_y,h_y] = pixel_to_normalised_space([reference_box.tensor[:,1],reference_box.tensor[:,3],],[im_shape[1],im_shape[0]],[1.5,1.5])
+    
     x = torch.rand(1000) * (h_x - l_x) + l_x
     y = torch.rand(1000) * (h_y - l_y) + l_y
     # z
     z = z_tmp+l/2
     z_coefficients = np.array([0.85, 0.35])
-    z = sample_normal_greater_than_para(fun(torch.median(z),z_coefficients), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
+    z = sample_normal_in_range(fun(torch.median(z),z_coefficients), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
 
     xyz = torch.stack([x, y, z], 1)
     
     # Pose
     rotation_matrix = []
     if ground_normal is None:
-        rotation_matrix = utils.randn_orthobasis_torch(1).squeeze(0)
+        rotation_matrix = utils.randn_orthobasis_torch(number_of_proposals).squeeze(0)
     else:
         angles = np.linspace(0, np.pi, 36) # 5 degree steps
         for i in range(number_of_proposals):
             rotation_matrix.append(torch.from_numpy(utils.orthobasis_from_normal(ground_normal, np.random.choice(angles)).astype(np.float32)))
 
+    list_of_cubes = []
+    for i in range(number_of_proposals):
+        pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrix[i])
+        list_of_cubes.append(pred_cube)
+
+    return list_of_cubes, torch.zeros(9), np.ones(9)
+
+def propose_rand_rotation(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal=None):
+    '''
+    Proposes a cube. The ranges are largely random, except for that the center needs to be inside the reference box.
+    Also, objects have a length, width and height according to priors.
+
+    im_shape = [x,y]
+    priors = [prior_mean, prior_std] 2x3
+
+    Output:
+    list_of_cubes : List of Cube
+    stats         : tensor N x number_of_proposals
+    '''
+    ####### Center
+    # Removing the outer % on each side of range for center point
+    m = 4
+    x_range_px = torch.tensor([reference_box.tensor[:,0]+reference_box.width/m,reference_box.tensor[:,2]-reference_box.width/m],device=depth_image.device)
+    y_range_px = torch.tensor([reference_box.tensor[:,1]+reference_box.height/m,reference_box.tensor[:,3]-reference_box.height/m],device=depth_image.device)
+    # Find depths
+    x_grid_px = torch.linspace(x_range_px[0],x_range_px[1],number_of_proposals, device=depth_image.device).long()
+    y_grid_px = torch.linspace(y_range_px[0],y_range_px[1],number_of_proposals, device=depth_image.device).long()
+    x_indices = x_grid_px.round()
+    y_indices = y_grid_px.round()
+    d = depth_image[y_indices, x_indices]
+    # Calculate x and y and temporary z
+    opposite_side_x = x_grid_px-K[0,2].repeat(number_of_proposals) # x-directional distance in px between image center and object center
+    opposite_side_y = y_grid_px-K[1,2].repeat(number_of_proposals) # y-directional distance in px between image center and object center
+    adjacent_side = K[0,0].repeat(number_of_proposals) # depth in px to image plane
+    angle_x = torch.atan2(opposite_side_x,adjacent_side)
+    dx_inside_camera = torch.sqrt(opposite_side_x**2 + adjacent_side**2)
+    angle_d = torch.atan2(opposite_side_y,dx_inside_camera)
+    y = d * torch.sin(angle_d)
+    dx = torch.sqrt(d**2 - y**2)
+    x = dx * torch.sin(angle_x)
+    z_tmp = torch.sqrt(dx**2 - x**2)
+
+    # Dimensions
+    w_prior = torch.tensor([priors[0][0], priors[1][0]], device=depth_image.device)
+    h_prior = torch.tensor([priors[0][1], priors[1][1]], device=depth_image.device)
+    l_prior = torch.tensor([priors[0][2], priors[1][2]], device=depth_image.device)
+    w = sample_normal_in_range(w_prior[0], w_prior[1], torch.tensor(0.05), w_prior[0] + 2 * w_prior[1], number_of_proposals)
+    h = sample_normal_in_range(h_prior[0], h_prior[1]*1.1, torch.tensor(0.05), h_prior[0] + 2.2 * h_prior[1], number_of_proposals)
+    l = sample_normal_in_range(l_prior[0], l_prior[1], torch.tensor(0.05), l_prior[0] + 2 * l_prior[1], number_of_proposals)
+    whl = torch.stack([w, h, l], 1)
+
+    # Finish center
+    def fun(x,coef):
+        return coef[0] * x + coef[1]
+    
+    # x
+    x_coefficients = np.array([1.15, 0])
+    x = sample_normal_in_range(fun(torch.median(x),x_coefficients), torch.std(x)*0.7, torch.tensor(-8),torch.tensor(8), number_of_proposals) # TODO Run without limits
+    
+    # y
+    y_coefficients  = np.array([1.1, 0])
+    y = sample_normal_in_range(fun(torch.median(y),y_coefficients), torch.std(y)*0.7, torch.tensor(-3),torch.tensor(3), number_of_proposals)
+    
+    # z
+    z = z_tmp+l/2
+    z_coefficients = np.array([0.85, 0.35])
+    z = sample_normal_in_range(fun(torch.median(z),z_coefficients), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
+
+    xyz = torch.stack([x, y, z], 1)
+    
+    # Pose
+    rotation_matrix = utils.randn_orthobasis_torch(number_of_proposals).squeeze(0)
+    
     list_of_cubes = []
     for i in range(number_of_proposals):
         pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrix[i])

@@ -1,5 +1,4 @@
 from detectron2.layers.nms import batched_nms
-from matplotlib import pyplot as plt
 import pyransac3d as pyrsc
 #import open3d as o3d
 import copy
@@ -27,10 +26,10 @@ from detectron2.modeling.roi_heads import (
     StandardROIHeads, ROI_HEADS_REGISTRY, select_foreground_proposals,
 )
 from detectron2.modeling.poolers import ROIPooler
-from ProposalNetwork.proposals.proposals import propose, propose_random_xy, propose_random_xy_patch
+from ProposalNetwork.proposals.proposals import propose, propose_random_xy, propose_random_xy_patch, propose_rand_rotation
 from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation
 from ProposalNetwork.utils.conversions import cube_to_box
-from ProposalNetwork.utils.spaces import Box, Cube
+from ProposalNetwork.utils.spaces import Cube
 from ProposalNetwork.utils.utils import iou_3d
 from cubercnn.modeling.roi_heads.cube_head import build_cube_head
 from cubercnn.modeling.proposal_generator.rpn import subsample_labels
@@ -388,12 +387,12 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_point_c  = np.zeros((n_gt, number_of_proposals))
         stats_image    = torch.zeros(n_gt, 9)
         stats_off      = np.zeros((n_gt, 10))
-
+        
         def predict_cubes(gt_box, priors, gt_3d=None):
             '''wrap propose'''
-            reference_box = Box(gt_box)
+            reference_box = Boxes(gt_box.unsqueeze(0))
             pred_cubes, stats_instance, stats_ranges = propose(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
-            pred_boxes = Boxes(torch.cat([cube_to_box(pred_cube, Ks_scaled_per_box).box.tensor for pred_cube in pred_cubes]))
+            pred_boxes = Boxes(torch.cat([cube_to_box(pred_cube, Ks_scaled_per_box).tensor for pred_cube in pred_cubes]))
             return pred_cubes, pred_boxes, stats_instance, stats_ranges
 
 
@@ -420,7 +419,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
                 
                 # scoring
-                IoU2D_scores = score_iou(cube_to_box(gt_cube, Ks_scaled_per_box).box, pred_boxes)
+                IoU2D_scores = score_iou(cube_to_box(gt_cube, Ks_scaled_per_box), pred_boxes)
                 point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground), pred_cubes, Ks_scaled_per_box, mask_per_image[i][0])
                 segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), bube_corners)
                 dim_scores = score_dimensions((prior_dim_mean, prior_dim_std), dimensions)
@@ -459,7 +458,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             # list of Instances with the fields: pred_boxes, scores, pred_classes, pred_bbox3D, pred_center_cam, pred_center_2D, pred_dimensions, pred_pose
             pred_instances = [Instances(size) for size in images_raw.image_sizes] # each instance object contains all boxes in one image, the list is for each image
             for instances_i in pred_instances:
-                instances_i.pred_boxes = Boxes.cat([cube_to_box(pred_cube, Ks_scaled_per_box.to('cpu')).box for pred_cube in pred_cubes_out])
+                instances_i.pred_boxes = Boxes.cat([cube_to_box(pred_cube, Ks_scaled_per_box.to('cpu')) for pred_cube in pred_cubes_out])
                 instances_i.scores = torch.tensor([pred_cube.score for pred_cube in pred_cubes_out])
                 instances_i.pred_classes = torch.tensor([pred_cube.label for pred_cube in pred_cubes_out])
                 instances_i.pred_bbox3D = torch.stack([pred_cube.get_all_corners() for pred_cube in pred_cubes_out])
