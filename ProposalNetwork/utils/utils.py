@@ -57,13 +57,13 @@ def sample_normal_in_range(means, stds, count, threshold_low=None, threshold_hig
 
     return samples.to(device)
 
-def randn_orthobasis_torch(num_samples=1):
-    z = torch.randn(num_samples, 3, 3)
+def randn_orthobasis_torch(num_samples=1,num_instances=1):
+    z = torch.randn(num_instances, num_samples, 3, 3)
     z = z / torch.norm(z, p=2, dim=-1, keepdim=True)
-    z[:, 0] = torch.cross(z[:, 1], z[:, 2], dim=-1)
-    z[:, 0] = z[:, 0] / torch.norm(z[:, 0], dim=-1, keepdim=True)
-    z[:, 1] = torch.cross(z[:, 2], z[:, 0], dim=-1)
-    z[:, 1] = z[:, 1] / torch.norm(z[:, 1], dim=-1, keepdim=True)
+    z[:, :, 0] = torch.cross(z[:, :, 1], z[:, :, 2], dim=-1)
+    z[:, :, 0] = z[:, :, 0] / torch.norm(z[:, :, 0], dim=-1, keepdim=True)
+    z[:, :, 1] = torch.cross(z[:, :, 2], z[:, :, 0], dim=-1)
+    z[:, :, 1] = z[:, :, 1] / torch.norm(z[:, :, 1], dim=-1, keepdim=True)
     return z
 
 def randn_orthobasis(num_samples=1):

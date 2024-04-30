@@ -19,6 +19,8 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     list_of_cubes : List of Cube
     stats         : tensor N x number_of_proposals
     '''
+    number_of_instances = len(reference_box)
+
     ####### Center
     # Removing the outer % on each side of range for center point
     m = 4
@@ -74,11 +76,12 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     
     # Pose
     if ground_normal is None:
-        rotation_matrices = utils.randn_orthobasis_torch(number_of_proposals)
+        rotation_matrices = utils.randn_orthobasis_torch(number_of_proposals, number_of_instances)
     else:
         angles = torch.linspace(0, np.pi, 36)
         rotation_matrices_inner = utils.orthobasis_from_normal_t(torch.from_numpy(ground_normal), angles)
-        rotation_matrices = rotation_matrices_inner[torch.randint(len(rotation_matrices_inner), (number_of_proposals,))]  
+        rotation_matrices = rotation_matrices_inner[torch.randint(len(rotation_matrices_inner), (number_of_instances,number_of_proposals))]  
+    
     # Check whether it is possible to find gt
     # if not (gt_cube == None) and not is_gt_included(gt_cube,x_range, y_range, z_range, w_prior, h_prior, l_prior):
     #    pass
