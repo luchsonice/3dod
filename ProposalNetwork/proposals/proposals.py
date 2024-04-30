@@ -1,6 +1,6 @@
 from ProposalNetwork.utils import utils
 from ProposalNetwork.utils.spaces import Cube
-from ProposalNetwork.utils.utils import gt_in_norm_range, sample_normal_in_range
+from ProposalNetwork.utils.utils import gt_in_norm_range, sample_normal_in_range, vectorized_linspace
 from ProposalNetwork.utils.conversions import pixel_to_normalised_space
 import torch
 import numpy as np
@@ -22,11 +22,13 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     ####### Center
     # Removing the outer % on each side of range for center point
     m = 4
-    x_range_px = torch.tensor([reference_box.x1+reference_box.width/m,reference_box.x2-reference_box.width/m],device=depth_image.device)
-    y_range_px = torch.tensor([reference_box.y1+reference_box.height/m,reference_box.y2-reference_box.height/m],device=depth_image.device)
+    widths = reference_box.tensor[:,2] - reference_box.tensor[:,0]
+    heights = reference_box.tensor[:,3] - reference_box.tensor[:,1]
+    x_range_px = torch.stack((reference_box.tensor[:,0]+widths/m,reference_box.tensor[:,2]-widths/m),dim=1)
+    y_range_px = torch.stack((reference_box.tensor[:,1]+heights/m,reference_box.tensor[:,3]-heights/m),dim=1)
     # Find depths
-    x_grid_px = torch.linspace(x_range_px[0],x_range_px[1],number_of_proposals, device=depth_image.device).long()
-    y_grid_px = torch.linspace(y_range_px[0],y_range_px[1],number_of_proposals, device=depth_image.device).long()
+    x_grid_px = vectorized_linspace(x_range_px[:,0],x_range_px[:,1],number_of_proposals).long()
+    y_grid_px = vectorized_linspace(y_range_px[:,0],y_range_px[:,1],number_of_proposals).long()
     x_indices = x_grid_px.round()
     y_indices = y_grid_px.round()
     d = depth_image[y_indices, x_indices]
@@ -120,8 +122,8 @@ def propose_random_xy(reference_box, depth_image, priors, im_shape, K, number_of
     ####### Center
     # Removing the outer % on each side of range for center point
     m = 4
-    x_range_px = torch.tensor([reference_box.x1+reference_box.width/m,reference_box.x2-reference_box.width/m],device=depth_image.device)
-    y_range_px = torch.tensor([reference_box.y1+reference_box.height/m,reference_box.y2-reference_box.height/m],device=depth_image.device)
+    x_range_px = torch.tensor([reference_box.tensor[:,0]+reference_box.width/m,reference_box.tensor[:,2]-reference_box.width/m],device=depth_image.device)
+    y_range_px = torch.tensor([reference_box.tensor[:,1]+reference_box.height/m,reference_box.tensor[:,3]-reference_box.height/m],device=depth_image.device)
     # Find depths
     x_grid_px = torch.linspace(x_range_px[0],x_range_px[1],number_of_proposals, device=depth_image.device).long()
     y_grid_px = torch.linspace(y_range_px[0],y_range_px[1],number_of_proposals, device=depth_image.device).long()
@@ -185,8 +187,8 @@ def propose_random_xy_patch(reference_box, depth_image, priors, im_shape, K, num
     ####### Center
     # Removing the outer % on each side of range for center point
     m = 4
-    x_range_px = torch.tensor([reference_box.x1+reference_box.width/m,reference_box.x2-reference_box.width/m],device=depth_image.device)
-    y_range_px = torch.tensor([reference_box.y1+reference_box.height/m,reference_box.y2-reference_box.height/m],device=depth_image.device)
+    x_range_px = torch.tensor([reference_box.tensor[:,0]+reference_box.width/m,reference_box.tensor[:,2]-reference_box.width/m],device=depth_image.device)
+    y_range_px = torch.tensor([reference_box.tensor[:,1]+reference_box.height/m,reference_box.tensor[:,3]-reference_box.height/m],device=depth_image.device)
     # Find depths
     x_grid_px = torch.linspace(x_range_px[0],x_range_px[1],number_of_proposals, device=depth_image.device).long()
     y_grid_px = torch.linspace(y_range_px[0],y_range_px[1],number_of_proposals, device=depth_image.device).long()
@@ -219,8 +221,8 @@ def propose_random_xy_patch(reference_box, depth_image, priors, im_shape, K, num
         return coef[0] * x + coef[1]
     
     # xy
-    [l_x,h_x] = pixel_to_normalised_space([reference_box.x1,reference_box.x2],[im_shape[0],im_shape[0]],[2.5,2.5])
-    [l_y,h_y] = pixel_to_normalised_space([reference_box.y1,reference_box.y2,],[im_shape[1],im_shape[0]],[2,2])
+    [l_x,h_x] = pixel_to_normalised_space([reference_box.tensor[:,0],reference_box.tensor[:,2]],[im_shape[0],im_shape[0]],[2,2])
+    [l_y,h_y] = pixel_to_normalised_space([reference_box.tensor[:,1],reference_box.tensor[:,3],],[im_shape[1],im_shape[0]],[1.5,1.5])
     
     x = torch.rand(1000) * (h_x - l_x) + l_x
     y = torch.rand(1000) * (h_y - l_y) + l_y
@@ -262,8 +264,8 @@ def propose_rand_rotation(reference_box, depth_image, priors, im_shape, K, numbe
     ####### Center
     # Removing the outer % on each side of range for center point
     m = 4
-    x_range_px = torch.tensor([reference_box.x1+reference_box.width/m,reference_box.x2-reference_box.width/m],device=depth_image.device)
-    y_range_px = torch.tensor([reference_box.y1+reference_box.height/m,reference_box.y2-reference_box.height/m],device=depth_image.device)
+    x_range_px = torch.tensor([reference_box.tensor[:,0]+reference_box.width/m,reference_box.tensor[:,2]-reference_box.width/m],device=depth_image.device)
+    y_range_px = torch.tensor([reference_box.tensor[:,1]+reference_box.height/m,reference_box.tensor[:,3]-reference_box.height/m],device=depth_image.device)
     # Find depths
     x_grid_px = torch.linspace(x_range_px[0],x_range_px[1],number_of_proposals, device=depth_image.device).long()
     y_grid_px = torch.linspace(y_range_px[0],y_range_px[1],number_of_proposals, device=depth_image.device).long()
