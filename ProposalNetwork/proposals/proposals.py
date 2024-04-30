@@ -48,9 +48,9 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     w_prior = torch.tensor([priors[0][0], priors[1][0]], device=depth_image.device)
     h_prior = torch.tensor([priors[0][1], priors[1][1]], device=depth_image.device)
     l_prior = torch.tensor([priors[0][2], priors[1][2]], device=depth_image.device)
-    w = sample_normal_in_range(w_prior[0], w_prior[1], torch.tensor(0.05), w_prior[0] + 2 * w_prior[1], number_of_proposals)
-    h = sample_normal_in_range(h_prior[0], h_prior[1]*1.1, torch.tensor(0.05), h_prior[0] + 2.2 * h_prior[1], number_of_proposals)
-    l = sample_normal_in_range(l_prior[0], l_prior[1], torch.tensor(0.05), l_prior[0] + 2 * l_prior[1], number_of_proposals)
+    w = sample_normal_in_range(w_prior[0], w_prior[1], number_of_proposals, torch.tensor(0.05), w_prior[0] + 2 * w_prior[1])
+    h = sample_normal_in_range(h_prior[0], h_prior[1]*1.1, number_of_proposals, torch.tensor(0.05), h_prior[0] + 2.2 * h_prior[1])
+    l = sample_normal_in_range(l_prior[0], l_prior[1], number_of_proposals, torch.tensor(0.05), l_prior[0] + 2 * l_prior[1])
     whl = torch.stack([w, h, l], 1)
 
     # Finish center
@@ -58,17 +58,17 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
         return coef[0] * x + coef[1]
     
     # x
-    x_coefficients = np.array([1.15, 0])
-    x = sample_normal_in_range(fun(torch.median(x),x_coefficients), torch.std(x)*0.7, torch.tensor(-8),torch.tensor(8), number_of_proposals) # TODO Run without limits
+    x_coefficients = torch.tensor([1.15, 0])
+    x = sample_normal_in_range(fun(torch.median(x,dim=1).values,x_coefficients), torch.std(x,dim=1)*0.7, torch.tensor(number_of_proposals))
     
     # y
-    y_coefficients  = np.array([1.1, 0])
-    y = sample_normal_in_range(fun(torch.median(y),y_coefficients), torch.std(y)*0.7, torch.tensor(-3),torch.tensor(3), number_of_proposals)
+    y_coefficients  = torch.tensor([1.1, 0])
+    y = sample_normal_in_range(fun(torch.median(y,dim=1).values,y_coefficients), torch.std(y,dim=1)*0.7, number_of_proposals)
     
     # z
     z = z_tmp+l/2
-    z_coefficients = np.array([0.85, 0.35])
-    z = sample_normal_in_range(fun(torch.median(z),z_coefficients), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
+    z_coefficients = torch.tensor([0.85, 0.35])
+    z = sample_normal_in_range(fun(torch.median(z,dim=1).values,z_coefficients), torch.std(z,dim=1) * 1.2, number_of_proposals)
 
     xyz = torch.stack([x, y, z], 1)
     
@@ -111,7 +111,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
 
 
 
-
+"""
 
 #### Other versions that were worse
     
@@ -318,3 +318,4 @@ def propose_rand_rotation(reference_box, depth_image, priors, im_shape, K, numbe
         list_of_cubes.append(pred_cube)
 
     return list_of_cubes, torch.zeros(9), np.ones(9)
+"""

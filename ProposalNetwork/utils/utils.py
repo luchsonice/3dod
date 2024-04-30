@@ -40,16 +40,20 @@ def compute_rotation_matrix_from_ortho6d(poses):
 
     return matrix
 
-def sample_normal_in_range(mean, std, threshold_low, threshold_high, count):
-    device = mean.device
+def sample_normal_in_range(means, stds, count, threshold_low=None, threshold_high=None):
+    device = means.device
     # Generate samples from a normal distribution
-    samples = torch.normal(mean, std, size=(count,))
+    if len(means.size()) == 0:
+        samples = torch.normal(means, stds, size=(count,))
+    else:
+        samples = torch.normal(means.unsqueeze(1).expand(-1,count), stds.unsqueeze(1).expand(-1,count))
 
     # Ensure that all samples are greater than threshold_low and less than threshold_high
-    while torch.any((samples < threshold_low) | (samples > threshold_high)): # TODO stop argument in case of never sampling
-        invalid_mask = (samples < threshold_low) | (samples > threshold_high)
-        # Replace invalid samples with new samples drawn from the normal distribution
-        samples[invalid_mask] = torch.normal(mean, std, size=(invalid_mask.sum(),))
+    if not (threshold_high or threshold_low is None):
+        while torch.any((samples < threshold_low) | (samples > threshold_high)): # TODO stop argument in case of never sampling
+            invalid_mask = (samples < threshold_low) | (samples > threshold_high)
+            # Replace invalid samples with new samples drawn from the normal distribution
+            samples[invalid_mask] = torch.normal(means, stds, size=(invalid_mask.sum(),))
 
     return samples.to(device)
 
@@ -193,9 +197,9 @@ def vectorized_linspace(start_tensor, end_tensor, number_of_steps):
     # Calculate spacing
     spacing = (end_tensor - start_tensor) / (number_of_steps - 1)
     # Create linear spaces with arange
-    linear_spaces = torch.arange(start=0, end=number_of_steps, dtype=start_tensor.dtype)/number_of_steps
+    linear_spaces = torch.arange(start=0, end=number_of_steps, dtype=start_tensor.dtype)
     linear_spaces = linear_spaces.repeat(start_tensor.size(0),1)
-    linear_spaces = linear_spaces * spacing.unsqueeze(1) + start_tensor.unsqueeze(1)
+    linear_spaces = linear_spaces * spacing[:,None] + start_tensor[:,None]
     return linear_spaces
 
 
