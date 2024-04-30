@@ -196,7 +196,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         org_shape = images.shape[-2:]
         resize_transform = ResizeLongestSide(segmentor.image_encoder.img_size)
         batched_input = []
-        images = resize_transform.apply_image_torch(images / 255.0)# .permute(2, 0, 1).contiguous()
+        images = resize_transform.apply_image_torch(images)# .permute(2, 0, 1).contiguous()
         for image, instance in zip(images, instances):
             if ex['use_pred_boxes']:
                 boxes = instance.pred_boxes.tensor
