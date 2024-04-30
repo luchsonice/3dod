@@ -223,7 +223,7 @@ def iou_3d(gt_cube, proposal_cubes):
     - iou: Intersection over Union (IoU) value.
     """
     gt_corners = torch.stack([gt_cube.get_all_corners()])
-    proposal_corners = torch.stack([cube.get_all_corners() for cube in proposal_cubes]).to(gt_corners.device)
+    proposal_corners = proposal_cubes.get_all_corners()
 
     # TODO check if corners in correct order; Should be
     vol, iou = box3d_overlap(gt_corners,proposal_corners)

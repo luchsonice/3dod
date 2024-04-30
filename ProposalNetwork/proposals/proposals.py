@@ -1,5 +1,5 @@
 from ProposalNetwork.utils import utils
-from ProposalNetwork.utils.spaces import Cube
+from ProposalNetwork.utils.spaces import Cube, Cubes
 from ProposalNetwork.utils.utils import gt_in_norm_range, sample_normal_in_range, vectorized_linspace
 from ProposalNetwork.utils.conversions import pixel_to_normalised_space
 import torch
@@ -16,7 +16,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     priors = [prior_mean, prior_std] 2x3
 
     Output:
-    list_of_cubes : List of Cube
+    cubes : Cubes with (number of proposals) cubes
     stats         : tensor N x number_of_proposals
     '''
     ####### Center
@@ -51,7 +51,6 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     w = sample_normal_in_range(w_prior[0], w_prior[1], torch.tensor(0.05), w_prior[0] + 2 * w_prior[1], number_of_proposals)
     h = sample_normal_in_range(h_prior[0], h_prior[1]*1.1, torch.tensor(0.05), h_prior[0] + 2.2 * h_prior[1], number_of_proposals)
     l = sample_normal_in_range(l_prior[0], l_prior[1], torch.tensor(0.05), l_prior[0] + 2 * l_prior[1], number_of_proposals)
-    whl = torch.stack([w, h, l], 1)
 
     # Finish center
     def fun(x,coef):
@@ -70,7 +69,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     z_coefficients = np.array([0.85, 0.35])
     z = sample_normal_in_range(fun(torch.median(z),z_coefficients), torch.std(z) * 1.2, torch.tensor(-0.5),torch.tensor(100), number_of_proposals)
 
-    xyz = torch.stack([x, y, z], 1)
+    xyzwhl = torch.stack([x, y, z, w, h, l], 1)
     
     # Pose
     if ground_normal is None:
@@ -83,14 +82,11 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     # if not (gt_cube == None) and not is_gt_included(gt_cube,x_range, y_range, z_range, w_prior, h_prior, l_prior):
     #    pass
 
-    list_of_cubes = []
-    for i in range(number_of_proposals):
-        pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrices[i])
-        list_of_cubes.append(pred_cube)
+    cubes = Cubes(torch.cat((xyzwhl, rotation_matrices.flatten(start_dim=1)), dim=1))
 
     # Statistics
     if gt_cube is None:
-        return list_of_cubes, None, None
+        return cubes, None, None
     
     stat_x = gt_in_norm_range([torch.min(x),torch.max(x)],gt_cube.center[0])
     stat_y = gt_in_norm_range([torch.min(y),torch.max(y)],gt_cube.center[1])
@@ -107,7 +103,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     
     ranges = np.array([torch.std(x)*0.8, torch.std(y)*0.8, torch.std(z)*1.2, w_prior[1], h_prior[1]*1.1, l_prior[1], np.pi,np.pi,np.pi])
 
-    return list_of_cubes, stats, ranges
+    return cubes, stats, ranges
 
 
 

@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from cubercnn import util
 
@@ -72,19 +73,6 @@ class Cube:
     
     def get_volume(self) -> float:
         return self.dimensions.prod().item()
-    
-    def get_projected_2d_area(self, K) -> float:
-        def cube_to_box(cube, K):
-            bube_corners = cube.get_bube_corners(K)
-    
-            min_x = torch.min(bube_corners[:,0])
-            max_x = torch.max(bube_corners[:,0])
-            min_y = torch.min(bube_corners[:,1])
-            max_y = torch.max(bube_corners[:,1])
-            
-            return Box(torch.tensor([min_x, min_y, max_x, max_y], device=cube.tensor.device))
-        area = cube_to_box(self, K).box.area()
-        return area
 
     
     def __repr__(self) -> str:
@@ -102,3 +90,166 @@ class Cube:
         self.dimensions = self.dimensions.to(device)
         self.rotation = self.rotation.to(device)
         return self
+    
+
+class Cubes:
+    '''
+    3D boxes in the format [[c1, c2, c3, w, h, l, R]]
+
+    inspired by `detectron2.structures.Boxes`
+
+    Args:
+        tensor: torch.tensor(
+            c1: The x coordinates of the center of the boxes.
+            c2: The y coordinates of the center of the boxes.
+            c3: The z coordinates of the center of the boxes.
+            w: The width of the boxes in meters.
+            h: The height of the boxes in meters.
+            l: The length of the boxes in meters.
+            R: The flattened 3D rotation matrix of the boxes (i.e. the rows are next to each other).
+            )
+            of shape (N, 15).
+    ```
+
+                      _____________________ 
+                    /|                    /|
+                   / |                   / |
+                  /  |                  /  |
+                 /___|_________________/   |
+                |    |                 |   | h
+                |    |                 |   |
+                |    |                 |   |
+                |    |   (c1,c2,c3)    |   |
+                |    |_________________|___|
+                |   /                  |   /
+                |  /                   |  /
+                | /                    | / l
+                |/_____________________|/
+                            w             
+    ```
+    '''
+    def __init__(self,tensor: torch.Tensor, score=None, label=None) -> None:
+
+        # score and label are meant as auxiliary information
+        self.score = score
+        self.label = label
+
+        if not isinstance(tensor, torch.Tensor):
+            if not isinstance(tensor, np.ndarray):
+                tensor = np.asarray(tensor)
+            tensor = torch.as_tensor(tensor, dtype=torch.float32, device=torch.device("cpu"))
+        else:
+            tensor = tensor.to(torch.float32)
+        if tensor.numel() == 0:
+            tensor = tensor.reshape((-1, 15)).to(dtype=torch.float32)
+        self.tensor = tensor
+
+    @property
+    def center(self):
+        return self.tensor[:, :3]
+    
+    @property
+    def dimensions(self):
+        return self.tensor[:, 3:6]
+    
+    @property
+    def rotation(self):
+        return self.tensor[:, 6:].reshape(-1, 3, 3)
+
+    def clone(self) -> "Cubes":
+        """
+        Clone the Cubes.
+
+        Returns:
+            Cubes
+        """
+        return Cubes(self.tensor.clone())
+    
+
+    def get_cubes(self):
+        color = [c/255.0 for c in util.get_color()]
+        return util.mesh_cuboid(torch.cat((self.center,self.dimensions)), self.rotation, color=color)
+    
+    def get_all_corners(self):
+        '''wrap ``util.get_cuboid_verts_faces``
+        
+        Returns:
+            verts: the 3D vertices of the cuboid in camera space'''
+        verts, _ = util.get_cuboid_verts_faces(self.tensor[:,:6], self.rotation)
+        return verts
+    
+    def get_bube_corners(self,K) -> torch.Tensor:
+        '''This assumes that all the cubes have the same camera intrinsic matrix K'''
+        cube_corners = self.get_all_corners() # N x 8 x 3
+        # output of
+        cube_corners = torch.matmul(K, cube_corners.permute(0,2,1)).permute(0,2,1)
+        return cube_corners[:, :, :2]/cube_corners[:, :,2].unsqueeze(-1) # N x 8 x 2
+    
+        cube_corners = self.get_all_corners()
+        cube_corners = torch.mm(K, cube_corners.t()).t()
+        return cube_corners[:,:2]/cube_corners[:,2].unsqueeze(1)
+    
+    def get_volumes(self) -> float:
+        return self.get_dimensions().prod(1).item()
+    
+    def __len__(self) -> int:
+        return self.tensor.shape[0]
+
+    def __repr__(self) -> str:
+        return f'Cubes({self.tensor})'
+    
+    def to(self, device: torch.device):
+        # Cubes are assumed float32 and does not support to(dtype)
+        return Cubes(self.tensor.to(device=device))
+    
+    def __getitem__(self, item) -> "Cubes":
+        """
+        Args:
+            item: int, slice, or a BoolTensor
+
+        Returns:
+            Cubes: Create a new :class:`Cubes` by indexing.
+
+        The following usage are allowed:
+
+        1. `new_cubes = cubes[3]`: return a `Cubes` which contains only one box.
+        2. `new_cubes = cubes[2:10]`: return a slice of cubes.
+        3. `new_cubes = cubes[vector]`, where vector is a torch.BoolTensor
+           with `length = len(cubes)`. Nonzero elements in the vector will be selected.
+
+        Note that the returned Cubes might share storage with this Cubes,
+        subject to Pytorch's indexing semantics.
+        """
+        if isinstance(item, int):
+            return Cubes(self.tensor[item].view(1, -1))
+        b = self.tensor[item]
+        assert b.dim() == 2, "Indexing on Cubes with {} failed to return a matrix!".format(item)
+        return Cubes(b)
+    
+
+    @classmethod
+    def cat(cls, cubes_list: list["Cubes"]) -> "Cubes":
+        """
+        Concatenates a list of Cubes into a single Cubes
+
+        Arguments:
+            cubes_list (list[Cubes])
+
+        Returns:
+            Cubes: the concatenated Cubes
+        """
+        assert isinstance(cubes_list, (list, tuple))
+        if len(cubes_list) == 0:
+            return cls(torch.empty(0))
+        assert all([isinstance(box, Cubes) for box in cubes_list])
+
+        # use torch.cat (v.s. layers.cat) so the returned cubes never share storage with input
+        cat_cubes = cls(torch.cat([b.tensor for b in cubes_list], dim=0))
+        return cat_cubes
+    
+    @torch.jit.unused
+    def __iter__(self):
+        """
+        Yield a cube as a Tensor of shape (15,) at a time.
+        """
+        yield from self.tensor

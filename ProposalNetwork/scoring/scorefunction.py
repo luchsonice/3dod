@@ -7,27 +7,25 @@ import ProposalNetwork.utils.spaces as spaces
 
 from ProposalNetwork.utils.utils import iou_2d, mask_iou, euler_to_unit_vector
 
-def score_point_cloud(point_cloud:torch.Tensor, cubes:list[spaces.Cube], K:torch.Tensor, segmentation_mask:torch.Tensor):
+def score_point_cloud(point_cloud:torch.Tensor, cubes:list[spaces.Cubes], K:torch.Tensor=None, segmentation_mask:torch.Tensor=None):
     '''
     score the cube according to the density (number of points) of the point cloud in the cube
     '''
     # must normalise the point cloud to have the same density for the entire depth
-
-    scores = []
-    for cube in cubes:
-        verts = cube.get_all_corners()
-        min_x, max_x = verts[:,0].min(), verts[:,0].max()
-        min_y, max_y = verts[:,1].min(), verts[:,1].max()
-        min_z, max_z = verts[:,2].min(), verts[:,2].max()
-        point_cloud_dens = ((point_cloud[:,0] > min_x) & 
-                            (point_cloud[:,0] < max_x) & 
-                            (point_cloud[:,1] > min_y) & 
-                            (point_cloud[:,1] < max_y) & 
-                            (point_cloud[:,2] > min_z) & 
-                            (point_cloud[:,2] < max_z))
-        score = point_cloud_dens.sum().item()
+    verts = cubes.get_all_corners()
+    min_x, _, = verts[:,0].min(1); max_x, _ = verts[:,0].max(1)
+    min_y, _, = verts[:,1].min(1); max_y, _ = verts[:,1].max(1)
+    min_z, _, = verts[:,2].min(1); max_z, _ = verts[:,2].max(1)
+    point_cloud_dens = ((point_cloud[:,0].view(-1,1) > min_x) & 
+                        (point_cloud[:,0].view(-1,1) < max_x) & 
+                        (point_cloud[:,1].view(-1,1) > min_y) & 
+                        (point_cloud[:,1].view(-1,1) < max_y) & 
+                        (point_cloud[:,2].view(-1,1) > min_z) & 
+                        (point_cloud[:,2].view(-1,1) < max_z))
+    score = point_cloud_dens.sum(0)
 
         # method 1
+        # just in case this is needed in the future, the function can be found at commit ID: 4a06501c46beda804fd3b8ddfcbb27211f89ef66
         # area = cube.get_projected_2d_area(K).item()
         # if area != 0:
         #     score /= area
@@ -43,9 +41,7 @@ def score_point_cloud(point_cloud:torch.Tensor, cubes:list[spaces.Cube], K:torch
         # if normalisation != 0:
         #     score = score/normalisation
 
-        scores.append(score)
-
-    return scores
+    return score
 
 
 
@@ -78,17 +74,11 @@ def score_dimensions(category, dimensions):
     dimensions : List of Lists
     P(dim|priors)
     '''
-    score = []
+    # category_name = Metadatacatalog.thing_classes[category] # for printing and checking that correct
     [prior_mean, prior_std] = category
-    prior_mean = prior_mean.numpy()
-    prior_std = prior_std.numpy()
-    for i in range(len(dimensions)):
-        #category_name = Metadatacatalog.thing_classes[category] # for printing and checking that correct
-        dimension = dimensions[i]
-        dimensions_scores = np.exp(-1/2 * ((dimension - prior_mean)/prior_std)**2)
-        score.append(dimensions_scores.mean())
-
-    return score
+    dimensions_scores = torch.exp(-1/2 * ((dimensions - prior_mean)/prior_std)**2)
+    scores = dimensions_scores.mean(1)
+    return scores
 
 def score_angles(gt_angles, pred_angles):
     gt_nv = euler_to_unit_vector(gt_angles)

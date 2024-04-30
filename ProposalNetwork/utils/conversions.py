@@ -22,6 +22,26 @@ def cube_to_box(cube,K):
     
     return Boxes(torch.tensor([[min_x, min_y, max_x, max_y]], device=cube.tensor.device))
 
+def cubes_to_box(cubes,K):
+    '''
+    Converts a Cubes to a Boxes.
+
+    Args:
+        cubes: A Cubes.
+        K: The 3D camera matrix of the box.
+
+    Returns:
+        A Box.
+    '''
+    bube_corners = cubes.get_bube_corners(K)
+    
+    min_x, _ = torch.min(bube_corners[:,0], 1)
+    max_x, _ = torch.max(bube_corners[:,0], 1)
+    min_y, _ = torch.min(bube_corners[:,1], 1)
+    max_y, _ = torch.max(bube_corners[:,1], 1)
+    
+    return Boxes(torch.column_stack([min_x, min_y, max_x, max_y]))
+
 def pixel_to_normalised_space(pixel_coord, im_shape, norm_shape):
     '''
     pixel_coord: List of length N

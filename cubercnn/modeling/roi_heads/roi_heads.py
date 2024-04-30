@@ -28,7 +28,7 @@ from detectron2.modeling.roi_heads import (
 from detectron2.modeling.poolers import ROIPooler
 from ProposalNetwork.proposals.proposals import propose, propose_random_xy, propose_random_xy_patch, propose_rand_rotation
 from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation
-from ProposalNetwork.utils.conversions import cube_to_box
+from ProposalNetwork.utils.conversions import cube_to_box, cubes_to_box
 from ProposalNetwork.utils.spaces import Cube
 from ProposalNetwork.utils.utils import iou_3d
 from cubercnn.modeling.roi_heads.cube_head import build_cube_head
@@ -392,7 +392,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             '''wrap propose'''
             reference_box = Boxes(gt_box.unsqueeze(0))
             pred_cubes, stats_instance, stats_ranges = propose(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
-            pred_boxes = Boxes(torch.cat([cube_to_box(pred_cube, Ks_scaled_per_box).tensor for pred_cube in pred_cubes]))
+            pred_boxes = cubes_to_box(pred_cubes, Ks_scaled_per_box)
             return pred_cubes, pred_boxes, stats_instance, stats_ranges
 
 
@@ -414,22 +414,19 @@ class ROIHeads_Boxer(StandardROIHeads):
 
                 # iou
                 IoU3D = iou_3d(gt_cube, pred_cubes).cpu().numpy()
-                pred_cubes = [pred_cube.to_device('cpu') for pred_cube in pred_cubes]
-                bube_corners = [pred_cubes[j].get_bube_corners(Ks_scaled_per_box.cpu()) for j in range(number_of_proposals)]
-                dimensions = [np.array(pred_cubes[i].dimensions) for i in range(len(pred_cubes))]
                 
                 # scoring
                 IoU2D_scores = score_iou(cube_to_box(gt_cube, Ks_scaled_per_box), pred_boxes)
-                point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground), pred_cubes, Ks_scaled_per_box, mask_per_image[i][0])
-                segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), bube_corners)
-                dim_scores = score_dimensions((prior_dim_mean, prior_dim_std), dimensions)
+                point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground), pred_cubes)
+                segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), pred_cubes.get_bube_corners(Ks_scaled_per_box))
+                dim_scores = score_dimensions((prior_dim_mean, prior_dim_std), pred_cubes.dimensions)
                 combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
                 random_score = np.random.rand(number_of_proposals)
                 
                 score_IoU2D[i,:] = accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)
-                score_point_c[i,:] = accumulate_scores(point_cloud_scores, IoU3D)
+                score_point_c[i,:] = accumulate_scores(point_cloud_scores.cpu().numpy(), IoU3D)
                 score_seg[i,:] = accumulate_scores(segment_scores, IoU3D)
-                score_dim[i,:] = accumulate_scores(dim_scores, IoU3D)
+                score_dim[i,:] = accumulate_scores(dim_scores.cpu().numpy(), IoU3D)
                 score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
                 score_random[i,:] = accumulate_scores(random_score, IoU3D)
 
