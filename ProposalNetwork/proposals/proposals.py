@@ -7,7 +7,7 @@ import numpy as np
 from cubercnn import util
 import sys
 
-def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal=None):
+def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal:np.ndarray=None):
     '''
     Proposes a cube. The ranges are largely random, except for that the center needs to be inside the reference box.
     Also, objects have a length, width and height according to priors.
@@ -73,22 +73,19 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     xyz = torch.stack([x, y, z], 1)
     
     # Pose
-    rotation_matrix = []
     if ground_normal is None:
-        rotation_matrix = utils.randn_orthobasis_torch(number_of_proposals).squeeze(0)
+        rotation_matrices = utils.randn_orthobasis_torch(number_of_proposals)
     else:
-        angles = np.linspace(0, np.pi, 36) # 5 degree steps
-        for i in range(number_of_proposals):
-            rotation_matrix.append(torch.from_numpy(utils.orthobasis_from_normal(ground_normal, np.random.choice(angles)).astype(np.float32)))
-
+        angles = torch.linspace(0, np.pi, 36)
+        rotation_matrices_inner = utils.orthobasis_from_normal_t(torch.from_numpy(ground_normal), angles)
+        rotation_matrices = rotation_matrices_inner[torch.randint(len(rotation_matrices_inner), (number_of_proposals,))]  
     # Check whether it is possible to find gt
     # if not (gt_cube == None) and not is_gt_included(gt_cube,x_range, y_range, z_range, w_prior, h_prior, l_prior):
     #    pass
 
-
     list_of_cubes = []
     for i in range(number_of_proposals):
-        pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrix[i])
+        pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrices[i])
         list_of_cubes.append(pred_cube)
 
     # Statistics

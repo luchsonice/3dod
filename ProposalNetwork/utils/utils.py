@@ -135,6 +135,43 @@ def rotate_vector(v, k, theta):
     term3 = k * np.dot(k, v) * (1 - cos_theta)
     
     return term1 + term2 + term3
+
+def vec_perp_t(vec):
+    '''generate a vector perpendicular to vec in 3d'''
+    # https://math.stackexchange.com/a/2450825
+    a, b, c = vec
+    if a == 0:
+        return torch.tensor([0,c,-b])
+    return normalize_vector(torch.tensor([b,-a,0]))
+
+def orthobasis_from_normal_t(normal:torch.Tensor, yaw_angles:torch.Tensor=0):
+    '''generate an orthonormal/Rotation matrix basis from a normal vector in 3d
+
+        normal is assumed to be normalised 
+     
+       returns a (no. of yaw_angles)x3x3 matrix with the basis vectors as columns, 3rd column is the original normal vector
+    '''
+    n = len(yaw_angles)
+    x = rotate_vector_t(vec_perp_t(normal), normal, yaw_angles)
+    # x = x / torch.norm(x, p=2)
+    y = torch.cross(normal.view(-1,1), x)
+    # y = y / torch.norm(y, p=2, dim=1)
+    return torch.cat([x.t(), normal.unsqueeze(0).repeat(n, 1), y.t()],dim=1).reshape(n,3,3).transpose(2,1) # the vectors should be as columns
+
+def rotate_vector_t(v, k, theta):
+    '''rotate a vector v around an axis k by an angle theta
+    it is assumed that k is a unit vector (p2 norm = 1)'''
+    # https://medium.com/@sim30217/rodrigues-rotation-formula-47489db49050
+    cos_theta = torch.cos(theta)
+    sin_theta = torch.sin(theta)
+    v2 = v.view(-1,1)
+
+    term1 = v2 * cos_theta
+    term2 = torch.cross(k, v).view(-1, 1) * sin_theta
+    term3 = (k * (k @ v)).view(-1, 1) * (1 - cos_theta)
+    
+    return (term1 + term2 + term3)
+
 # ########### End rotations
 def gt_in_norm_range(range,gt):
     if range[0] > 0: # both positive

@@ -349,7 +349,7 @@ def do_test(cfg, model, iteration='final', storage=None):
         data_mapper = DatasetMapper3D(cfg, is_train=False, mode='eval_with_gt')
         data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
 
-        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, batch_size=1, filter_empty=True, num_workers=1)
+        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, batch_size=cfg.SOLVER.IMS_PER_BATCH, filter_empty=True, num_workers=1)
 
         experiment_type = {}
 
@@ -361,9 +361,6 @@ def do_test(cfg, model, iteration='final', storage=None):
         if experiment_type['output_recall_scores']:
             _ = mean_average_best_overlap(model, data_loader, segmentor, experiment_type)
         
-
-        # TODO: code can only run to here at the moment
-        # exit()
         else:
             results_json = inference_on_dataset(model, data_loader, segmentor, experiment_type)
 
