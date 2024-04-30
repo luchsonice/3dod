@@ -167,7 +167,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         score_point_cloud = np.concatenate([np.array(sublist) for sublist in (x[6] for x in outputs)])
         stat_empty_boxes  = np.array([x[7] for x in outputs])
 
-        print('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
+        logger.info('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
 
         Iou2D = Iou2D.mean(axis=0)
         score_seg = score_seg.mean(axis=0)
@@ -194,7 +194,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         f_name = os.path.join('ProposalNetwork/output/MABO', 'MABO.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
-        print('saved to ', f_name)
+        logger.info('saved to ', f_name)
 
         # Statistics
         stats = torch.cat([x[8] for x in outputs],dim=0)
@@ -211,7 +211,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         f_name = os.path.join('ProposalNetwork/output/MABO', 'stats.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
-        print('saved to ', f_name)
+        logger.info('saved to ', f_name)
 
         stats_off = np.concatenate([np.array(sublist) for sublist in (x[9] for x in outputs)])
         plt.figure(figsize=(15, 15))
@@ -222,7 +222,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_off.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
-        print('saved to ', f_name)
+        logger.info('saved to ', f_name)
 
         plt.figure(figsize=(15, 15))
         for i,title in enumerate(titles):
@@ -234,7 +234,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_off_zoom.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
-        print('saved to ', f_name)
+        logger.info('saved to ', f_name)
         
         # ## for vis
         d_iter = iter(data_loader)
