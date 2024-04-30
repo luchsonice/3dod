@@ -40,7 +40,7 @@ def compute_rotation_matrix_from_ortho6d(poses):
 
     return matrix
 
-def sample_normal_greater_than_para(mean, std, threshold_low, threshold_high, count):
+def sample_normal_in_range(mean, std, threshold_low, threshold_high, count):
     device = mean.device
     # Generate samples from a normal distribution
     samples = torch.normal(mean, std, size=(count,))
