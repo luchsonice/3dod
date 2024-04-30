@@ -156,7 +156,9 @@ def vectorized_linspace(start_tensor, end_tensor, number_of_steps):
     # Calculate spacing
     spacing = (end_tensor - start_tensor) / (number_of_steps - 1)
     # Create linear spaces with arange
-    linear_spaces = torch.arange(start=0, end=number_of_steps, dtype=start_tensor.dtype) * spacing + start_tensor
+    linear_spaces = torch.arange(start=0, end=number_of_steps, dtype=start_tensor.dtype)/number_of_steps
+    linear_spaces = linear_spaces.repeat(start_tensor.size(0),1)
+    linear_spaces = linear_spaces * spacing.unsqueeze(1) + start_tensor.unsqueeze(1)
     return linear_spaces
 
 
