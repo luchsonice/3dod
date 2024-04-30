@@ -84,7 +84,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     # Check whether it is possible to find gt
     # if not (gt_cube == None) and not is_gt_included(gt_cube,x_range, y_range, z_range, w_prior, h_prior, l_prior):
     #    pass
-    exit()
+        
     list_of_cubes = []
     for i in range(number_of_proposals):
         pred_cube = Cube(torch.cat((xyz[i], whl[i]), dim=0),rotation_matrices[i])
