@@ -53,7 +53,6 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     w = sample_normal_in_range(w_prior[0], w_prior[1], number_of_proposals, 0.05, w_prior[0] + 2 * w_prior[1])
     h = sample_normal_in_range(h_prior[0], h_prior[1]*1.1, number_of_proposals, 0.05, h_prior[0] + 2.2 * h_prior[1])
     l = sample_normal_in_range(l_prior[0], l_prior[1], number_of_proposals, 0.05, l_prior[0] + 2 * l_prior[1])
-    whl = torch.stack([w, h, l], 1)
 
     # Finish center
     def fun(x,coef):
@@ -71,7 +70,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     z_coefficients = torch.tensor([0.85, 0.35])
     z = sample_normal_in_range(fun(torch.median(z,dim=1).values,z_coefficients), torch.std(z,dim=1) * 1.2, number_of_proposals)
 
-    xyzwhl = torch.stack([x, y, z, w, h, l], 1)
+    xyzwhl = torch.stack([x, y, z, w, h, l], 2)
     
     # Pose
     if ground_normal is None:
@@ -85,12 +84,12 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     # if not (gt_cube == None) and not is_gt_included(gt_cube,x_range, y_range, z_range, w_prior, h_prior, l_prior):
     #    pass
 
-    cubes = Cubes(torch.cat((xyzwhl, rotation_matrices.flatten(start_dim=1)), dim=1))
+    cubes = Cubes(torch.cat((xyzwhl, rotation_matrices.flatten(start_dim=2)), dim=2))
 
     # Statistics
     if gt_cube is None:
         return cubes, None, None
-    
+    """
     stat_x = gt_in_norm_range([torch.min(x,dim=1),torch.max(x,dim=1)],gt_cube.center[0])
     stat_y = gt_in_norm_range([torch.min(y,dim=1),torch.max(y,dim=1)],gt_cube.center[1])
     stat_z = gt_in_norm_range([torch.min(z,dim=1),torch.max(z,dim=1)],gt_cube.center[2])
@@ -107,6 +106,8 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     ranges = np.array([torch.std(x,dim=1)*0.8, torch.std(y,dim=1)*0.8, torch.std(z,dim=1)*1.2, w_prior[1], h_prior[1]*1.1, l_prior[1], np.pi,np.pi,np.pi])
 
     return cubes, stats, ranges
+    """
+    return cubes, torch.zeros(9), np.ones(9)
 
 """
 

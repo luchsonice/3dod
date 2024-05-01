@@ -234,7 +234,6 @@ def iou_3d(gt_cube, proposal_cubes):
     gt_corners = torch.stack([gt_cube.get_all_corners()])
     proposal_corners = proposal_cubes.get_all_corners()
 
-    # TODO check if corners in correct order; Should be
     vol, iou = box3d_overlap(gt_corners,proposal_corners)
     iou = iou[0]
 

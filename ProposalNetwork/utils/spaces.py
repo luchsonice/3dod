@@ -133,6 +133,7 @@ class Cubes:
         # score and label are meant as auxiliary information
         self.score = score
         self.label = label
+        self.num_instances = tensor.size(0)
 
         if not isinstance(tensor, torch.Tensor):
             if not isinstance(tensor, np.ndarray):
@@ -146,15 +147,16 @@ class Cubes:
 
     @property
     def center(self):
-        return self.tensor[:, :3]
+        return self.tensor[:, :, :3]
     
     @property
     def dimensions(self):
-        return self.tensor[:, 3:6]
+        return self.tensor[:, :, 3:6]
     
     @property
     def rotation(self):
-        return self.tensor[:, 6:].reshape(-1, 3, 3)
+        shape = self.tensor.shape
+        return self.tensor[:, :, 6:].reshape(shape[0],shape[1], 3, 3)
 
     def clone(self) -> "Cubes":
         """
@@ -175,19 +177,27 @@ class Cubes:
         
         Returns:
             verts: the 3D vertices of the cuboid in camera space'''
-        verts, _ = util.get_cuboid_verts_faces(self.tensor[:,:6], self.rotation)
+        print(self.tensor.dim())
+        if self.tensor.dim == 2:
+            self.tensor = self.tensor.unsqueeze(0)
+            print(self.tensor.size())
+        verts_list = []
+        for i in range(self.num_instances):
+            verts_next_instance, _ = util.get_cuboid_verts_faces(self.tensor[i, :, :6], self.rotation[i])
+            verts_list.append(verts_next_instance)
+        verts = torch.stack(verts_list, dim=0)
+
         return verts
     
     def get_bube_corners(self,K) -> torch.Tensor:
         '''This assumes that all the cubes have the same camera intrinsic matrix K'''
-        cube_corners = self.get_all_corners() # N x 8 x 3
+        cube_corners = self.get_all_corners() # num_instances x N x 8 x 3
         # output of
-        cube_corners = torch.matmul(K, cube_corners.permute(0,2,1)).permute(0,2,1)
-        return cube_corners[:, :, :2]/cube_corners[:, :,2].unsqueeze(-1) # N x 8 x 2
-    
-        cube_corners = self.get_all_corners()
-        cube_corners = torch.mm(K, cube_corners.t()).t()
-        return cube_corners[:,:2]/cube_corners[:,2].unsqueeze(1)
+        K_repeated = K.repeat(self.num_instances,1,1)
+        cube_corners = torch.matmul(K_repeated, cube_corners.permute(1,0,3,2)).permute(1,0,3,2)
+        cube_corners = cube_corners[:, :, :, :2]/cube_corners[:, :, :, 2].unsqueeze(-1)
+
+        return cube_corners # num_instances x N x 8 x 2
     
     def get_volumes(self) -> float:
         return self.get_dimensions().prod(1).item()

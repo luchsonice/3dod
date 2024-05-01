@@ -34,13 +34,17 @@ def cubes_to_box(cubes,K):
         A Box.
     '''
     bube_corners = cubes.get_bube_corners(K)
-    
-    min_x, _ = torch.min(bube_corners[:,0], 1)
-    max_x, _ = torch.max(bube_corners[:,0], 1)
-    min_y, _ = torch.min(bube_corners[:,1], 1)
-    max_y, _ = torch.max(bube_corners[:,1], 1)
-    
-    return Boxes(torch.column_stack([min_x, min_y, max_x, max_y]))
+    min_x, _ = torch.min(bube_corners[:, :, :, 0], 2)
+    max_x, _ = torch.max(bube_corners[:, :, :, 0], 2)
+    min_y, _ = torch.min(bube_corners[:, :, :, 1], 2)
+    max_y, _ = torch.max(bube_corners[:, :, :, 1], 2)
+
+    values = torch.stack((min_x, min_y, max_x, max_y),dim=2)
+    box_list = []
+    for i in range(cubes.num_instances):
+        box_list.append(Boxes(values[i]))
+
+    return box_list
 
 def pixel_to_normalised_space(pixel_coord, im_shape, norm_shape):
     '''
