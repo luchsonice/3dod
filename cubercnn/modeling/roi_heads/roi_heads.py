@@ -196,7 +196,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         org_shape = images.shape[-2:]
         resize_transform = ResizeLongestSide(segmentor.image_encoder.img_size)
         batched_input = []
-        images = resize_transform.apply_image_torch(images / 255.0)# .permute(2, 0, 1).contiguous()
+        images = resize_transform.apply_image_torch(images)# .permute(2, 0, 1).contiguous()
         for image, instance in zip(images, instances):
             if ex['use_pred_boxes']:
                 boxes = instance.pred_boxes.tensor
@@ -455,6 +455,8 @@ class ROIHeads_Boxer(StandardROIHeads):
         
         elif not experiment_type['output_recall_scores']: # AP
             # list of Instances with the fields: pred_boxes, scores, pred_classes, pred_bbox3D, pred_center_cam, pred_center_2D, pred_dimensions, pred_pose
+            # it is possible to assign multiple element to each Instances object at once.
+            # such that the loop can be over the images.
             pred_instances = [Instances(size) for size in images_raw.image_sizes] # each instance object contains all boxes in one image, the list is for each image
             for instances_i in pred_instances:
                 instances_i.pred_boxes = Boxes.cat([cube_to_box(pred_cube, Ks_scaled_per_box.to('cpu')) for pred_cube in pred_cubes_out])
