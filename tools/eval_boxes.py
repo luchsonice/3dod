@@ -261,7 +261,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
                 , assigned_colors=colors
             )
             prop_img = v_pred.get_image()
-            pred_cube_meshes = [p_info.pred_cubes.get_cubes().__getitem__(0).detach()]
+            pred_cube_meshes = [p_info.pred_cubes[j].get_cubes().__getitem__(0).detach() for j in range(box_size)]
             img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, p_info.K, pred_cube_meshes, text=pred_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
             vis_img_3d = img_3DPR.astype(np.uint8)
             vis_img_3d = show_mask2(p_info.mask_per_image.cpu().numpy(), vis_img_3d, random_color=colors) # NOTE Uncomment to add segmentation mask to pred image

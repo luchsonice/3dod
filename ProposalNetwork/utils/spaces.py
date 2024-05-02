@@ -173,7 +173,6 @@ class Cubes:
     def get_cubes(self):
         color = [c/255.0 for c in util.get_color()]
         return util.mesh_cuboid(torch.cat((self.centers.squeeze(0),self.dimensions.squeeze(0)),dim=1), self.rotations.squeeze(0), color=color)
-
         
     
     def get_all_corners(self):
