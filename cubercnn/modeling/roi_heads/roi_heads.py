@@ -459,10 +459,10 @@ class ROIHeads_Boxer(StandardROIHeads):
                 instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes_out, Ks_scaled_per_box.to('cpu')))
                 instances_i.scores = pred_cubes_out.scores
                 instances_i.pred_classes = pred_cubes_out.labels
-                instances_i.pred_bbox3D = pred_cubes_out.get_all_corners().squeeze()
-                instances_i.pred_center_cam = pred_cubes_out.centers.squeeze()
-                instances_i.pred_dimensions = pred_cubes_out.dimensions.squeeze()
-                instances_i.pred_pose = pred_cubes_out.rotations.squeeze()
+                instances_i.pred_bbox3D = pred_cubes_out.get_all_corners().squeeze(1)
+                instances_i.pred_center_cam = pred_cubes_out.centers.squeeze(1)
+                instances_i.pred_dimensions = pred_cubes_out.dimensions.squeeze(1)
+                instances_i.pred_pose = pred_cubes_out.rotations.squeeze(1)
                 instances_i.pred_center_2D = instances_i.pred_boxes.get_centers()  
 
             return pred_instances
