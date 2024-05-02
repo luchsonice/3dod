@@ -455,14 +455,14 @@ class ROIHeads_Boxer(StandardROIHeads):
             # it is possible to assign multiple element to each Instances object at once.
             # such that the loop can be over the images.
             pred_instances = [Instances(size) for size in images_raw.image_sizes] # each instance object contains all boxes in one image, the list is for each image
-            for i, instances_i in zip(range(pred_cubes_out.num_instances),pred_instances):
-                instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes_out[i], Ks_scaled_per_box.to('cpu')))
-                instances_i.scores = torch.tensor([pred_cubes_out.scores[i]])
-                instances_i.pred_classes = torch.tensor([pred_cubes_out.labels[i]])
-                instances_i.pred_bbox3D = pred_cubes_out[i].get_all_corners()
-                instances_i.pred_center_cam = pred_cubes_out[i].centers
-                instances_i.pred_dimensions = pred_cubes_out[i].dimensions
-                instances_i.pred_pose = pred_cubes_out[i].rotations
+            for instances_i in pred_instances:
+                instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes_out, Ks_scaled_per_box.to('cpu')))
+                instances_i.scores = pred_cubes_out.scores
+                instances_i.pred_classes = pred_cubes_out.labels
+                instances_i.pred_bbox3D = pred_cubes_out.get_all_corners().squeeze()
+                instances_i.pred_center_cam = pred_cubes_out.centers.squeeze()
+                instances_i.pred_dimensions = pred_cubes_out.dimensions.squeeze()
+                instances_i.pred_pose = pred_cubes_out.rotations.squeeze()
                 instances_i.pred_center_2D = instances_i.pred_boxes.get_centers()  
 
             return pred_instances
