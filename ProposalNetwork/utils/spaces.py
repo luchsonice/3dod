@@ -144,9 +144,11 @@ class Cubes:
         if tensor.numel() == 0:
             tensor = tensor.reshape((-1, 15)).to(dtype=torch.float32)
         self.tensor = tensor
+        if self.tensor.dim() == 2:
+            self.tensor = self.tensor.unsqueeze(0)
 
     @property
-    def center(self):
+    def centers(self):
         return self.tensor[:, :, :3]
     
     @property
@@ -154,7 +156,7 @@ class Cubes:
         return self.tensor[:, :, 3:6]
     
     @property
-    def rotation(self):
+    def rotations(self):
         shape = self.tensor.shape
         return self.tensor[:, :, 6:].reshape(shape[0],shape[1], 3, 3)
 
@@ -170,20 +172,20 @@ class Cubes:
 
     def get_cubes(self):
         color = [c/255.0 for c in util.get_color()]
-        return util.mesh_cuboid(torch.cat((self.center,self.dimensions)), self.rotation, color=color)
+        return util.mesh_cuboid(torch.cat((self.centers.squeeze(0),self.dimensions.squeeze(0)),dim=1), self.rotations.squeeze(0), color=color)
+
+        
     
     def get_all_corners(self):
         '''wrap ``util.get_cuboid_verts_faces``
         
         Returns:
             verts: the 3D vertices of the cuboid in camera space'''
-        print(self.tensor.dim())
-        if self.tensor.dim == 2:
-            self.tensor = self.tensor.unsqueeze(0)
-            print(self.tensor.size())
+
         verts_list = []
         for i in range(self.num_instances):
-            verts_next_instance, _ = util.get_cuboid_verts_faces(self.tensor[i, :, :6], self.rotation[i])
+
+            verts_next_instance, _ = util.get_cuboid_verts_faces(self.tensor[i, :, :6], self.rotations[i])
             verts_list.append(verts_next_instance)
         verts = torch.stack(verts_list, dim=0)
 
@@ -231,7 +233,10 @@ class Cubes:
         subject to Pytorch's indexing semantics.
         """
         if isinstance(item, int):
-            return Cubes(self.tensor[item].view(1, -1))
+            prev_n_prop = self.tensor.shape[1]
+            return Cubes(self.tensor[item].view(1, prev_n_prop, -1))
+        elif isinstance(item, tuple):
+            return Cubes(self.tensor[item[0],item[1]].view(1, 1, -1))
         b = self.tensor[item]
         assert b.dim() == 2, "Indexing on Cubes with {} failed to return a matrix!".format(item)
         return Cubes(b)
