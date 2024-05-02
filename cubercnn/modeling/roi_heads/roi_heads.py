@@ -458,18 +458,18 @@ class ROIHeads_Boxer(StandardROIHeads):
             # it is possible to assign multiple element to each Instances object at once.
             # such that the loop can be over the images.
             pred_instances = [Instances(size) for size in images_raw.image_sizes] # each instance object contains all boxes in one image, the list is for each image
-            for instances_i in pred_instances:
-                instances_i.pred_boxes = Boxes.cat([cube_to_box(pred_cube, Ks_scaled_per_box.to('cpu')) for pred_cube in pred_cubes_out])
-                instances_i.scores = torch.tensor([pred_cube.score for pred_cube in pred_cubes_out])
-                instances_i.pred_classes = torch.tensor([pred_cube.label for pred_cube in pred_cubes_out])
-                instances_i.pred_bbox3D = torch.stack([pred_cube.get_all_corners() for pred_cube in pred_cubes_out])
-                instances_i.pred_center_cam = torch.stack([pred_cube.center for pred_cube in pred_cubes_out])
-                instances_i.pred_dimensions = torch.stack([pred_cube.dimensions for pred_cube in pred_cubes_out])
-                instances_i.pred_pose = torch.stack([pred_cube.rotation for pred_cube in pred_cubes_out])
+            for pred_cubes, instances_i in zip(pred_instances, pred_cubes_out):
+                instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes, Ks_scaled_per_box.to('cpu')).squeeze(1))
+                instances_i.scores = pred_cube.scores.squeeze(1)
+                instances_i.pred_classes = pred_cubes.labels.squeeze(1)
+                instances_i.pred_bbox3D = pred_cubes.get_all_corners()
+                instances_i.pred_center_cam = pred_cubes.centers
+                instances_i.pred_dimensions = pred_cubes.dimensions
+                instances_i.pred_pose = pred_cubes.rotation
 
                 instances_i.pred_center_2D = instances_i.pred_boxes.get_centers()  
 
-            return pred_instances   
+            return pred_instances     
 
     def _sample_proposals(
         self, matched_idxs: torch.Tensor, matched_labels: torch.Tensor, gt_classes: torch.Tensor, matched_ious=None
