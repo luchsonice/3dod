@@ -78,39 +78,6 @@ def randn_orthobasis(num_samples=1):
     z[:, 1] = z[:, 1] / np.linalg.norm(z[:, 1], axis=-1, keepdims=True)
     return z
 
-"""
-# plotting
-import open3d as o3d
-def draw_vector(vector, color=(0, 0, 1)):
-    # Create a LineSet object
-    line_set = o3d.geometry.LineSet()
-
-    # Set the points of the LineSet to be the origin and the vector
-    line_set.points = o3d.utility.Vector3dVector([np.zeros(3), vector])
-    line_set.colors = o3d.utility.Vector3dVector([color, color])
-
-    # Set the lines of the LineSet to be a line from the first point to the second point
-    line_set.lines = o3d.utility.Vector2iVector([[0, 1]])
-
-    # Draw the LineSet
-    return line_set
-
-pcd = o3d.geometry.PointCloud()
-pcd.points = o3d.utility.Vector3dVector(points)
-pcd.colors = o3d.utility.Vector3dVector(colors)
-# display normal vector in point cloud 
-plane = pcd.select_by_index(best_inliers).paint_uniform_color([1, 0, 0])
-not_plane = pcd.select_by_index(best_inliers, invert=True)
-mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(origin=[0, 0, 0])
-# X-axis : Red arrow
-# Y-axis : Green arrow
-# Z-axis : Blue arrow
-obb = plane.get_oriented_bounding_box()
-obb.color = [0, 0, 1]
-objs = [plane, not_plane, mesh, obb, utils.draw_vector(normal_vec)]
-o3d.visualization.draw_geometries(objs)
-"""
-
 # ##things for making rotations
 def vec_perp(vec):
     '''generate a vector perpendicular to vec in 3d'''
@@ -231,9 +198,8 @@ def iou_3d(gt_cube, proposal_cubes):
     Returns:
     - iou: Intersection over Union (IoU) value.
     """
-    gt_corners = torch.stack([gt_cube.get_all_corners()])
-    proposal_corners = proposal_cubes.get_all_corners()
-
+    gt_corners = gt_cube.get_all_corners()[0]
+    proposal_corners = proposal_cubes.get_all_corners()[0]
     vol, iou = box3d_overlap(gt_corners,proposal_corners)
     iou = iou[0]
 

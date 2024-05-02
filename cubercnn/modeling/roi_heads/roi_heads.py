@@ -408,20 +408,18 @@ class ROIHeads_Boxer(StandardROIHeads):
         else:
             assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
             #for i, (gt_2d, gt_3d, gt_pose, prior_dim_mean, prior_dim_std, gt_box_class) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses, prior_dims_mean, prior_dims_std, gt_box_classes)): ## NOTE:this works assuming batch_size=1
-            gt_cubes = Cubes(torch.cat((gt_boxes3D[:,6:].unsqueeze(0),gt_boxes3D[:,3:6].unsqueeze(0), gt_poses.view(n_gt,9).unsqueeze(0)),dim=2))
+            gt_cubes = Cubes(torch.cat((gt_boxes3D[:,6:].unsqueeze(0),gt_boxes3D[:,3:6].unsqueeze(0), gt_poses.view(n_gt,9).unsqueeze(0)),dim=2).permute(1,0,2))
             pred_cubes, pred_boxes, stats_instance, stats_ranges = predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), gt_cubes)
-            print(gt_cubes[0].get_all_corners())
+            
             for i in range(n_gt):
                 # iou
-                
                 IoU3D = iou_3d(gt_cubes[i], pred_cubes[i]).cpu().numpy()
-                
-                
+
                 # scoring
-                IoU2D_scores = score_iou(cube_to_box(gt_cubes[i], Ks_scaled_per_box), pred_boxes[i])
-                point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground), pred_cubes)
-                segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), pred_cubes.get_bube_corners(Ks_scaled_per_box))
-                dim_scores = score_dimensions((prior_dim_mean, prior_dim_std), pred_cubes.dimensions)
+                IoU2D_scores = score_iou(cubes_to_box(gt_cubes[i], Ks_scaled_per_box)[0], pred_boxes[i])
+                point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground), pred_cubes[i])
+                segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), pred_cubes[i].get_bube_corners(Ks_scaled_per_box))
+                dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0])
                 combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
                 random_score = np.random.rand(number_of_proposals)
                 
@@ -431,18 +429,17 @@ class ROIHeads_Boxer(StandardROIHeads):
                 score_dim[i,:] = accumulate_scores(dim_scores.cpu().numpy(), IoU3D)
                 score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
                 score_random[i,:] = accumulate_scores(random_score, IoU3D)
-
-                highest_score = np.argmax(IoU2D_scores)
-                highest_3DIoU = IoU3D.max()
-                pred_cube = pred_cubes[highest_score]
-                gt_cube_meshes.append(gt_cubes.get_cube().__getitem__(0).detach())
-                pred_cube.label = gt_box_class; pred_cube.score = IoU2D_scores[highest_score]
+                
+                highest_score = torch.argmax(IoU2D_scores)
+                pred_cube = pred_cubes[i,highest_score]
+                gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
+                pred_cube.label = gt_box_classes[i]; pred_cube.score = IoU2D_scores[highest_score]
                 pred_cubes_out.append(pred_cube)
 
                 # stats
                 sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
                 stats_image[i] = stats_instance
-                nested_list = [[highest_3DIoU],abs(gt_cubes.center.numpy()-pred_cube.center.numpy())/stats_ranges[:3],abs(gt_cubes.dimensions.numpy()-pred_cube.dimensions.numpy())/stats_ranges[3:6],abs(util.mat2euler(gt_cubes.rotation)-util.mat2euler(pred_cube.rotation))/stats_ranges[6:]]
+                nested_list = [[IoU3D.max()],abs(gt_cubes[i].centers.numpy()-pred_cube.centers.numpy())[0][0]/stats_ranges[:3],abs(gt_cubes[i].dimensions.numpy()-pred_cube.dimensions.numpy())[0][0]/stats_ranges[3:6],abs(util.mat2euler(gt_cubes[i].rotations[0][0])-util.mat2euler(pred_cube.rotations[0][0]))/stats_ranges[6:]]
                 stats_off[i] = [item for sublist in nested_list for item in sublist]
 
             stat_empty_boxes = sum_percentage_empty_boxes/n_gt

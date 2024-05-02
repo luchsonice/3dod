@@ -12,7 +12,7 @@ def score_point_cloud(point_cloud:torch.Tensor, cubes:list[spaces.Cubes], K:torc
     score the cube according to the density (number of points) of the point cloud in the cube
     '''
     # must normalise the point cloud to have the same density for the entire depth
-    verts = cubes.get_all_corners()
+    verts = cubes.get_all_corners().squeeze(0)
     min_x, _, = verts[:,0].min(1); max_x, _ = verts[:,0].max(1)
     min_y, _, = verts[:,1].min(1); max_y, _ = verts[:,1].max(1)
     min_z, _, = verts[:,2].min(1); max_z, _ = verts[:,2].max(1)
@@ -56,6 +56,7 @@ def score_segmentation(segmentation_mask, bube_corners):
     '''
 
     scores = []
+    bube_corners = bube_corners.squeeze(0) # remove instance dim
     for i in range(len(bube_corners)):
         bube_mask = np.zeros(segmentation_mask.shape, dtype='uint8')
 
