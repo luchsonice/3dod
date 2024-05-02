@@ -166,8 +166,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         score_random      = np.concatenate([np.array(sublist) for sublist in (x[5] for x in outputs)])
         score_point_cloud = np.concatenate([np.array(sublist) for sublist in (x[6] for x in outputs)])
         stat_empty_boxes  = np.array([x[7] for x in outputs])
-
-        logger.info('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
+        #logger.info('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
+        print('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
 
         Iou2D = Iou2D.mean(axis=0)
         score_seg = score_seg.mean(axis=0)
@@ -194,7 +194,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         f_name = os.path.join('ProposalNetwork/output/MABO', 'MABO.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
-        logger.info('saved to ', f_name)
+        #logger.info('saved to ', f_name)
+        print('saved to ', f_name)
 
         # Statistics
         stats = torch.cat([x[8] for x in outputs],dim=0)
@@ -211,7 +212,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         f_name = os.path.join('ProposalNetwork/output/MABO', 'stats.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
-        logger.info('saved to ', f_name)
+        #logger.info('saved to ', f_name
+        print('saved to ', f_name)
 
         stats_off = np.concatenate([np.array(sublist) for sublist in (x[9] for x in outputs)])
         plt.figure(figsize=(15, 15))
@@ -222,7 +224,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_off.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
-        logger.info('saved to ', f_name)
+        #logger.info('saved to ', f_name)
+        print('saved to ', f_name)
 
         plt.figure(figsize=(15, 15))
         for i,title in enumerate(titles):
@@ -234,15 +237,15 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_off_zoom.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
-        logger.info('saved to ', f_name)
+        #logger.info('saved to ', f_name)
+        print('saved to ', f_name)
         
         # ## for vis
         d_iter = iter(data_loader)
         for i , _ in track(enumerate(outputs), description="Plotting every single image", total=len(outputs)):
             p_info = outputs[i][0]
-
-            pred_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[cube.label] for cube in p_info.pred_cubes]
-            box_size = len(p_info.pred_cubes)
+            pred_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[label] for label in p_info.pred_cubes.label.numpy()]
+            box_size = p_info.pred_cubes.num_instances
             for x in range(box_size-len(pred_box_classes_names)):
                 pred_box_classes_names.append(f'z={p_info.pred_cubes[x].dimensions[2]}, s={p_info.pred_cubes[x].score}')
             colors = [np.concatenate([np.random.random(3), np.array([0.6])], axis=0) for _ in range(box_size)]
@@ -257,7 +260,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
                 , assigned_colors=colors
             )
             prop_img = v_pred.get_image()
-            pred_cube_meshes = [cube.get_cubes().__getitem__(0).detach() for cube in p_info.pred_cubes]
+            pred_cube_meshes = [p_info.pred_cubes.get_cubes().__getitem__(0).detach()]
             img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, p_info.K, pred_cube_meshes, text=pred_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
             vis_img_3d = img_3DPR.astype(np.uint8)
             vis_img_3d = show_mask2(p_info.mask_per_image.cpu().numpy(), vis_img_3d, random_color=colors) # NOTE Uncomment to add segmentation mask to pred image

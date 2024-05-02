@@ -430,7 +430,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
                 score_random[i,:] = accumulate_scores(random_score, IoU3D)
                 
-                highest_score = torch.argmax(IoU2D_scores)
+                highest_score = np.argmax(combined_score)
                 pred_cube = pred_cubes[i,highest_score]
                 gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
                 pred_cube.label = gt_box_classes[i]; pred_cube.score = IoU2D_scores[highest_score]
@@ -442,11 +442,10 @@ class ROIHeads_Boxer(StandardROIHeads):
                 nested_list = [[IoU3D.max()],abs(gt_cubes[i].centers.numpy()-pred_cube.centers.numpy())[0][0]/stats_ranges[:3],abs(gt_cubes[i].dimensions.numpy()-pred_cube.dimensions.numpy())[0][0]/stats_ranges[3:6],abs(util.mat2euler(gt_cubes[i].rotations[0][0])-util.mat2euler(pred_cube.rotations[0][0]))/stats_ranges[6:]]
                 stats_off[i] = [item for sublist in nested_list for item in sublist]
 
-            pred_cubes_out = Cubes(torch.stack(pred_cubes_out, dim=0))
+            pred_cubes_out = Cubes(torch.stack(pred_cubes_out, dim=0),label=gt_box_classes)
             stat_empty_boxes = sum_percentage_empty_boxes/n_gt
 
             p_info = Plotinfo(pred_cubes_out, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
-
 
         if experiment_type['output_recall_scores']: # MABO
             return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off
