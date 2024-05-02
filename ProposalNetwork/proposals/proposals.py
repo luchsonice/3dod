@@ -1,5 +1,5 @@
 from ProposalNetwork.utils import utils
-from ProposalNetwork.utils.spaces import Cube, Cubes
+from ProposalNetwork.utils.spaces import Cubes
 from ProposalNetwork.utils.utils import gt_in_norm_range, sample_normal_in_range, vectorized_linspace
 from ProposalNetwork.utils.conversions import pixel_to_normalised_space
 import torch

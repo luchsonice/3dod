@@ -12,7 +12,7 @@ coordinate system is assumed to have origin in the upper left
 |
 (0,M)
 '''
-
+"""
 class Cube:
     '''
     3D box in the format [c1, c2, c3, w, h, l, R]
@@ -90,7 +90,7 @@ class Cube:
         self.dimensions = self.dimensions.to(device)
         self.rotation = self.rotation.to(device)
         return self
-    
+"""
 
 class Cubes:
     '''
@@ -128,11 +128,11 @@ class Cubes:
                             w             
     ```
     '''
-    def __init__(self,tensor: torch.Tensor, score=None, label=None) -> None:
+    def __init__(self,tensor: torch.Tensor, scores=None, labels=None) -> None:
 
         # score and label are meant as auxiliary information
-        self.score = score
-        self.label = label
+        self.scores = scores
+        self.labels = labels
         self.num_instances = tensor.size(0)
 
         if not isinstance(tensor, torch.Tensor):
@@ -184,7 +184,6 @@ class Cubes:
 
         verts_list = []
         for i in range(self.num_instances):
-
             verts_next_instance, _ = util.get_cuboid_verts_faces(self.tensor[i, :, :6], self.rotations[i])
             verts_list.append(verts_next_instance)
         verts = torch.stack(verts_list, dim=0)

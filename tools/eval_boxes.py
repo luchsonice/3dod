@@ -132,6 +132,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
 
         outputs = []
         for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
+            if i >1:break
             output = model(inputs, segmentor, experiment_type)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off, stats_off_impro
             if output is not None:
@@ -244,10 +245,10 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         d_iter = iter(data_loader)
         for i , _ in track(enumerate(outputs), description="Plotting every single image", total=len(outputs)):
             p_info = outputs[i][0]
-            pred_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[label] for label in p_info.pred_cubes.label.numpy()]
+            pred_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[label] for label in p_info.pred_cubes.labels.numpy()]
             box_size = p_info.pred_cubes.num_instances
             for x in range(box_size-len(pred_box_classes_names)):
-                pred_box_classes_names.append(f'z={p_info.pred_cubes[x].dimensions[2]}, s={p_info.pred_cubes[x].score}')
+                pred_box_classes_names.append(f'z={p_info.pred_cubes[x].dimensions[2]}, s={p_info.pred_cubes[x].scores}')
             colors = [np.concatenate([np.random.random(3), np.array([0.6])], axis=0) for _ in range(box_size)]
             fig, (ax, ax1) = plt.subplots(2,1, figsize=(14, 10))
             input = next(d_iter)[0]

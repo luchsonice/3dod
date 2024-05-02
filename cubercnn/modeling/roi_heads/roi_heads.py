@@ -441,8 +441,8 @@ class ROIHeads_Boxer(StandardROIHeads):
                 stats_image[i] = stats_instance
                 nested_list = [[IoU3D.max()],abs(gt_cubes[i].centers.numpy()-pred_cube.centers.numpy())[0][0]/stats_ranges[:3],abs(gt_cubes[i].dimensions.numpy()-pred_cube.dimensions.numpy())[0][0]/stats_ranges[3:6],abs(util.mat2euler(gt_cubes[i].rotations[0][0])-util.mat2euler(pred_cube.rotations[0][0]))/stats_ranges[6:]]
                 stats_off[i] = [item for sublist in nested_list for item in sublist]
-
-            pred_cubes_out = Cubes(torch.stack(pred_cubes_out, dim=0),label=gt_box_classes)
+            
+            pred_cubes_out = Cubes(torch.stack(pred_cubes_out, dim=0).unsqueeze(1),scores=stats_off[:,0],labels=gt_box_classes)
             stat_empty_boxes = sum_percentage_empty_boxes/n_gt
 
             p_info = Plotinfo(pred_cubes_out, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
@@ -455,18 +455,17 @@ class ROIHeads_Boxer(StandardROIHeads):
             # it is possible to assign multiple element to each Instances object at once.
             # such that the loop can be over the images.
             pred_instances = [Instances(size) for size in images_raw.image_sizes] # each instance object contains all boxes in one image, the list is for each image
-            for pred_cubes, instances_i in zip(pred_instances, pred_cubes_out):
-                instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes, Ks_scaled_per_box.to('cpu')).squeeze(1))
-                instances_i.scores = pred_cube.scores.squeeze(1)
-                instances_i.pred_classes = pred_cubes.labels.squeeze(1)
-                instances_i.pred_bbox3D = pred_cubes.get_all_corners()
-                instances_i.pred_center_cam = pred_cubes.centers
-                instances_i.pred_dimensions = pred_cubes.dimensions
-                instances_i.pred_pose = pred_cubes.rotation
-
+            for i, instances_i in zip(range(pred_cubes_out.num_instances),pred_instances):
+                instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes_out[i], Ks_scaled_per_box.to('cpu')))
+                instances_i.scores = torch.tensor([pred_cubes_out.scores[i]])
+                instances_i.pred_classes = torch.tensor([pred_cubes_out.labels[i]])
+                instances_i.pred_bbox3D = pred_cubes_out[i].get_all_corners()
+                instances_i.pred_center_cam = pred_cubes_out[i].centers
+                instances_i.pred_dimensions = pred_cubes_out[i].dimensions
+                instances_i.pred_pose = pred_cubes_out[i].rotations
                 instances_i.pred_center_2D = instances_i.pred_boxes.get_centers()  
 
-            return pred_instances     
+            return pred_instances
 
     def _sample_proposals(
         self, matched_idxs: torch.Tensor, matched_labels: torch.Tensor, gt_classes: torch.Tensor, matched_ious=None
