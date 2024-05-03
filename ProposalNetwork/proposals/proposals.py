@@ -213,10 +213,14 @@ def propose_random_xy_patch(reference_box, depth_image, priors, im_shape, K, num
     def fun(x,coef):
         return coef[0] * x + coef[1]
     # xy
-    [l_x,h_x] = pixel_to_normalised_space([reference_box.tensor[:,0],reference_box.tensor[:,2]],[im_shape[0],im_shape[0]],[2,2])        # TODO Vectorize
-    [l_y,h_y] = pixel_to_normalised_space([reference_box.tensor[:,1],reference_box.tensor[:,3]],[im_shape[1],im_shape[0]],[1.5,1.5])    # TODO Vectorize
-    x = torch.rand(number_of_instances,1000) * (h_x - l_x) + l_x
-    y = torch.rand(number_of_instances,1000) * (h_y - l_y) + l_y
+    x_tensor = pixel_to_normalised_space([reference_box.tensor[:,0],reference_box.tensor[:,2]],[im_shape[0],im_shape[0]],[2,2])        # TODO Vectorize
+    y_tensor = pixel_to_normalised_space([reference_box.tensor[:,1],reference_box.tensor[:,3]],[im_shape[1],im_shape[0]],[1.5,1.5])    # TODO Vectorize
+    l_x = x_tensor[:,0]
+    h_x = x_tensor[:,1]
+    l_y = y_tensor[:,0]
+    h_y = y_tensor[:,1]
+    x = torch.rand(number_of_instances,1000) * (h_x - l_x).view(-1, 1) + l_x.view(-1, 1)
+    y = torch.rand(number_of_instances,1000) * (h_y - l_y).view(-1, 1) + l_y.view(-1, 1)
 
     # z
     z = z_tmp+l/2

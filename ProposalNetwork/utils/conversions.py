@@ -52,17 +52,16 @@ def pixel_to_normalised_space(pixel_coord, im_shape, norm_shape):
     im_shape: List of length N
     norm_shape: List of length N
     '''
-    if not torch.is_tensor(pixel_coord):
-        pixel_coord = torch.tensor(pixel_coord)
+    pixel_coord = torch.stack(pixel_coord,dim=1)
 
     new_coords = pixel_coord.to(torch.float32)
 
-    for i in range(len(pixel_coord)):
+    for i in range(pixel_coord.size(1)):
         old_dim = im_shape[i]
         new_dim = norm_shape[i]
 
-        new_coords[i] -= 0.5 * old_dim
-        new_coords[i] *= new_dim / old_dim
+        new_coords[:,i] -= 0.5 * old_dim
+        new_coords[:,i] *= new_dim / old_dim
     
     return new_coords # TODO feel like its missing a line, something if normshape is not 2. Where did we take inspiration from? A library?
 
