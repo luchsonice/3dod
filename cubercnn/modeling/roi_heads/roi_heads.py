@@ -407,7 +407,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 highest_score = np.argmax(combined_score)
                 pred_cube = pred_cubes[i,highest_score]
                 pred_cube.label = gt_box_class; pred_cube.score = combined_score[highest_score]
-                pred_cubes_out.append(pred_cube)
+                pred_cubes_out.append(pred_cube.tensor[0][0])
         else:
             assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
             #for i, (gt_2d, gt_3d, gt_pose, prior_dim_mean, prior_dim_std, gt_box_class) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses, prior_dims_mean, prior_dims_std, gt_box_classes)): ## NOTE:this works assuming batch_size=1
@@ -444,12 +444,11 @@ class ROIHeads_Boxer(StandardROIHeads):
                 stats_image[i] = stats_instance
                 nested_list = [[IoU3D.max()],abs(gt_cubes[i].centers.numpy()-pred_cube.centers.numpy())[0][0]/stats_ranges[:3],abs(gt_cubes[i].dimensions.numpy()-pred_cube.dimensions.numpy())[0][0]/stats_ranges[3:6],abs(util.mat2euler(gt_cubes[i].rotations[0][0])-util.mat2euler(pred_cube.rotations[0][0]))/stats_ranges[6:]]
                 stats_off[i] = [item for sublist in nested_list for item in sublist]
-            
-            pred_cubes_out = Cubes(torch.stack(pred_cubes_out, dim=0).unsqueeze(1),scores=stats_off[:,0],labels=gt_box_classes)
             stat_empty_boxes = sum_percentage_empty_boxes/n_gt
-
             p_info = Plotinfo(pred_cubes_out, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
 
+        pred_cubes_out = Cubes(torch.stack(pred_cubes_out, dim=0).unsqueeze(1),scores=stats_off[:,0],labels=gt_box_classes)
+            
         if experiment_type['output_recall_scores']: # MABO
             return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off
         
