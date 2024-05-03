@@ -5,6 +5,15 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": []
+        },
+        {
             "name": "Cube R-CNN Demo",
             "type": "python",
             "request": "launch",
@@ -50,31 +59,40 @@
             "args": ["--eval-only", "--config-file", "configs/Base_Omni3D.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth"]
         },
         {
-            "name": "BoxNet with GT",
+            "name": "BoxNet MABO GT",
             "type": "python",
             "request": "launch",
             "program": "tools/eval_boxes.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml", "PLOT.EVAL", "MABO"]
+            "args": ["--eval-only", "--config-file" ,"configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "MABO", "PLOT.MODE2D", "GT"]
         },
         {
-            "name": "Python: Current File",
-            "type": "python",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "args": []
-        },
-        {
-            "name": "BoxNet with prediction",
+            "name": "BoxNet MABO PRED",
             "type": "python",
             "request": "launch",
             "program": "tools/eval_boxes.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth"]
-        }
+            "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "MABO", "PLOT.MODE2D", "PRED"]
+        },
+        {
+            "name": "BoxNet AP PRED",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/eval_boxes.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "AP", "PLOT.MODE2D", "PRED"]
+        },
+        {
+            "name": "BoxNet AP GT",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/eval_boxes.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "AP", "PLOT.MODE2D", "GT"]
+        },
     ]
 }
