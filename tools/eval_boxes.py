@@ -388,7 +388,7 @@ def do_test(cfg, model, iteration='final', storage=None):
             log_str = vis.visualize_from_instances(
                 instances, data_loader.dataset, dataset_name, 
                 cfg.INPUT.MIN_SIZE_TEST, os.path.join(output_folder, dataset_name), 
-                MetadataCatalog.get('omni3d_model').thing_classes, iteration
+                MetadataCatalog.get('omni3d_model').thing_classes, iteration, visualize_every=1
             )
             logger.info(log_str)
 

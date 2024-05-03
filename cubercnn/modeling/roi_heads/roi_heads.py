@@ -41,6 +41,18 @@ logger = logging.getLogger(__name__)
 E_CONSTANT = 2.71828183
 SQRT_2_CONSTANT = 1.41421356
 
+@dataclass
+class Plotinfo:
+    '''simple dataclass to store plot information access as Plotinfo.x
+    fields: pred_cubes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, K'''
+    pred_cubes: List[Cubes]
+    gt_cube_meshes: List
+    gt_boxes3D: List
+    gt_boxes: List
+    gt_box_classes: List
+    mask_per_image: List
+    K: np.array
+
 def show_mask(mask, ax, random_color=False):
     if random_color:
         color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
@@ -196,7 +208,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         org_shape = images.shape[-2:]
         resize_transform = ResizeLongestSide(segmentor.image_encoder.img_size)
         batched_input = []
-        images = resize_transform.apply_image_torch(images)# .permute(2, 0, 1).contiguous()
+        images = resize_transform.apply_image_torch(images*1.0)# .permute(2, 0, 1).contiguous()
         for image, instance in zip(images, instances):
             if ex['use_pred_boxes']:
                 boxes = instance.pred_boxes.tensor
@@ -260,6 +272,12 @@ class ROIHeads_Boxer(StandardROIHeads):
         else:
             pred_instances, _ = self.box_predictor.inference(predictions, proposals, )
             return pred_instances
+        
+    def accumulate_scores(self, scores, IoU3D):
+        idx = np.argsort(scores)[::-1]
+        scores = np.array([IoU3D[i] for i in idx])
+        scores = np.maximum.accumulate(scores)
+        return scores
     
     def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type):
 
@@ -272,24 +290,6 @@ class ROIHeads_Boxer(StandardROIHeads):
         Ks = [K.to('cpu') for K in Ks]
         instances = [instance.to('cpu') for instance in instances]
 
-        
-        def accumulate_scores(scores, IoU3D):
-            idx = np.argsort(scores)[::-1]
-            scores = np.array([IoU3D[i] for i in idx])
-            scores = np.maximum.accumulate(scores)
-            return scores
-        
-        @dataclass
-        class Plotinfo:
-            '''simple dataclass to store plot information access as Plotinfo.x
-            fields: pred_cubes, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, K'''
-            pred_cubes: List[Cubes]
-            gt_cube_meshes: List
-            gt_boxes3D: List
-            gt_boxes: List
-            gt_box_classes: List
-            mask_per_image: List
-            K: np.array
 
         if experiment_type['use_pred_boxes']:
             gt_box_classes = (torch.cat([p.pred_classes for p in instances], dim=0) if len(instances) else torch.empty(0))
@@ -311,7 +311,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         if self.dims_priors_enabled:
             # gather prior dimensions
-            prior_dims = self.priors_dims_per_cat.detach()
+            prior_dims = self.priors_dims_per_cat.detach().to('cpu')
             prior_dims = prior_dims[:, gt_box_classes, :, :].squeeze(0)
             prior_dims_mean = prior_dims[:, 0, :]
             prior_dims_std = prior_dims[:, 1, :]
@@ -328,7 +328,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         if ground_maps is not None:
         # select only the points in x,y,z that are part of the ground map
-            ground = ground_maps.tensor.cpu().squeeze()[::use_nth,::use_nth]
+            ground = ground_maps.tensor.squeeze()[::use_nth,::use_nth]
             zg = z[ground > 0]
             xg = x[ground > 0]
             yg = y[ground > 0]
@@ -397,8 +397,8 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         pred_cubes_out = []
         if experiment_type['use_pred_boxes']:
-            for i, (gt_box, prior_dim_mean, prior_dim_std, gt_box_class) in enumerate(zip(gt_boxes, prior_dims_mean, prior_dims_std, gt_box_classes)):
-                pred_cubes, pred_boxes, _, _ = predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std))
+            pred_cubes, pred_boxes, _, _ = predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std))
+            for i, (gt_box, gt_box_class) in enumerate(zip(gt_boxes, gt_box_classes)):
                 IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes)
 
                 highest_score = np.argmax(IoU2D_scores)
@@ -423,12 +423,12 @@ class ROIHeads_Boxer(StandardROIHeads):
                 combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
                 random_score = np.random.rand(number_of_proposals)
                 
-                score_IoU2D[i,:] = accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)
-                score_point_c[i,:] = accumulate_scores(point_cloud_scores.cpu().numpy(), IoU3D)
-                score_seg[i,:] = accumulate_scores(segment_scores, IoU3D)
-                score_dim[i,:] = accumulate_scores(dim_scores.cpu().numpy(), IoU3D)
-                score_combined[i,:] = accumulate_scores(combined_score, IoU3D)
-                score_random[i,:] = accumulate_scores(random_score, IoU3D)
+                score_IoU2D[i,:] = self.accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)
+                score_point_c[i,:] = self.accumulate_scores(point_cloud_scores.cpu().numpy(), IoU3D)
+                score_seg[i,:] = self.accumulate_scores(segment_scores, IoU3D)
+                score_dim[i,:] = self.accumulate_scores(dim_scores.cpu().numpy(), IoU3D)
+                score_combined[i,:] = self.accumulate_scores(combined_score, IoU3D)
+                score_random[i,:] = self.accumulate_scores(random_score, IoU3D)
                 
                 highest_score = np.argmax(combined_score)
                 pred_cube = pred_cubes[i,highest_score]
