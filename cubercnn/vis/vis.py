@@ -73,7 +73,7 @@ def create_colorbar(height, width, color_lo=(0,0, 250), color_hi=(0, 250, 250)):
     return im.astype(np.uint8)
 
 
-def visualize_from_instances(detections, dataset, dataset_name, min_size_test, output_folder, category_names_official, iteration=''):
+def visualize_from_instances(detections, dataset, dataset_name, min_size_test, output_folder, category_names_official, iteration='',visualize_every=50):
     
     vis_folder = os.path.join(output_folder, 'vis')
     
@@ -94,7 +94,7 @@ def visualize_from_instances(detections, dataset, dataset_name, min_size_test, o
 
     for imind, im_obj in enumerate(detections):
         
-        write_sample = ((imind % 50) == 0)
+        write_sample = ((imind % visualize_every) == 0)
         
         annos = dataset._dataset[imind]['annotations']
         gt_boxes_2d = np.array([anno['bbox'] for anno in annos])
