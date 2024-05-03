@@ -162,8 +162,9 @@ class ROIHeads_Boxer(StandardROIHeads):
                 # pred_instances = filter_proposals(pred_instances)
 
                 ## NMS
-                max_vis_prop = min(len(pred_instances[0]), len(proposals[0]))
+                filtered_pred_instances = []
                 for instances_i in pred_instances:
+                    max_vis_prop = min(len(instances_i), 20)
 
                     # perform a simple NMS, which is not cls dependent. 
                     keep = batched_nms(
@@ -173,15 +174,17 @@ class ROIHeads_Boxer(StandardROIHeads):
                         0.9)
                     
                     keep = keep[:max_vis_prop]
+                    new_instances = Instances(instances_i.image_size)
+                    new_instances.pred_boxes = instances_i.pred_boxes[keep]
+                    new_instances.scores = instances_i.scores[keep]
+                    new_instances.scores_full = instances_i.scores_full[keep]
+                    new_instances.pred_classes = instances_i.pred_classes[keep]
 
-                    pred_boxes = instances_i.pred_boxes[keep]
-                    pred_scores = instances_i.scores[keep]
-                    pred_classes = instances_i.pred_classes[keep]
-
+                    filtered_pred_instances.append(new_instances)
 
             # mask for each proposal
             # NOTE: at the the moment the this assumes a batch size of 1, since the test loader has it hardcoded
-            target_instances = pred_instances if experiment_type['use_pred_boxes'] else proposals
+            target_instances = filtered_pred_instances if experiment_type['use_pred_boxes'] else proposals
 
             # from detectron2.utils.visualizer import Visualizer
             # import matplotlib.pyplot as plt
@@ -195,7 +198,6 @@ class ROIHeads_Boxer(StandardROIHeads):
             # plt.imshow(prop_img)
 
             masks = self.object_masks(images_raw.tensor, target_instances, segmentor, experiment_type) # over all images in batch
-
             pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type)
             return pred_instances
         
@@ -400,13 +402,13 @@ class ROIHeads_Boxer(StandardROIHeads):
             pred_cubes, pred_boxes, _, _ = predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std))
             for i, (gt_box, gt_box_class) in enumerate(zip(gt_boxes, gt_box_classes)):
                 IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes[i])
-                segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), pred_cubes[i].get_bube_corners(Ks_scaled_per_box))
-                dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0])
-                combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
+                # segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), pred_cubes[i].get_bube_corners(Ks_scaled_per_box))
+                # dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0])
+                # combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
                 
-                highest_score = np.argmax(combined_score)
+                highest_score = np.argmax(IoU2D_scores)
                 pred_cube = pred_cubes[i,highest_score]
-                pred_cube.label = gt_box_class; pred_cube.score = combined_score[highest_score]
+                pred_cube.label = gt_box_class; pred_cube.score = IoU2D_scores[highest_score]
                 pred_cubes_out.append(pred_cube)
         else:
             assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
