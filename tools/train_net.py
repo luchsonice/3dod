@@ -84,7 +84,7 @@ def do_test(cfg, model, iteration='final', storage=None):
         '''
         Distributed Cube R-CNN inference
         '''
-        data_loader = build_detection_test_loader(cfg, dataset_name, num_workers=4)
+        data_loader = build_detection_test_loader(cfg, dataset_name,batch_size=cfg.SOLVER.IMS_PER_BATCH, num_workers=4)
         results_json = inference_on_dataset(model, data_loader)
 
         if comm.is_main_process():
@@ -354,7 +354,7 @@ def setup(args):
 
     for dataset_name in dataset_names_test:
         if not(dataset_name in cfg.DATASETS.TRAIN):
-            simple_register(dataset_name, filter_settings, filter_empty=False)
+            simple_register(dataset_name, filter_settings, filter_empty=True)
     
     return cfg
 
