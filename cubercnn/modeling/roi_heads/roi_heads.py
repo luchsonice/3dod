@@ -397,19 +397,19 @@ class ROIHeads_Boxer(StandardROIHeads):
             return pred_cubes, pred_boxes, stats_instance, stats_ranges
 
 
-        pred_cubes_out = []
+        pred_cubes_out = Cubes(torch.zeros(len(gt_boxes), 1, 15), scores=torch.zeros(len(gt_boxes)),labels=gt_box_classes)
         if experiment_type['use_pred_boxes']:
             pred_cubes, pred_boxes, _, _ = predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std))
             for i, (gt_box, gt_box_class) in enumerate(zip(gt_boxes, gt_box_classes)):
                 IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes[i])
-                # segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), pred_cubes[i].get_bube_corners(Ks_scaled_per_box))
+                segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), pred_cubes[i].get_bube_corners(Ks_scaled_per_box))
                 # dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0])
                 # combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
                 
                 highest_score = np.argmax(IoU2D_scores)
                 pred_cube = pred_cubes[i,highest_score]
-                pred_cube.label = gt_box_class; pred_cube.score = IoU2D_scores[highest_score]
-                pred_cubes_out.append(pred_cube.tensor[0][0])
+                pred_cubes_out.labels[i] = gt_box_class; pred_cubes_out.scores[i] = IoU2D_scores[highest_score]
+                pred_cubes_out.tensor[i] = pred_cube.tensor[0]
         else:
             assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
             #for i, (gt_2d, gt_3d, gt_pose, prior_dim_mean, prior_dim_std, gt_box_class) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses, prior_dims_mean, prior_dims_std, gt_box_classes)): ## NOTE:this works assuming batch_size=1
@@ -438,8 +438,8 @@ class ROIHeads_Boxer(StandardROIHeads):
                 highest_score = np.argmax(combined_score)
                 pred_cube = pred_cubes[i,highest_score]
                 gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
-                pred_cube.label = gt_box_classes[i]; pred_cube.score = combined_score[highest_score]
-                pred_cubes_out.append(pred_cube.tensor[0][0])
+                pred_cubes_out.labels[i] = gt_box_classes[i]; pred_cubes_out.scores[i] = IoU2D_scores[highest_score]
+                pred_cubes_out.tensor[i] = pred_cube.tensor[0]
 
                 # stats
                 sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
@@ -449,7 +449,6 @@ class ROIHeads_Boxer(StandardROIHeads):
             stat_empty_boxes = sum_percentage_empty_boxes/n_gt
             p_info = Plotinfo(pred_cubes_out, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
 
-        pred_cubes_out = Cubes(torch.stack(pred_cubes_out, dim=0).unsqueeze(1),scores=stats_off[:,0],labels=gt_box_classes)
             
         if experiment_type['output_recall_scores']: # MABO
             return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off
