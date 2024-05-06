@@ -185,8 +185,9 @@ class ROIHeads_Boxer(StandardROIHeads):
             # mask for each proposal
             # NOTE: at the the moment the this assumes a batch size of 1, since the test loader has it hardcoded
             target_instances = filtered_pred_instances if experiment_type['use_pred_boxes'] else proposals
-            if len(target_instances[0].pred_boxes) == 0:
-                return target_instances
+            if experiment_type['use_pred_boxes']:
+                if len(target_instances[0].pred_boxes) == 0:
+                    return target_instances
             masks = self.object_masks(images_raw.tensor, target_instances, segmentor, experiment_type) # over all images in batch
             pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type)
             return pred_instances
