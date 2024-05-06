@@ -159,7 +159,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                                 break
                     return pred_instances
 
-                # pred_instances = filter_proposals(pred_instances)
+                #pred_instances = filter_proposals(pred_instances)
 
                 ## NMS
                 filtered_pred_instances = []
@@ -393,7 +393,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             pred_cubes, pred_boxes, _, _ = predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std))
             for i, (gt_box, gt_box_class) in enumerate(zip(gt_boxes, gt_box_classes)):
                 IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes[i])
-                segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), pred_cubes[i].get_bube_corners(Ks_scaled_per_box))
+                segment_scores = score_segmentation(mask_per_image[i][0], pred_cubes[i].get_bube_corners(Ks_scaled_per_box))
                 dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0])
                 combined_score = np.array(IoU2D_scores)*np.array(dim_scores)*np.array(segment_scores)
                 
@@ -403,7 +403,6 @@ class ROIHeads_Boxer(StandardROIHeads):
                 pred_cubes_out.tensor[i] = pred_cube.tensor[0]
         else:
             assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
-            #for i, (gt_2d, gt_3d, gt_pose, prior_dim_mean, prior_dim_std, gt_box_class) in enumerate(zip(gt_boxes, gt_boxes3D, gt_poses, prior_dims_mean, prior_dims_std, gt_box_classes)): ## NOTE:this works assuming batch_size=1
             gt_cubes = Cubes(torch.cat((gt_boxes3D[:,6:].unsqueeze(0),gt_boxes3D[:,3:6].unsqueeze(0), gt_poses.view(n_gt,9).unsqueeze(0)),dim=2).permute(1,0,2))
             pred_cubes, pred_boxes, stats_instance, stats_ranges = predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), gt_cubes)
             
