@@ -185,18 +185,8 @@ class ROIHeads_Boxer(StandardROIHeads):
             # mask for each proposal
             # NOTE: at the the moment the this assumes a batch size of 1, since the test loader has it hardcoded
             target_instances = filtered_pred_instances if experiment_type['use_pred_boxes'] else proposals
-
-            # from detectron2.utils.visualizer import Visualizer
-            # import matplotlib.pyplot as plt
-            # prop_img = images_raw.tensor[0].permute(1,2,0).cpu().numpy()
-            # v_pred = Visualizer(prop_img, None)
-            # v_pred = v_pred.overlay_instances(
-            #     boxes=target_instances[0].pred_boxes.tensor
-            #     ,
-            # )
-            # prop_img = v_pred.get_image()
-            # plt.imshow(prop_img)
-
+            if len(target_instances[0].pred_boxes) == 0:
+                return target_instances
             masks = self.object_masks(images_raw.tensor, target_instances, segmentor, experiment_type) # over all images in batch
             pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type)
             return pred_instances
@@ -403,10 +393,10 @@ class ROIHeads_Boxer(StandardROIHeads):
             for i, (gt_box, gt_box_class) in enumerate(zip(gt_boxes, gt_box_classes)):
                 IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes[i])
                 segment_scores = score_segmentation(mask_per_image[i][0].cpu().numpy(), pred_cubes[i].get_bube_corners(Ks_scaled_per_box))
-                # dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0])
-                # combined_score = np.array(segment_scores)*np.array(IoU2D_scores)*np.array(dim_scores)
+                dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0])
+                combined_score = np.array(IoU2D_scores)*np.array(dim_scores)*np.array(segment_scores)
                 
-                highest_score = np.argmax(IoU2D_scores)
+                highest_score = np.argmax(combined_score)
                 pred_cube = pred_cubes[i,highest_score]
                 pred_cubes_out.labels[i] = gt_box_class; pred_cubes_out.scores[i] = IoU2D_scores[highest_score]
                 pred_cubes_out.tensor[i] = pred_cube.tensor[0]
