@@ -227,20 +227,12 @@ def mask_iou(segmentation_mask, bube_mask):
     '''
     Area is of segmentation_mask
     '''
-    # Compute intersection mask
-    intersection_mask = np.logical_and(segmentation_mask, bube_mask).astype(np.uint8)
-    # Count pixels in intersection
-    intersection_area = np.sum(intersection_mask)
-
-    # Compute union mask
-    union_mask = np.logical_or(segmentation_mask, bube_mask).astype(np.uint8)
-    # Count pixels in union mask
-    union_area = np.sum(union_mask)
-
-    # Compute IoU
-    iou = intersection_area / union_area
-
-    return iou
+    bube_mask = torch.tensor(bube_mask)
+    intersection = (segmentation_mask * bube_mask).sum()
+    if intersection == 0:
+        return 0.0
+    union = torch.logical_or(segmentation_mask, bube_mask).to(torch.int).sum()
+    return intersection / union
 
 def is_gt_included(gt_cube,x_range,y_range,z_range, w_prior, h_prior, l_prior):
     # Define how far away dimensions need to be to be counted as unachievable
