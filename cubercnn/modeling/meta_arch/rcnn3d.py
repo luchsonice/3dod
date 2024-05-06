@@ -313,7 +313,7 @@ class BoxNet(RCNN3D):
         if batched_inputs[0]['ground_map'] is not None:
             ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
         else:
-            logger.info("ground map file not found, setting to None")
+            #logger.info("ground map file not found, setting to None")
             ground_maps = None
             # TODO: make logic to predict ground map on the fly
             # logger.info("ground map file not found, computing...")
