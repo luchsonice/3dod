@@ -386,7 +386,8 @@ class ROIHeads_Boxer(StandardROIHeads):
             pred_boxes = cubes_to_box(pred_cubes, Ks_scaled_per_box)
             return pred_cubes, pred_boxes, stats_instance, stats_ranges
 
-        pred_cubes_out = []
+
+        pred_cubes_out = Cubes(torch.zeros(len(gt_boxes), 1, 15), scores=torch.zeros(len(gt_boxes)),labels=gt_box_classes)
         if experiment_type['use_pred_boxes']:
             pred_cubes, pred_boxes, _, _ = predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std))
             for i, (gt_box, gt_box_class) in enumerate(zip(gt_boxes, gt_box_classes)):
@@ -397,8 +398,8 @@ class ROIHeads_Boxer(StandardROIHeads):
                 
                 highest_score = np.argmax(combined_score)
                 pred_cube = pred_cubes[i,highest_score]
-                pred_cube.label = gt_box_class; pred_cube.score = combined_score[highest_score]
-                pred_cubes_out.append(pred_cube.tensor[0][0])
+                pred_cubes_out.labels[i] = gt_box_class; pred_cubes_out.scores[i] = IoU2D_scores[highest_score]
+                pred_cubes_out.tensor[i] = pred_cube.tensor[0]
         else:
             assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
             gt_cubes = Cubes(torch.cat((gt_boxes3D[:,6:].unsqueeze(0),gt_boxes3D[:,3:6].unsqueeze(0), gt_poses.view(n_gt,9).unsqueeze(0)),dim=2).permute(1,0,2))
@@ -426,8 +427,8 @@ class ROIHeads_Boxer(StandardROIHeads):
                 highest_score = np.argmax(combined_score)
                 pred_cube = pred_cubes[i,highest_score]
                 gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
-                pred_cube.label = gt_box_classes[i]; pred_cube.score = combined_score[highest_score]
-                pred_cubes_out.append(pred_cube.tensor[0][0])
+                pred_cubes_out.labels[i] = gt_box_classes[i]; pred_cubes_out.scores[i] = IoU2D_scores[highest_score]
+                pred_cubes_out.tensor[i] = pred_cube.tensor[0]
 
                 # stats
                 sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
@@ -437,8 +438,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             stat_empty_boxes = sum_percentage_empty_boxes/n_gt
             p_info = Plotinfo(pred_cubes_out, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
 
-        pred_cubes_out = Cubes(torch.stack(pred_cubes_out, dim=0).unsqueeze(1),scores=stats_off[:,0],labels=gt_box_classes)
-         
+            
         if experiment_type['output_recall_scores']: # MABO
             return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off
         

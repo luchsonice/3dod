@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 import cv2
-import pickle
 from scipy.stats import pearsonr 
+from ProposalNetwork.scoring.convex_outline import tracing_outline_robust
 import ProposalNetwork.utils.spaces as spaces
 
 from ProposalNetwork.utils.utils import iou_2d, mask_iou, euler_to_unit_vector
@@ -65,8 +65,24 @@ def score_segmentation(segmentation_mask, bube_corners):
         polygon_points = cv2.convexHull(np.array(bube_corners[i]))
         polygon_points = np.array([polygon_points],dtype=np.int32)
         cv2.fillPoly(bube_mask, polygon_points, 1)
-        scores.append(mask_iou(segmentation_mask, bube_mask)) # TODO I think we should try diving by gt as its unfair in combined
+        scores.append(mask_iou(segmentation_mask[::4,::4], bube_mask[::4,::4])) # TODO I think we should try diving by gt as its unfair in combined
 
+    return scores
+
+def score_segmentation_v2(segmentation_mask, pred_cubes, K):
+
+    scores = []
+    for i in range(len(pred_cubes.tensor.squeeze())):
+        v_2d = pred_cubes[:, i].get_bube_corners(K).squeeze()
+        _, f = pred_cubes[:, i].get_cuboids_verts_faces()
+        f = f.squeeze()
+        points, ids = tracing_outline_robust(v_2d.numpy(), f.numpy()) # not doing any projection,just simply take the verts's x and y .
+
+        bube_mask = np.zeros(segmentation_mask.shape, dtype='uint8')
+        # append first point to close the loop
+        # points = np.append(points, [points[0]], axis=0)
+        cv2.fillPoly(bube_mask, np.expand_dims(points,0).astype(int), 1)
+        scores.append(mask_iou(segmentation_mask, bube_mask))
     return scores
 
 def score_dimensions(category, dimensions):

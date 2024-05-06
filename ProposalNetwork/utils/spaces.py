@@ -189,14 +189,33 @@ class Cubes:
 
         return verts
     
+    def get_cuboids_verts_faces(self):
+        '''wrap ``util.get_cuboid_verts_faces``
+        
+        Returns:
+            verts: the 3D vertices of the cuboid in camera space
+            faces: the faces of the cuboid in camera space'''
+
+        verts_list = []
+        faces_list = []
+        for i in range(self.num_instances):
+            verts_next_instance, faces = util.get_cuboid_verts_faces(self.tensor[i, :, :6], self.rotations[i])
+            verts_list.append(verts_next_instance)
+            faces_list.append(faces)
+        verts = torch.stack(verts_list, dim=0)
+        faces = torch.stack(faces_list, dim=0)
+
+        return verts, faces
+    
     def get_bube_corners(self,K) -> torch.Tensor:
-        '''This assumes that all the cubes have the same camera intrinsic matrix K'''
+        '''This assumes that all the cubes have the same camera intrinsic matrix K
+        Returns:
+            num_instances x N x 8 x 2'''
         cube_corners = self.get_all_corners() # num_instances x N x 8 x 3
         # output of
         K_repeated = K.repeat(self.num_instances,1,1)
         cube_corners = torch.matmul(K_repeated, cube_corners.permute(1,0,3,2)).permute(1,0,3,2)
         cube_corners = cube_corners[:, :, :, :2]/cube_corners[:, :, :, 2].unsqueeze(-1)
-
         return cube_corners # num_instances x N x 8 x 2
     
     def get_volumes(self) -> float:
