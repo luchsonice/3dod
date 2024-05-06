@@ -94,7 +94,7 @@ class DPTHead(nn.Module):
             nn.Identity(),
         )
     
-    def forward(self, out_features, patch_h, patch_w):
+    def forward(self, out_features, patch_h, patch_w, return_features=True):
         out = []
         for i, x in enumerate(out_features):
             if self.use_clstoken:
@@ -127,6 +127,8 @@ class DPTHead(nn.Module):
         out = F.interpolate(out, (int(patch_h * 14), int(patch_w * 14)), mode="bilinear", align_corners=True)
         out = self.scratch.output_conv2(out)
             
+        if return_features:
+            return out, {'path_1':path_1, 'path_2':path_2, 'path_3':path_3, 'path_4':path_4}
         return out
 
 
@@ -148,8 +150,8 @@ class DPT_DINOv2(nn.Module):
         
         patch_h, patch_w = h // 14, w // 14
 
-        depth = self.depth_head(features, patch_h, patch_w)
+        depth, depth_features = self.depth_head(features, patch_h, patch_w)
         depth = F.interpolate(depth, size=(h, w), mode="bilinear", align_corners=True)
         depth = F.relu(depth)
 
-        return depth.squeeze(1)
+        return depth.squeeze(1), depth_features

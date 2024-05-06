@@ -67,5 +67,5 @@ for img_id, img_info in track(datasets.imgs.items()):
     width = img_info['width']
     height = img_info['height']
     img = np.array(Image.open('datasets/'+file_path))
-    depth = depth_of_images(img, model)
-    np.savez_compressed(f'datasets/depth_maps/{img_id}.npz', depth=depth)
+    depth, depth_features = depth_of_images(img, model)
+    np.savez_compressed(f'datasets/depth_maps/{img_id}.npz', depth=depth, depth_features=depth_features)

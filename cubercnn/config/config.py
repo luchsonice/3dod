@@ -166,3 +166,6 @@ def get_cfg_defaults(cfg):
     cfg.PLOT.OUTPUT_DIR = ''
     cfg.PLOT.EVAL = ''
     cfg.PLOT.MODE2D = '' #either GT or PRED
+
+    cfg.PLOT.SCORING_FUNC = ''
+    cfg.PLOT.PROPOSAL_FUNC = ''

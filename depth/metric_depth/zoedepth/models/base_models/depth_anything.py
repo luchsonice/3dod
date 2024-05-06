@@ -267,13 +267,13 @@ class DepthAnythingCore(nn.Module):
         
         with torch.set_grad_enabled(self.trainable):
 
-            rel_depth = self.core(x)
+            rel_depth, depth_features = self.core(x)
             if not self.fetch_features:
                 return rel_depth
         out = [self.core_out[k] for k in self.layer_names]
 
         if return_rel_depth:
-            return rel_depth, out
+            return rel_depth, out, depth_features
         return out
 
     def get_rel_pos_params(self):
