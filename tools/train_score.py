@@ -206,12 +206,13 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     do_eval = cfg.TEST.EVAL_PERIOD > 0
 
     model.train()
+    segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
 
     optimizer = build_optimizer(cfg, model)
     scheduler = build_lr_scheduler(cfg, optimizer)
 
     # bookkeeping
-    checkpointer = DetectionCheckpointer(model, cfg.OUTPUT_DIR, optimizer=optimizer, scheduler=scheduler)    
+    checkpointer = DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR, optimizer=optimizer, scheduler=scheduler)
     periodic_checkpointer = PeriodicCheckpointerOnlyOne(checkpointer, cfg.SOLVER.CHECKPOINT_PERIOD, max_iter=max_iter)
     
     # create the dataloader
@@ -245,7 +246,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             storage.iter = iteration
 
             # forward
-            loss_dict = model(data)
+            loss_dict = model(data, segmentor, {})
             losses = sum(loss_dict.values())
             
             # send loss scalars to tensorboard.
@@ -344,7 +345,6 @@ def main(args):
 
     # skip straight to eval mode
     # load the saved model if using eval boxes
-    DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(cfg.MODEL.WEIGHTS, resume=False)
     
     filter_settings = data.get_filter_settings_from_cfg(cfg)
 
@@ -391,7 +391,8 @@ def main(args):
         # log the per-dataset categories
         logger.info('Available categories for {}'.format(info['name']))
         logger.info([thing_classes[i] for i in (possible_categories & known_category_training_ids)])
-
+    
+    DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(cfg.MODEL.WEIGHTS, resume=False)
 
     return do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src)
 
