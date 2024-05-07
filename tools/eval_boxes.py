@@ -69,7 +69,7 @@ def init_segmentation(device='cpu') -> Sam:
     return sam
 
 
-def inference_on_dataset(model, data_loader, segmentor, experiment_type):
+def inference_on_dataset(model, data_loader, segmentor, experiment_type, proposal_function):
     """
     Run model on the data_loader. 
     Also benchmark the inference speed of `model.__call__` accurately.
@@ -101,8 +101,8 @@ def inference_on_dataset(model, data_loader, segmentor, experiment_type):
         stack.enter_context(torch.no_grad())
 
         for idx, inputs in track(enumerate(data_loader), description="Average Precision", total=total):
-            #logger.info("Image {} batches".format(idx))
-            outputs = model(inputs, segmentor, experiment_type)
+            logger.info("Image {}".format(idx))
+            outputs = model(inputs, segmentor, experiment_type, proposal_function)
             for input, output in zip(inputs, outputs):
 
                 prediction = {
@@ -362,11 +362,12 @@ def do_test(cfg, model, iteration='final', storage=None):
         # either use pred_boxes or GT boxes
         if cfg.PLOT.MODE2D == 'PRED': experiment_type['use_pred_boxes'] = True
         else: experiment_type['use_pred_boxes'] = False
+        # define proposal function to use
         if experiment_type['output_recall_scores']:
-            _ = mean_average_best_overlap(model, data_loader, segmentor, experiment_type)
+            _ = mean_average_best_overlap(model, data_loader, segmentor, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
         
         else:
-            results_json = inference_on_dataset(model, data_loader, segmentor, experiment_type)
+            results_json = inference_on_dataset(model, data_loader, segmentor, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
 
             eval_helper = Omni3DEvaluationHelper(
                 dataset_names_test, 
