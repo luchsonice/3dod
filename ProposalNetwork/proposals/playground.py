@@ -1,59 +1,18 @@
-import argparse
 import pickle
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torchvision.transforms as transforms
 from matplotlib import pyplot as plt
 from PIL import Image
 import os
 
 from cubercnn import util, vis
-from depth.metric_depth.zoedepth.models.builder import build_model
-from depth.metric_depth.zoedepth.utils.config import get_config
 from detectron2.data.catalog import MetadataCatalog
 from detectron2.data.detection_utils import convert_image_to_rgb
 from detectron2.layers.nms import batched_nms
 from detectron2.utils.visualizer import Visualizer
-
-
-def depth_of_images(image, model):
-    """
-    This function takes in a list of images and returns the depth of the images"""
-    # Born out of Issue 36. 
-    # Allows  the user to set up own test files to infer on (Create a folder my_test and add subfolder input and output in the metric_depth directory before running this script.)
-    # Make sure you have the necessary libraries
-    # Code by @1ssb
-
-    # Global settings
-    DATASET = 'nyu' # Lets not pick a fight with the model's dataloader
-
-    color_image = Image.fromarray(image).convert('RGB')
-    original_width, original_height = color_image.size
-    image_tensor = transforms.ToTensor()(color_image).unsqueeze(0).to('cuda' if torch.cuda.is_available() else 'cpu')
-
-    pred_o = model(image_tensor, dataset=DATASET)
-    if isinstance(pred_o, dict):
-        pred = pred_o.get('metric_depth', pred_o.get('out'))
-        features = pred_o.get('features', None)
-    elif isinstance(pred_o, (list, tuple)):
-        pred = pred[-1]
-    pred = pred.squeeze().detach().cpu().numpy()
-
-    # Resize color image and depth to final size
-    resized_pred = Image.fromarray(pred).resize((original_width, original_height), Image.NEAREST)
-
-    # resized_pred is the image shaped to the original image size, depth is in meters
-    return np.array(resized_pred), features
-
-def setup_depth_model(model_name, pretrained_resource):
-    DATASET = 'nyu' # Lets not pick a fight with the model's dataloader
-    config = get_config(model_name, "eval", DATASET)
-    config.pretrained_resource = pretrained_resource
-    model = build_model(config).to('cuda' if torch.cuda.is_available() else 'cpu')
-    model.eval()
-    return model
+from cubercnn.data.generate_depth_maps import setup_depth_model, depth_of_images
 
 def make_random_boxes(n_boxes=10):
     # rotation_matrix = torch.rand(3,3)*2*torch.pi
