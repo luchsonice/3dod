@@ -111,10 +111,6 @@ class DatasetMapper3D(DatasetMapper):
         detection_utils.check_image_size(dataset_dict, image)
         dp_img = Image.fromarray(np.load(dataset_dict["depth_image_path"])['depth'])
 
-        if self.is_train:
-            depth_features = np.load(dataset_dict["depth_image_path"])['depth_features']
-            dataset_dict['depth_features'] = torch.as_tensor(np.ascontiguousarray(depth_features))
-
         aug_input = T.AugInput(image)
         transforms = self.augmentations(aug_input)
         image = aug_input.image
