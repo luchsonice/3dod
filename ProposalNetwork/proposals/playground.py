@@ -33,10 +33,11 @@ def depth_of_images(image, model):
     original_width, original_height = color_image.size
     image_tensor = transforms.ToTensor()(color_image).unsqueeze(0).to('cuda' if torch.cuda.is_available() else 'cpu')
 
-    pred = model(image_tensor, dataset=DATASET)
-    if isinstance(pred, dict):
-        pred = pred.get('metric_depth', pred.get('out'))
-    elif isinstance(pred, (list, tuple)):
+    pred_o = model(image_tensor, dataset=DATASET)
+    if isinstance(pred_o, dict):
+        pred = pred_o.get('metric_depth', pred_o.get('out'))
+        features = pred_o.get('features', None)
+    elif isinstance(pred_o, (list, tuple)):
         pred = pred[-1]
     pred = pred.squeeze().detach().cpu().numpy()
 
@@ -44,7 +45,7 @@ def depth_of_images(image, model):
     resized_pred = Image.fromarray(pred).resize((original_width, original_height), Image.NEAREST)
 
     # resized_pred is the image shaped to the original image size, depth is in meters
-    return np.array(resized_pred)
+    return np.array(resized_pred), features
 
 def setup_depth_model(model_name, pretrained_resource):
     DATASET = 'nyu' # Lets not pick a fight with the model's dataloader

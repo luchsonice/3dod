@@ -146,7 +146,7 @@ class ZoeDepth(DepthModel):
         # print("input shape:", x.shape)
         self.orig_input_width = w
         self.orig_input_height = h
-        rel_depth, out = self.core(x, denorm=denorm, return_rel_depth=True)
+        rel_depth, out, depth_features = self.core(x, denorm=denorm, return_rel_depth=True)
         # print("output shapes", rel_depth.shape, out.shape)
         # print('rel_depth shape:', rel_depth.shape)
         # print('out type:', type(out))
@@ -207,6 +207,8 @@ class ZoeDepth(DepthModel):
 
         if return_probs:
             output['probs'] = x
+
+        output['depth_features'] = depth_features
 
         return output
 

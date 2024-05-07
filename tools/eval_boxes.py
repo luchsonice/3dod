@@ -353,7 +353,7 @@ def do_test(cfg, model, iteration='final', storage=None):
         data_mapper = DatasetMapper3D(cfg, is_train=False, mode='eval_with_gt')
         data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
 
-        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, batch_size=cfg.SOLVER.IMS_PER_BATCH, filter_empty=True, num_workers=1)
+        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, batch_size=cfg.SOLVER.IMS_PER_BATCH, num_workers=1)
 
         experiment_type = {}
 
@@ -431,6 +431,7 @@ def setup(args):
     
     dataset_names_test = cfg.DATASETS.TEST
 
+    # filter_ = True if cfg.PLOT.EVAL == 'MABO' else False
     for dataset_name in dataset_names_test:
         if not(dataset_name in cfg.DATASETS.TRAIN):
             # TODO: empties should not be filtering in test normally, or maybe they should??
