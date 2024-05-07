@@ -24,6 +24,9 @@ from detectron2.data import MetadataCatalog
 from pytorch3d.transforms import rotation_6d_to_matrix
 from cubercnn.modeling.roi_heads import build_roi_heads
 from cubercnn import util, vis
+import torch.nn.functional as F
+from detectron2.config import configurable
+import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 
@@ -255,7 +258,47 @@ class RCNN3D(GeneralizedRCNN):
 
 
 @META_ARCH_REGISTRY.register()
-class BoxNet(RCNN3D):
+class BoxNet(nn.Module):
+
+    @configurable
+    def __init__(
+        self,
+        *,
+        depth_model: nn.Module,
+        backbone: Backbone,
+        proposal_generator: nn.Module,
+        roi_heads: nn.Module,
+        pixel_mean: tuple[float],
+        pixel_std: tuple[float],
+        input_format: Optional[str] = None,
+        vis_period: int = 0,
+    ):
+        """
+        Args:
+            backbone: a backbone module, must follow detectron2's backbone interface
+            proposal_generator: a module that generates proposals using backbone features
+            roi_heads: a ROI head that performs per-region computation
+            pixel_mean, pixel_std: list or tuple with #channels element, representing
+                the per-channel mean and std to be used to normalize the input image
+            input_format: describe the meaning of channels of input. Needed by visualization
+            vis_period: the period to run visualization. Set to 0 to disable.
+        """
+        super().__init__()
+        self.depth_model = depth_model
+        self.backbone = backbone
+        self.proposal_generator = proposal_generator
+        self.roi_heads = roi_heads
+
+        self.input_format = input_format
+        self.vis_period = vis_period
+        if vis_period > 0:
+            assert input_format is not None, "input_format is required for visualization!"
+
+        self.register_buffer("pixel_mean", torch.tensor(pixel_mean).view(-1, 1, 1), False)
+        self.register_buffer("pixel_std", torch.tensor(pixel_std).view(-1, 1, 1), False)
+        assert (
+            self.pixel_mean.shape == self.pixel_std.shape
+        ), f"{self.pixel_mean} and {self.pixel_std} have different shapes!"
     
     @classmethod
     def from_config(cls, cfg, priors=None):
@@ -304,8 +347,10 @@ class BoxNet(RCNN3D):
                 return self.inference(batched_inputs, do_postprocess=True, segmentor=segmentor, experiment_type=experiment_type)
 
         if self.training:
+
             images = self.preprocess_image(batched_inputs)
             images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
+            
 
             # scaling factor for the sample relative to its original scale
             # e.g., how much has the image been upsampled by? or downsampled?
@@ -323,9 +368,10 @@ class BoxNet(RCNN3D):
             # backbone and proposal generator only work on 2D images and annotations.
             features = self.backbone(images.tensor)
             proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
-            images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
 
-            depth = self.depth_model(images_raw.tensor)
+            pred_o = self.depth_model(images_raw.tensor)
+            features = pred_o['depth_features']
+            p4 = F.interpolate(features['path_4'], size=features.shape[:-2], mode='bilinear', align_corners=False)
 
     
     def inference(self,

@@ -28,7 +28,7 @@ import pickle
 
 from cubercnn.data.dataset_mapper import DatasetMapper3D
 
-logger = logging.getLogger("scoring")
+logger = logging.getLogger("Scoring")
 
 from cubercnn.config import get_cfg_defaults
 from cubercnn.data import (
@@ -319,7 +319,7 @@ def main(args):
     cfg = setup(args)
     
     name = f'cube {datetime.datetime.now().isoformat()}'
-    wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
+    wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='disabled')
 
     priors = None
     with open('filetransfer/priors.pkl', 'rb') as f:
@@ -345,7 +345,55 @@ def main(args):
     # skip straight to eval mode
     # load the saved model if using eval boxes
     DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(cfg.MODEL.WEIGHTS, resume=False)
-    return do_train(cfg, model)
+    
+    filter_settings = data.get_filter_settings_from_cfg(cfg)
+
+    # setup and join the data.
+    dataset_paths = [os.path.join('datasets', 'Omni3D', name + '.json') for name in cfg.DATASETS.TRAIN]
+    datasets = data.Omni3D(dataset_paths, filter_settings=filter_settings)
+
+    # determine the meta data given the datasets used. 
+    data.register_and_store_model_metadata(datasets, cfg.OUTPUT_DIR, filter_settings)
+
+    thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
+    dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
+    
+    '''
+    It may be useful to keep track of which categories are annotated/known
+    for each dataset in use, in case a method wants to use this information.
+    '''
+
+    infos = datasets.dataset['info']
+
+    if type(infos) == dict:
+        infos = [datasets.dataset['info']]
+
+    dataset_id_to_unknown_cats = {}
+    possible_categories = set(i for i in range(cfg.MODEL.ROI_HEADS.NUM_CLASSES + 1))
+    
+    dataset_id_to_src = {}
+
+    for info in infos:
+        dataset_id = info['id']
+        known_category_training_ids = set()
+
+        if not dataset_id in dataset_id_to_src:
+            dataset_id_to_src[dataset_id] = info['source']
+
+        for id in info['known_category_ids']:
+            if id in dataset_id_to_contiguous_id:
+                known_category_training_ids.add(dataset_id_to_contiguous_id[id])
+        
+        # determine and store the unknown categories.
+        unknown_categories = possible_categories - known_category_training_ids
+        dataset_id_to_unknown_cats[dataset_id] = unknown_categories
+
+        # log the per-dataset categories
+        logger.info('Available categories for {}'.format(info['name']))
+        logger.info([thing_classes[i] for i in (possible_categories & known_category_training_ids)])
+
+
+    return do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src)
 
 
 if __name__ == "__main__":
