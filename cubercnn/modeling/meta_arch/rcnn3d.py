@@ -295,12 +295,12 @@ class BoxNet(RCNN3D):
         )
         return images
 
-    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor, experiment_type):
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor, experiment_type, proposal_function):
         if not self.training:
             if not experiment_type['use_pred_boxes']: # MABO
-                return self.inference(batched_inputs, do_postprocess=False, segmentor=segmentor, experiment_type=experiment_type)
+                return self.inference(batched_inputs, do_postprocess=False, segmentor=segmentor, experiment_type=experiment_type, proposal_function=proposal_function)
             else: # AP
-                return self.inference(batched_inputs, do_postprocess=True, segmentor=segmentor, experiment_type=experiment_type)
+                return self.inference(batched_inputs, do_postprocess=True, segmentor=segmentor, experiment_type=experiment_type, proposal_function=proposal_function)
 
         if self.training:
             raise NotImplementedError("Training is not possible for BoxNet")

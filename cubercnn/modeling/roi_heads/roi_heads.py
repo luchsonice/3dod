@@ -111,7 +111,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         if self.training:
             masks = self.object_masks(images_raw.tensor, proposals, segmentor, {'use_pred_boxes': False})
             experiment_type['use_pred_boxes'] = False
-            instances_3d, losses = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, proposals, Ks, im_dims, im_scales_ratio, experiment_type, , proposal_function, combined_features)
+            instances_3d, losses = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, proposals, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function, combined_features)
             return instances_3d, losses
         
         else:
