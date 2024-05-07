@@ -379,17 +379,18 @@ class BoxNet(nn.Module):
             # FPN: https://arxiv.org/abs/1612.03144v2
             # backbone and proposal generator only work on 2D images and annotations.
             features = self.backbone(images.tensor)
-            proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
+            # proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
 
             # images_raw are normalised to [0,1] and not resized here
-            pred_o = self.depth_model(images_raw.float()/255.0)
+            pred_o = self.depth_model(images_raw.tensor.float()/255.0)
             d_features = pred_o['depth_features']
             path_1 = d_features['path_1']
             p1 = F.interpolate(path_1, size=features['p2'].shape[-2:], mode='bilinear', align_corners=False)
 
             combined_features = torch.cat((features['p2'], p1), dim=1)
 
-            results = self.roi_heads(images, images_raw, depth_maps, ground_maps, combined_features, proposals, Ks, im_scales_ratio, segmentor, experiment_type)
+            gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
+            results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, gt_instances, Ks, im_scales_ratio, segmentor, experiment_type, combined_features)
             return results
 
     

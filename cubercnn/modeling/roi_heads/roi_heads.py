@@ -106,22 +106,15 @@ class ROIHeads_Boxer(StandardROIHeads):
 
 
 
-    def forward(self, images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, targets=None):
-
+    def forward(self, images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, combined_features, targets=None):
+        # proposals are GT here
         im_dims = [image.shape[1:] for image in images]
+        for prop in proposals:
+            prop.remove('gt_boxes3D')
 
         if self.training:
-            proposals = self.label_and_sample_proposals(proposals, targets, experiment_type['output_recall_scores'])
-        
-        # del targets
-
-        if self.training:
-
-            losses = self._forward_box(features, proposals)
-            if self.loss_w_3d > 0:
-                instances_3d, losses_cube = self._forward_cube(images, features, proposals, Ks, im_dims, im_scales_ratio)
-                losses.update(losses_cube)
-
+            masks = self.object_masks(images_raw.tensor, proposals, segmentor, {'use_pred_boxes': False})
+            instances_3d, losses = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, targets, Ks, im_dims, im_scales_ratio, experiment_type)
             return instances_3d, losses
         
         else:
@@ -265,6 +258,29 @@ class ROIHeads_Boxer(StandardROIHeads):
         else:
             pred_instances, _ = self.box_predictor.inference(predictions, proposals, )
             return pred_instances
+        
+    def _forward_box_for_depth(self, features: Dict[str, torch.Tensor], proposals: List[Instances]):
+        """
+        Forward logic of the box prediction branch. If `self.train_on_pred_boxes is True`,
+            the function puts predicted boxes in the `proposal_boxes` field of `proposals` argument.
+
+        Args:
+            features (dict[str, Tensor]): mapping from feature map names to tensor.
+                Same as in :meth:`ROIHeads.forward`.
+            proposals (list[Instances]): the per-image object proposals with
+                their matching ground truth.
+                Each has fields "proposal_boxes", and "objectness_logits",
+                "gt_classes", "gt_boxes".
+
+        Returns:
+            a list of `Instances`, the predicted instances.
+        """
+        features = [features[f] for f in self.box_in_features]
+        box_features = self.box_pooler(features, [x.proposal_boxes for x in proposals])
+        box_features = self.box_head(box_features)
+        predictions = self.box_predictor(box_features)
+        pred_instances, losses = self.box_predictor.inference(predictions, proposals, )
+        return pred_instances, losses
         
     def accumulate_scores(self, scores, IoU3D):
         idx = np.argsort(scores)[::-1]
@@ -501,7 +517,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         return sampled_idxs, gt_classes[sampled_idxs]
     
     @torch.no_grad()
-    def label_and_sample_proposals(self, proposals: List[Instances], targets: List[Instances], output_recall_scores) -> List[Instances]:
+    def label_and_sample_proposals(self, proposals: List[Instances], targets: List[Instances]) -> List[Instances]:
         
         #separate valid and ignore gts
         targets_ign = [target[target.gt_classes < 0] for target in targets]
@@ -563,10 +579,9 @@ class ROIHeads_Boxer(StandardROIHeads):
             proposals_with_gt.append(proposals_per_image)
 
         # Log the number of fg/bg samples that are selected for training ROI heads
-        if not output_recall_scores:
-            storage = get_event_storage()
-            storage.put_scalar("roi_head/num_fg_samples", np.mean(num_fg_samples))
-            storage.put_scalar("roi_head/num_bg_samples", np.mean(num_bg_samples))
+        storage = get_event_storage()
+        storage.put_scalar("roi_head/num_fg_samples", np.mean(num_fg_samples))
+        storage.put_scalar("roi_head/num_bg_samples", np.mean(num_bg_samples))
 
         return proposals_with_gt
 
