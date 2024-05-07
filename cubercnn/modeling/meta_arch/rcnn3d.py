@@ -17,6 +17,7 @@ from detectron2.utils.logger import _log_api_usage
 from detectron2.modeling.meta_arch import (
     META_ARCH_REGISTRY, GeneralizedRCNN
 )
+from cubercnn.data.generate_depth_maps import setup_depth_model
 from cubercnn.modeling.roi_heads import build_roi_heads
 
 from detectron2.data import MetadataCatalog
@@ -259,8 +260,12 @@ class BoxNet(RCNN3D):
     @classmethod
     def from_config(cls, cfg, priors=None):
         backbone = build_backbone(cfg, priors=priors)
+        depth_model = 'zoedepth'
+        pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
+        d_model = setup_depth_model(depth_model, pretrained_resource) #NOTE maybe make the depth model be learnable as well
         return {
             "backbone": backbone,
+            "depth_model": d_model,
             "proposal_generator": build_proposal_generator(cfg, backbone.output_shape()),
             "roi_heads": build_roi_heads(cfg, backbone.output_shape(), priors=priors),
             "input_format": cfg.INPUT.FORMAT,
@@ -268,6 +273,7 @@ class BoxNet(RCNN3D):
             "pixel_mean": cfg.MODEL.PIXEL_MEAN,
             "pixel_std": cfg.MODEL.PIXEL_STD,
         }
+            
 
     def preprocess_image(self, batched_inputs: List[Dict[str, torch.Tensor]], normalise=True, img_type="image", convert=False, NoOp=False):
         """
@@ -298,7 +304,29 @@ class BoxNet(RCNN3D):
                 return self.inference(batched_inputs, do_postprocess=True, segmentor=segmentor, experiment_type=experiment_type)
 
         if self.training:
-            raise NotImplementedError("Training is not possible for BoxNet")
+            images = self.preprocess_image(batched_inputs)
+            images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
+
+            # scaling factor for the sample relative to its original scale
+            # e.g., how much has the image been upsampled by? or downsampled?
+            im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
+            # The unmodified intrinsics for the image
+            Ks = [torch.FloatTensor(info['K']) for info in batched_inputs]
+
+            if "instances" in batched_inputs[0]:
+                gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
+            else:
+                gt_instances = None
+
+            # the backbone is actually a FPN, where the DLA model is the bottom-up structure.
+            # FPN: https://arxiv.org/abs/1612.03144v2
+            # backbone and proposal generator only work on 2D images and annotations.
+            features = self.backbone(images.tensor)
+            proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
+            images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
+
+            depth = self.depth_model(images_raw.tensor)
+
     
     def inference(self,
         batched_inputs: List[Dict[str, torch.Tensor]],
