@@ -100,28 +100,18 @@ class ROIHeads_Boxer(StandardROIHeads):
     
     @classmethod
     def _init_cube_head(self, cfg, input_shape: Dict[str, ShapeSpec]):
+        return {'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED, }
 
-        return {'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED,
-                }
-
-
-
-    def forward(self, images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, targets=None):
-
+    def forward(self, images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, combined_features, targets=None):
+        # proposals are GT here
         im_dims = [image.shape[1:] for image in images]
+        for prop in proposals:
+            prop.remove('gt_boxes3D')
 
         if self.training:
-            proposals = self.label_and_sample_proposals(proposals, targets)
-        
-        # del targets
-
-        if self.training:
-
-            losses = self._forward_box(features, proposals)
-            if self.loss_w_3d > 0:
-                instances_3d, losses_cube = self._forward_cube(images, features, proposals, Ks, im_dims, im_scales_ratio, proposal_function)
-                losses.update(losses_cube)
-
+            masks = self.object_masks(images_raw.tensor, proposals, segmentor, {'use_pred_boxes': False})
+            experiment_type['use_pred_boxes'] = False
+            instances_3d, losses = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, proposals, Ks, im_dims, im_scales_ratio, experiment_type, , proposal_function, combined_features)
             return instances_3d, losses
         
         else:
@@ -257,11 +247,6 @@ class ROIHeads_Boxer(StandardROIHeads):
                     for proposals_per_image, pred_boxes_per_image in zip(proposals, pred_boxes):
                         proposals_per_image.proposal_boxes = Boxes(pred_boxes_per_image)
             return losses
-        # elif output_recall_scores:
-        #     pred_boxes = self.box_predictor.predict_boxes_for_gt_classes(predictions, proposals)
-        #     for proposals_per_image, pred_boxes_per_image in zip(proposals, pred_boxes):
-        #         pred_boxes_per_image.pred_boxes = Boxes(pred_boxes_per_image)
-        #     return pred_boxes
         else:
             pred_instances, _ = self.box_predictor.inference(predictions, proposals, )
             return pred_instances
@@ -272,7 +257,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         scores = np.maximum.accumulate(scores)
         return scores
     
-    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type, proposal_function):
+    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type, proposal_function, combined_features):
 
         # send all objects to cpu
         images_raw = images_raw.to('cpu')
@@ -289,9 +274,13 @@ class ROIHeads_Boxer(StandardROIHeads):
             gt_boxes = torch.cat([p.pred_boxes for p in instances], dim=0,) if len(instances) > 1 else instances[0].pred_boxes
         else:
             gt_box_classes = (torch.cat([p.gt_classes for p in instances], dim=0) if len(instances) else torch.empty(0))
-            gt_boxes3D = torch.cat([p.gt_boxes3D for p in instances], dim=0,)
+            gt_boxes3D = torch.cat([p.gt_boxes3D for p in instances], dim=0,) if len(instances) else torch.empty(0)
             gt_boxes = torch.cat([p.gt_boxes for p in instances], dim=0,) if len(instances) > 1 else instances[0].gt_boxes
             gt_poses = torch.cat([p.gt_poses for p in instances], dim=0,)
+
+
+        if self.training:
+            combined_features
 
         n_gt = len(gt_boxes)
         
