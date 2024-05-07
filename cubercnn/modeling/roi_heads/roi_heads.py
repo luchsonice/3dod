@@ -394,12 +394,13 @@ class ROIHeads_Boxer(StandardROIHeads):
             for i, (gt_box) in enumerate(gt_boxes):
                 IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes[i])
                 segment_scores = score_segmentation(mask_per_image[i][0], pred_cubes[i].get_bube_corners(Ks_scaled_per_box))
+                segment_scores = torch.stack(segment_scores)
                 dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0])
-                point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground), pred_cubes[i])
-                combined_score = np.array(IoU2D_scores)*np.array(dim_scores)*np.array(segment_scores)
+                #point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground), pred_cubes[i])
+                combined_score = IoU2D_scores*dim_scores*segment_scores
                 
                 score_to_use = combined_score
-                highest_score = np.argmax(score_to_use)
+                highest_score = torch.argmax(score_to_use)
                 pred_cube = pred_cubes[i,highest_score]
                 pred_cubes_out.scores[i] = score_to_use[highest_score]
                 pred_cubes_out.tensor[i] = pred_cube.tensor[0]
