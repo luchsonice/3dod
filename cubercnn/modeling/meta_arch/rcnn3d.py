@@ -356,11 +356,14 @@ class BoxNet(nn.Module):
                 return self.inference(batched_inputs, do_postprocess=True, segmentor=segmentor, experiment_type=experiment_type)
 
         if self.training:
-
-            images = self.preprocess_image(batched_inputs)
-            images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True, to_float=True)
-            
-
+            images = self.preprocess_image(batched_inputs, img_type='image', convert=False)
+            images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
+            depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False, NoOp=True)
+            if batched_inputs[0]['ground_map'] is not None:
+                ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
+            else:
+                #logger.info("ground map file not found, setting to None")
+                ground_maps = None
             # scaling factor for the sample relative to its original scale
             # e.g., how much has the image been upsampled by? or downsampled?
             im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
@@ -379,9 +382,15 @@ class BoxNet(nn.Module):
             proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
 
             # images_raw are normalised to [0,1] and not resized here
-            pred_o = self.depth_model(images_raw.tensor)
+            pred_o = self.depth_model(images_raw.float()/255.0)
             d_features = pred_o['depth_features']
-            p4 = F.interpolate(d_features['path_4'], size=features.shape[:-2], mode='bilinear', align_corners=False)
+            path_1 = d_features['path_1']
+            p1 = F.interpolate(path_1, size=features['p2'].shape[-2:], mode='bilinear', align_corners=False)
+
+            combined_features = torch.cat((features['p2'], p1), dim=1)
+
+            results = self.roi_heads(images, images_raw, depth_maps, ground_maps, combined_features, proposals, Ks, im_scales_ratio, segmentor, experiment_type)
+            return results
 
     
     def inference(self,
