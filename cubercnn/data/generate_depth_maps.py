@@ -39,7 +39,7 @@ def depth_of_images(image, model):
     resized_pred = Image.fromarray(pred).resize((original_width, original_height), Image.NEAREST)
 
     # resized_pred is the image shaped to the original image size, depth is in meters
-    return np.array(resized_pred), features
+    return np.array(resized_pred)
 
 def setup_depth_model(model_name, pretrained_resource):
     DATASET = 'nyu' # Lets not pick a fight with the model's dataloader
@@ -104,5 +104,5 @@ for img_id, img_info in track(datasets.imgs.items()):
     width = img_info['width']
     height = img_info['height']
     img = np.array(Image.open('datasets/'+file_path))
-    depth, depth_features = depth_of_images(img, model)
-    np.savez_compressed(f'datasets/depth_maps/{img_id}.npz', depth=depth, depth_features=depth_features)
+    depth = depth_of_images(img, model)
+    np.savez_compressed(f'datasets/depth_maps/{img_id}.npz', depth=depth)
