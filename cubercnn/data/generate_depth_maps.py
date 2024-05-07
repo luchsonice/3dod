@@ -9,6 +9,7 @@ import torch
 import torchvision.transforms as transforms
 from depth.metric_depth.zoedepth.models.builder import build_model
 from depth.metric_depth.zoedepth.utils.config import get_config
+import torch.nn.functional as F
 
 from rich.progress import track
 
@@ -27,6 +28,7 @@ def depth_of_images(image, model):
     original_width, original_height = color_image.size
     image_tensor = transforms.ToTensor()(color_image).unsqueeze(0).to('cuda' if torch.cuda.is_available() else 'cpu')
 
+    # input as bx3xhxw (unnormalized image)
     pred_o = model(image_tensor, dataset=DATASET)
     if isinstance(pred_o, dict):
         pred = pred_o.get('metric_depth', pred_o.get('out'))
@@ -91,18 +93,18 @@ def init_dataset():
 
     return datasets
 
+if __name__ == '__main__':
+    datasets = init_dataset()
 
-datasets = init_dataset()
+    os.makedirs('datasets/depth_maps', exist_ok=True)
 
-os.makedirs('datasets/depth_maps', exist_ok=True)
-
-depth_model = 'zoedepth'
-pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
-model = setup_depth_model(depth_model, pretrained_resource)
-for img_id, img_info in track(datasets.imgs.items()):
-    file_path = img_info['file_path']
-    width = img_info['width']
-    height = img_info['height']
-    img = np.array(Image.open('datasets/'+file_path))
-    depth = depth_of_images(img, model)
-    np.savez_compressed(f'datasets/depth_maps/{img_id}.npz', depth=depth)
+    depth_model = 'zoedepth'
+    pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
+    model = setup_depth_model(depth_model, pretrained_resource)
+    for img_id, img_info in track(datasets.imgs.items()):
+        file_path = img_info['file_path']
+        width = img_info['width']
+        height = img_info['height']
+        img = np.array(Image.open('datasets/'+file_path))
+        depth = depth_of_images(img, model)
+        np.savez_compressed(f'datasets/depth_maps/{img_id}.npz', depth=depth)
