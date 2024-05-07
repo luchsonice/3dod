@@ -33,11 +33,11 @@ def depth_of_images(image, model):
     original_width, original_height = color_image.size
     image_tensor = transforms.ToTensor()(color_image).unsqueeze(0).to('cuda' if torch.cuda.is_available() else 'cpu')
 
-    pred = model(image_tensor, dataset=DATASET)
-    if isinstance(pred, dict):
-        pred = pred.get('metric_depth', pred.get('out'))
-        features = pred.get('features', None)
-    elif isinstance(pred, (list, tuple)):
+    pred_o = model(image_tensor, dataset=DATASET)
+    if isinstance(pred_o, dict):
+        pred = pred_o.get('metric_depth', pred_o.get('out'))
+        features = pred_o.get('features', None)
+    elif isinstance(pred_o, (list, tuple)):
         pred = pred[-1]
     pred = pred.squeeze().detach().cpu().numpy()
 
