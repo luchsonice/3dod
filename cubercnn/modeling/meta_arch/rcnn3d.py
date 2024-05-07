@@ -259,7 +259,102 @@ class RCNN3D(GeneralizedRCNN):
 
 
 @META_ARCH_REGISTRY.register()
-class BoxNet(nn.Module):
+class BoxNet(RCNN3D):
+    
+    @classmethod
+    def from_config(cls, cfg, priors=None):
+        backbone = build_backbone(cfg, priors=priors)
+        return {
+            "backbone": backbone,
+            "proposal_generator": build_proposal_generator(cfg, backbone.output_shape()),
+            "roi_heads": build_roi_heads(cfg, backbone.output_shape(), priors=priors),
+            "input_format": cfg.INPUT.FORMAT,
+            "vis_period": cfg.VIS_PERIOD,
+            "pixel_mean": cfg.MODEL.PIXEL_MEAN,
+            "pixel_std": cfg.MODEL.PIXEL_STD,
+        }
+
+    def preprocess_image(self, batched_inputs: List[Dict[str, torch.Tensor]], normalise=True, img_type="image", convert=False, NoOp=False):
+        """
+        Normalize, pad and batch the input images.
+        """
+        images = [self._move_to_current_device(x[img_type]) for x in batched_inputs]
+        if normalise:
+            images = [(x - self.pixel_mean) / self.pixel_std for x in images]
+        else:
+            if convert:
+                # convert from BGR to RGB
+                images = [x[[2,1,0],:,:] for x in images]
+            if NoOp:
+                images = ImageList.from_tensors(images,0,)
+                return images
+        images = ImageList.from_tensors(
+            images,
+            self.backbone.size_divisibility,
+            padding_constraints=self.backbone.padding_constraints,
+        )
+        return images
+
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor, experiment_type):
+        if not self.training:
+            if not experiment_type['use_pred_boxes']: # MABO
+                return self.inference(batched_inputs, do_postprocess=False, segmentor=segmentor, experiment_type=experiment_type)
+            else: # AP
+                return self.inference(batched_inputs, do_postprocess=True, segmentor=segmentor, experiment_type=experiment_type)
+
+        if self.training:
+            raise NotImplementedError("Training is not possible for BoxNet")
+    
+    def inference(self,
+        batched_inputs: List[Dict[str, torch.Tensor]],
+        detected_instances: Optional[List[Instances]] = None, do_postprocess: bool = True, segmentor=None, experiment_type={}):
+        assert not self.training
+
+        # must apply the same preprocessing to both the image, the depth map, and the mask
+        # except don't normalise the input for the segmentation method
+        images = self.preprocess_image(batched_inputs, img_type='image', convert=False)
+        images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
+        depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False, NoOp=True)
+        if batched_inputs[0]['ground_map'] is not None:
+            ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
+        else:
+            #logger.info("ground map file not found, setting to None")
+            ground_maps = None
+            # TODO: make logic to predict ground map on the fly
+            # logger.info("ground map file not found, computing...")
+            # raise NotImplementedError("Implement ground on the fly, see generate_ground_segmentations.py for reference")
+
+        # scaling factor for the sample relative to its original scale
+        # e.g., how much has the image been upsampled by? or downsampled?
+        im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
+        
+        # The unmodified intrinsics for the image
+        Ks = [torch.FloatTensor(info['K']) for info in batched_inputs]
+
+        # do_postprocess is the same as using predicted boxes
+        if do_postprocess:
+            # gt_instances should be None in inference mode
+            features = self.backbone(images.tensor)
+            # normal inference
+            proposals, _ = self.proposal_generator(images, features, None)
+        else:
+            if "instances" in batched_inputs[0]:
+                gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
+            else:
+                gt_instances = None
+            features, proposals = None, gt_instances
+
+        # is it necessary to resize images back???
+
+        # use the mask and the 2D box to predict the 3D box
+        # proposals are ground truth for MABO plots and predictions for AP plots
+        results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type)
+        return results
+
+
+
+@META_ARCH_REGISTRY.register()
+class CombinedNet(nn.Module):
 
     @configurable
     def __init__(
