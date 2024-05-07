@@ -269,7 +269,6 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             periodic_checkpointer.step(iteration)
 
             iteration += 1
-
             if iteration >= max_iter:
                 break
     
@@ -318,21 +317,15 @@ def setup(args):
 def main(args):
     
     cfg = setup(args)
-
-    assert cfg.PLOT.MODE2D in ['GT', 'PRED'], 'MODE2D must be either GT or PRED'
-    assert cfg.PLOT.EVAL in ['AP', 'MABO'], 'EVAL must be either AP or MABO'
-    if cfg.PLOT.EVAL == 'MABO':
-        assert cfg.PLOT.MODE2D == 'GT', 'MABO only works with GT boxes'
     
     name = f'cube {datetime.datetime.now().isoformat()}'
-    # wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
+    wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
 
     priors = None
     with open('filetransfer/priors.pkl', 'rb') as f:
         priors, _ = pickle.load(f)
 
     category_path = 'output/Baseline_sgd/category_meta.json'
-    # category_path = os.path.join(util.file_parts(args.opts[1])[0], 'category_meta.json')
     
     # store locally if needed
     if category_path.startswith(util.CubeRCNNHandler.PREFIX):
@@ -346,17 +339,13 @@ def main(args):
     MetadataCatalog.get('omni3d_model').thing_classes = thing_classes
     MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id  = id_map
 
-
     # build the  model.
     model = build_model(cfg, priors=priors)
 
-
     # skip straight to eval mode
     # load the saved model if using eval boxes
-    if cfg.PLOT.MODE2D == 'PRED':
-        DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
-            cfg.MODEL.WEIGHTS, resume=False)
-    return do_test(cfg, model)
+    DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(cfg.MODEL.WEIGHTS, resume=False)
+    return do_train(cfg, model)
 
 
 if __name__ == "__main__":
