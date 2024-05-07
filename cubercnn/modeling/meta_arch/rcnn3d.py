@@ -325,7 +325,7 @@ class BoxNet(nn.Module):
     def _move_to_current_device(self, x):
         return move_device_like(x, self.pixel_mean)
 
-    def preprocess_image(self, batched_inputs: List[Dict[str, torch.Tensor]], normalise=True, img_type="image", convert=False, NoOp=False):
+    def preprocess_image(self, batched_inputs: List[Dict[str, torch.Tensor]], normalise=True, img_type="image", convert=False, NoOp=False, to_float=False):
         """
         Normalize, pad and batch the input images.
         """
@@ -336,6 +336,8 @@ class BoxNet(nn.Module):
             if convert:
                 # convert from BGR to RGB
                 images = [x[[2,1,0],:,:] for x in images]
+            if to_float:
+                images = [x.float()/255.0 for x in images]
             if NoOp:
                 images = ImageList.from_tensors(images,0,)
                 return images
@@ -356,7 +358,7 @@ class BoxNet(nn.Module):
         if self.training:
 
             images = self.preprocess_image(batched_inputs)
-            images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
+            images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True, to_float=True)
             
 
             # scaling factor for the sample relative to its original scale
@@ -376,9 +378,10 @@ class BoxNet(nn.Module):
             features = self.backbone(images.tensor)
             proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
 
+            # images_raw are normalised to [0,1] and not resized here
             pred_o = self.depth_model(images_raw.tensor)
-            features = pred_o['depth_features']
-            p4 = F.interpolate(features['path_4'], size=features.shape[:-2], mode='bilinear', align_corners=False)
+            d_features = pred_o['depth_features']
+            p4 = F.interpolate(d_features['path_4'], size=features.shape[:-2], mode='bilinear', align_corners=False)
 
     
     def inference(self,

@@ -1,17 +1,6 @@
-import os
-from detectron2.data.catalog import MetadataCatalog
-import numpy as np
-from PIL import Image
-
-from cubercnn import data
-from priors import get_config_and_filter_settings
 import torch
-import torchvision.transforms as transforms
 from depth.metric_depth.zoedepth.models.builder import build_model
 from depth.metric_depth.zoedepth.utils.config import get_config
-import torch.nn.functional as F
-
-from rich.progress import track
 
 def depth_of_images(image, model):
     """
@@ -94,6 +83,18 @@ def init_dataset():
     return datasets
 
 if __name__ == '__main__':
+    import os
+    from detectron2.data.catalog import MetadataCatalog
+    import numpy as np
+    from PIL import Image
+
+    from cubercnn import data
+    from priors import get_config_and_filter_settings
+    import torchvision.transforms as transforms
+
+    import torch.nn.functional as F
+
+    from rich.progress import track
     datasets = init_dataset()
 
     os.makedirs('datasets/depth_maps', exist_ok=True)

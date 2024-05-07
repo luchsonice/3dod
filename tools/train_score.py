@@ -28,7 +28,7 @@ import pickle
 
 from cubercnn.data.dataset_mapper import DatasetMapper3D
 
-logger = logging.getLogger("Scoring")
+logger = logging.getLogger("scoring")
 
 from cubercnn.config import get_cfg_defaults
 from cubercnn.data import (
@@ -392,7 +392,7 @@ def main(args):
         logger.info('Available categories for {}'.format(info['name']))
         logger.info([thing_classes[i] for i in (possible_categories & known_category_training_ids)])
     
-    DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(cfg.MODEL.WEIGHTS, resume=False)
+    # DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(cfg.MODEL.WEIGHTS, resume=False)
 
     return do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src)
 
