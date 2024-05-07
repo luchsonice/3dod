@@ -75,7 +75,10 @@ class ROIHeads_Boxer(StandardROIHeads):
     '''The 3D box prediction head.'''
 
     @configurable
-    def __init__(self, *, dims_priors_enabled = None, priors=None, **kwargs, ):
+    def __init__(self, *, 
+                 cube_pooler:nn.Module, mlp:nn.Sequential,
+                 dims_priors_enabled = None, priors=None, 
+                 **kwargs, ):
         super().__init__(**kwargs)
 
         # misc
@@ -85,6 +88,9 @@ class ROIHeads_Boxer(StandardROIHeads):
             self.priors_dims_per_cat = nn.Parameter(torch.FloatTensor(priors['priors_dims_per_cat']).unsqueeze(0))
         else:
             self.priors_dims_per_cat = nn.Parameter(torch.ones(1, self.num_classes, 2, 3))
+
+        self.cube_pooler = cube_pooler
+        self.mlp = mlp
 
     @classmethod
     def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec], priors=None):
@@ -100,13 +106,34 @@ class ROIHeads_Boxer(StandardROIHeads):
     
     @classmethod
     def _init_cube_head(self, cfg, input_shape: Dict[str, ShapeSpec]):
-        return {'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED, }
+        in_features = cfg.MODEL.ROI_HEADS.IN_FEATURES
+        pooler_scales = tuple(1.0 / input_shape[k].stride for k in in_features)
+        pooler_resolution = cfg.MODEL.ROI_CUBE_HEAD.POOLER_RESOLUTION 
+        pooler_sampling_ratio = cfg.MODEL.ROI_CUBE_HEAD.POOLER_SAMPLING_RATIO
+        pooler_type = cfg.MODEL.ROI_CUBE_HEAD.POOLER_TYPE
+
+        cube_pooler = ROIPooler(
+            output_size=pooler_resolution,
+            scales=pooler_scales,
+            sampling_ratio=pooler_sampling_ratio,
+            pooler_type=pooler_type,
+        )
+
+        # TODO: make the sizes configurable
+        mlp = nn.Sequential(
+            nn.Linear(pooler_resolution**2, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.ReLU(),
+        )
+    
+        return {'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED, 
+                'cube_pooler': cube_pooler,
+                'mlp': mlp}
 
     def forward(self, images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, combined_features, targets=None):
         # proposals are GT here
         im_dims = [image.shape[1:] for image in images]
-        for prop in proposals:
-            prop.remove('gt_boxes3D')
 
         if self.training:
             masks = self.object_masks(images_raw.tensor, proposals, segmentor, {'use_pred_boxes': False})
@@ -278,10 +305,6 @@ class ROIHeads_Boxer(StandardROIHeads):
             gt_boxes = torch.cat([p.gt_boxes for p in instances], dim=0,) if len(instances) > 1 else instances[0].gt_boxes
             gt_poses = torch.cat([p.gt_poses for p in instances], dim=0,)
 
-
-        if self.training:
-            combined_features
-
         n_gt = len(gt_boxes)
         
         # nothing to do..
@@ -375,9 +398,26 @@ class ROIHeads_Boxer(StandardROIHeads):
             pred_cubes, stats_instance, stats_ranges = propose(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
             pred_boxes = cubes_to_box(pred_cubes, Ks_scaled_per_box)
             return pred_cubes, pred_boxes, stats_instance, stats_ranges
-
-
+        
         pred_cubes_out = Cubes(torch.zeros(len(gt_boxes), 1, 15), scores=torch.zeros(len(gt_boxes)),labels=gt_box_classes)
+        
+        if self.training:
+
+            pred_cubes, pred_boxes, _, _ = predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std))
+        
+            for i, (gt_box) in enumerate(gt_boxes):
+                IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes[i])
+
+            all_pred_boxes = Boxes.cat(pred_boxes)
+            
+            cube_features = self.cube_pooler(combined_features, all_pred_boxes).flatten(1)
+            pred_iou2d_scores = self.mlp(cube_features)
+            
+            loss = F.mse_loss(pred_iou2d_scores, IoU2D_scores, reduction='mean')
+
+            return loss
+
+
         if experiment_type['use_pred_boxes']:
             pred_cubes, pred_boxes, _, _ = predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std))
             for i, (gt_box) in enumerate(gt_boxes):

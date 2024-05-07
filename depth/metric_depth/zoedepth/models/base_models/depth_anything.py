@@ -83,13 +83,13 @@ class Resize(object):
                 "minimal": Scale as least as possible.  (Output size might be smaller than given size.)
                 Defaults to "lower_bound".
         """
-        print("Params passed to Resize transform:")
-        print("\twidth: ", width)
-        print("\theight: ", height)
-        print("\tresize_target: ", resize_target)
-        print("\tkeep_aspect_ratio: ", keep_aspect_ratio)
-        print("\tensure_multiple_of: ", ensure_multiple_of)
-        print("\tresize_method: ", resize_method)
+        # print("Params passed to Resize transform:")
+        # print("\twidth: ", width)
+        # print("\theight: ", height)
+        # print("\tresize_target: ", resize_target)
+        # print("\tkeep_aspect_ratio: ", keep_aspect_ratio)
+        # print("\tensure_multiple_of: ", ensure_multiple_of)
+        # print("\tresize_method: ", resize_method)
 
         self.__width = width
         self.__height = height
