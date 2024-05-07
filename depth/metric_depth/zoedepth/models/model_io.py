@@ -47,7 +47,7 @@ def load_state_dict(model, state_dict):
         state[k] = v
 
     model.load_state_dict(state)
-    print("Loaded successfully")
+    # print("Loaded successfully")
     return model
 
 
@@ -77,7 +77,7 @@ def load_state_from_resource(model, resource: str):
     Returns:
         torch.nn.Module: Model with loaded weights
     """
-    print(f"Using pretrained resource {resource}")
+    # print(f"Using pretrained resource {resource}")
 
     if resource.startswith('url::'):
         url = resource.split('url::')[1]

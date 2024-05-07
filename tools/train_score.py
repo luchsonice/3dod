@@ -6,7 +6,6 @@ warnings.filterwarnings("ignore", message="Overwriting tiny_vit_11m_224 in regis
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_5m_224 in registry")
 
 # Copyright (c) Meta Platforms, Inc. and affiliates
-from contextlib import ExitStack
 import logging
 import os
 from segment_anything import sam_model_registry
@@ -31,10 +30,6 @@ from cubercnn.data.dataset_mapper import DatasetMapper3D
 logger = logging.getLogger("scoring")
 
 from cubercnn.config import get_cfg_defaults
-from cubercnn.data import (
-    build_detection_test_loader,
-    simple_register
-)
 from cubercnn.evaluation import (
     Omni3DEvaluationHelper,
 )
@@ -389,8 +384,8 @@ def main(args):
         dataset_id_to_unknown_cats[dataset_id] = unknown_categories
 
         # log the per-dataset categories
-        logger.info('Available categories for {}'.format(info['name']))
-        logger.info([thing_classes[i] for i in (possible_categories & known_category_training_ids)])
+        # logger.info('Available categories for {}'.format(info['name']))
+        # logger.info([thing_classes[i] for i in (possible_categories & known_category_training_ids)])
     
     # DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(cfg.MODEL.WEIGHTS, resume=False)
 
