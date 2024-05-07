@@ -131,14 +131,14 @@ class ROIHeads_Boxer(StandardROIHeads):
                 'cube_pooler': cube_pooler,
                 'mlp': mlp}
 
-    def forward(self, images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, combined_features, targets=None):
+    def forward(self, images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, combined_features, targets=None):
         # proposals are GT here
         im_dims = [image.shape[1:] for image in images]
 
         if self.training:
             masks = self.object_masks(images_raw.tensor, proposals, segmentor, {'use_pred_boxes': False})
             experiment_type['use_pred_boxes'] = False
-            instances_3d, losses = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, proposals, Ks, im_dims, im_scales_ratio, experiment_type, combined_features)
+            instances_3d, losses = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, proposals, Ks, im_dims, im_scales_ratio, experiment_type, , proposal_function, combined_features)
             return instances_3d, losses
         
         else:
@@ -206,7 +206,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 if len(target_instances[0].pred_boxes) == 0:
                     return target_instances
             masks = self.object_masks(images_raw.tensor, target_instances, segmentor, experiment_type) # over all images in batch
-            pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type)
+            pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function)
             return pred_instances
         
     def object_masks(self, images, instances, segmentor, ex):
@@ -284,7 +284,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         scores = np.maximum.accumulate(scores)
         return scores
     
-    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type, combined_features):
+    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type, proposal_function, combined_features):
 
         # send all objects to cpu
         images_raw = images_raw.to('cpu')
@@ -395,7 +395,15 @@ class ROIHeads_Boxer(StandardROIHeads):
         def predict_cubes(gt_boxes, priors, gt_3d=None):
             '''wrap propose'''
             reference_box = Boxes(gt_boxes)
-            pred_cubes, stats_instance, stats_ranges = propose(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+            if proposal_function == 'xy':
+                pred_cubes, stats_instance, stats_ranges = propose_random_xy(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+            elif proposal_function == 'xy_patch':
+                pred_cubes, stats_instance, stats_ranges = propose_random_xy_patch(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+            elif proposal_function == 'rotation':
+                pred_cubes, stats_instance, stats_ranges = propose_random_rotation(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+            else:
+                pred_cubes, stats_instance, stats_ranges = propose(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+            
             pred_boxes = cubes_to_box(pred_cubes, Ks_scaled_per_box)
             return pred_cubes, pred_boxes, stats_instance, stats_ranges
         

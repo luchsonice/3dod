@@ -347,12 +347,12 @@ class BoxNet(nn.Module):
         )
         return images
 
-    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor, experiment_type):
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor, experiment_type, proposal_function):
         if not self.training:
             if not experiment_type['use_pred_boxes']: # MABO
-                return self.inference(batched_inputs, do_postprocess=False, segmentor=segmentor, experiment_type=experiment_type)
+                return self.inference(batched_inputs, do_postprocess=False, segmentor=segmentor, experiment_type=experiment_type, proposal_function=proposal_function)
             else: # AP
-                return self.inference(batched_inputs, do_postprocess=True, segmentor=segmentor, experiment_type=experiment_type)
+                return self.inference(batched_inputs, do_postprocess=True, segmentor=segmentor, experiment_type=experiment_type, proposal_function=proposal_function)
 
         if self.training:
             images = self.preprocess_image(batched_inputs, img_type='image', convert=False)
@@ -389,13 +389,13 @@ class BoxNet(nn.Module):
             combined_features = torch.cat((features['p2'], p1), dim=1)
 
             gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
-            results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, gt_instances, Ks, im_scales_ratio, segmentor, experiment_type, combined_features)
+            results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, gt_instances, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, combined_features)
             return results
 
     
     def inference(self,
         batched_inputs: List[Dict[str, torch.Tensor]],
-        detected_instances: Optional[List[Instances]] = None, do_postprocess: bool = True, segmentor=None, experiment_type={}):
+        detected_instances: Optional[List[Instances]] = None, do_postprocess: bool = True, segmentor=None, experiment_type={}, proposal_function='propose'):
         assert not self.training
 
         # must apply the same preprocessing to both the image, the depth map, and the mask
@@ -436,7 +436,7 @@ class BoxNet(nn.Module):
 
         # use the mask and the 2D box to predict the 3D box
         # proposals are ground truth for MABO plots and predictions for AP plots
-        results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type)
+        results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function)
         return results
     
     def visualize_training(self, batched_inputs, proposals, instances):
