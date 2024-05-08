@@ -347,7 +347,7 @@ class BoxNet(nn.Module):
         )
         return images
 
-    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor, experiment_type, proposal_function):
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor, experiment_type, proposal_function='propose'):
         if not self.training:
             if not experiment_type['use_pred_boxes']: # MABO
                 return self.inference(batched_inputs, do_postprocess=False, segmentor=segmentor, experiment_type=experiment_type, proposal_function=proposal_function)
@@ -389,8 +389,8 @@ class BoxNet(nn.Module):
             combined_features = torch.cat((features['p2'], p1), dim=1)
 
             gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
-            results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, gt_instances, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, combined_features)
-            return results
+            instances3d, results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, gt_instances, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, combined_features)
+            return instances3d, results
 
     
     def inference(self,

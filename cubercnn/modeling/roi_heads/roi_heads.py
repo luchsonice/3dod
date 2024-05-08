@@ -106,8 +106,7 @@ class ROIHeads_Boxer(StandardROIHeads):
     
     @classmethod
     def _init_cube_head(self, cfg, input_shape: Dict[str, ShapeSpec]):
-        in_features = cfg.MODEL.ROI_HEADS.IN_FEATURES
-        pooler_scales = tuple(1.0 / input_shape[k].stride for k in in_features)
+        pooler_scales = (1.0,)
         pooler_resolution = cfg.MODEL.ROI_CUBE_HEAD.POOLER_RESOLUTION 
         pooler_sampling_ratio = cfg.MODEL.ROI_CUBE_HEAD.POOLER_SAMPLING_RATIO
         pooler_type = cfg.MODEL.ROI_CUBE_HEAD.POOLER_TYPE
@@ -120,8 +119,9 @@ class ROIHeads_Boxer(StandardROIHeads):
         )
 
         # TODO: make the sizes configurable
+        res = 7*7*512
         mlp = nn.Sequential(
-            nn.Linear(pooler_resolution**2, 256),
+            nn.Linear(res, 256),
             nn.ReLU(),
             nn.Linear(256, 1),
             nn.ReLU(),
@@ -413,17 +413,23 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             pred_cubes, pred_boxes, _, _ = predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std))
         
-            for i, (gt_box) in enumerate(gt_boxes):
-                IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes[i])
-
-            all_pred_boxes = Boxes.cat(pred_boxes)
+            iou2d = [score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes[i]) for i, (gt_box) in enumerate(gt_boxes)]
+            iou2ds = torch.cat(iou2d).to(combined_features.device)
+            all_pred_boxes = Boxes.cat(pred_boxes).to(combined_features.device)
             
-            cube_features = self.cube_pooler(combined_features, all_pred_boxes).flatten(1)
-            pred_iou2d_scores = self.mlp(cube_features)
+            cube_features = self.cube_pooler([combined_features], [all_pred_boxes]).flatten(1)
+            pred_iou2d_scores = self.mlp(cube_features).flatten()
             
-            loss = F.mse_loss(pred_iou2d_scores, IoU2D_scores, reduction='mean')
+            loss = F.mse_loss(pred_iou2d_scores, iou2ds, reduction='mean')
 
-            return loss
+            # split up to have X per instance
+            scores_per_instance = torch.split(pred_iou2d_scores, len(pred_boxes[0]))
+            for i, score in enumerate(scores_per_instance):
+                best_cube = torch.argmax(score)
+                pred_cubes_out.tensor[i] = pred_cubes[i,best_cube].tensor[0]
+                pred_cubes_out.scores[i] = scores_per_instance[i][best_cube]
+
+            return pred_cubes_out, loss
 
 
         if experiment_type['use_pred_boxes']:
