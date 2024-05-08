@@ -206,7 +206,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 if len(target_instances[0].pred_boxes) == 0:
                     return target_instances
             masks = self.object_masks(images_raw.tensor, target_instances, segmentor, experiment_type) # over all images in batch
-            pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function)
+            pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function, combined_features)
             return pred_instances
         
     def object_masks(self, images, instances, segmentor, ex):

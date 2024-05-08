@@ -436,7 +436,7 @@ class BoxNet(nn.Module):
 
         # use the mask and the 2D box to predict the 3D box
         # proposals are ground truth for MABO plots and predictions for AP plots
-        results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function)
+        results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, combined_features=None)
         return results
     
     def visualize_training(self, batched_inputs, proposals, instances):
