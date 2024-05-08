@@ -106,8 +106,7 @@ class ROIHeads_Boxer(StandardROIHeads):
     
     @classmethod
     def _init_cube_head(self, cfg, input_shape: Dict[str, ShapeSpec]):
-        in_features = cfg.MODEL.ROI_HEADS.IN_FEATURES
-        pooler_scales = tuple(1.0 / input_shape[k].stride for k in in_features)
+        pooler_scales = (1.0,)
         pooler_resolution = cfg.MODEL.ROI_CUBE_HEAD.POOLER_RESOLUTION 
         pooler_sampling_ratio = cfg.MODEL.ROI_CUBE_HEAD.POOLER_SAMPLING_RATIO
         pooler_type = cfg.MODEL.ROI_CUBE_HEAD.POOLER_TYPE
@@ -138,7 +137,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         if self.training:
             masks = self.object_masks(images_raw.tensor, proposals, segmentor, {'use_pred_boxes': False})
             experiment_type['use_pred_boxes'] = False
-            instances_3d, losses = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, proposals, Ks, im_dims, im_scales_ratio, experiment_type, , proposal_function, combined_features)
+            instances_3d, losses = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, proposals, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function, combined_features)
             return instances_3d, losses
         
         else:
@@ -206,7 +205,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 if len(target_instances[0].pred_boxes) == 0:
                     return target_instances
             masks = self.object_masks(images_raw.tensor, target_instances, segmentor, experiment_type) # over all images in batch
-            pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function)
+            pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function, combined_features)
             return pred_instances
         
     def object_masks(self, images, instances, segmentor, ex):
@@ -413,12 +412,12 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             pred_cubes, pred_boxes, _, _ = predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std))
         
-            for i, (gt_box) in enumerate(gt_boxes):
-                IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes[i])
+            iou2d = [score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes[i]) for i, (gt_box) in enumerate(gt_boxes)]
+            iou2ds = torch.cat(iou2d)
 
             all_pred_boxes = Boxes.cat(pred_boxes)
             
-            cube_features = self.cube_pooler(combined_features, all_pred_boxes).flatten(1)
+            cube_features = self.cube_pooler([combined_features], [all_pred_boxes]).flatten(1)
             pred_iou2d_scores = self.mlp(cube_features)
             
             loss = F.mse_loss(pred_iou2d_scores, IoU2D_scores, reduction='mean')
