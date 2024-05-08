@@ -63,6 +63,8 @@ from cubercnn.evaluation import (
     Omni3DEvaluationHelper,
     inference_on_dataset
 )
+from tqdm import tqdm
+
 
 def init_segmentation(device='cpu') -> Sam:
     # 1) first cd into the segment_anything and pip install -e .
@@ -209,10 +211,11 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     # bookkeeping
     checkpointer = DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR, optimizer=optimizer, scheduler=scheduler)
     periodic_checkpointer = PeriodicCheckpointerOnlyOne(checkpointer, cfg.SOLVER.CHECKPOINT_PERIOD, max_iter=max_iter)
-    
+    writers = default_writers(cfg.OUTPUT_DIR, max_iter)
+
     # create the dataloader
     data_mapper = DatasetMapper3D(cfg, is_train=True)
-    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=4)
+    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=1)
 
     # give the mapper access to dataset_ids
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
@@ -232,6 +235,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
         freeze_bn(model)
 
     data_iter = iter(data_loader)
+    pbar = tqdm(range(start_iter, max_iter), initial=start_iter, total=max_iter, desc="Training", smoothing=0.05)
 
     with EventStorage(start_iter) as storage:
         
@@ -241,29 +245,31 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             storage.iter = iteration
 
             # forward
-            loss_dict = model(data, segmentor, {})
-            losses = sum(loss_dict.values())
+            instances3d, loss = model(data, segmentor, {})
             
             # send loss scalars to tensorboard.
-            storage.put_scalars(total_loss=losses, **loss_dict)
+            storage.put_scalars(total_loss=loss)
         
             # backward and step
             optimizer.zero_grad()
-            losses.backward()
+            loss.backward()
             optimizer.step()
             storage.put_scalar("lr", optimizer.param_groups[0]["lr"], smoothing_hint=False)
             scheduler.step()
 
-            # Evaluate only when the loss is not diverging.
-            if (do_eval and ((iteration + 1) % cfg.TEST.EVAL_PERIOD) == 0 and iteration != (max_iter - 1)):
-                logger.info('Starting test for iteration {}'.format(iteration+1))
-                do_test(cfg, model, iteration=iteration+1, storage=storage)
+            # if (do_eval and ((iteration + 1) % cfg.TEST.EVAL_PERIOD) == 0 and iteration != (max_iter - 1)):
+            #     logger.info('Starting test for iteration {}'.format(iteration+1))
+            #     do_test(cfg, model, iteration=iteration+1, storage=storage)
                 
-            if not cfg.MODEL.USE_BN: 
-                freeze_bn(model)
-
             periodic_checkpointer.step(iteration)
 
+            # logging stuff 
+            pbar.update(1)
+            pbar.set_postfix({"loss": loss.item()})
+            if iteration - start_iter > 5 and ((iteration + 1) % 2 == 0 or iteration == max_iter - 1):
+                for writer in writers:
+                    writer.write()
+            
             iteration += 1
             if iteration >= max_iter:
                 break
@@ -314,8 +320,9 @@ def main(args):
     
     cfg = setup(args)
     
-    name = f'cube {datetime.datetime.now().isoformat()}'
-    wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='disabled')
+    name = f'learned score {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
+    
+    wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='online')
 
     priors = None
     with open('filetransfer/priors.pkl', 'rb') as f:
