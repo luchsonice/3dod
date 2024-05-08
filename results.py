@@ -23,7 +23,7 @@ def AP3D_per_class(dataset, file='output/base_cubercnn.log'):
     df = df.sort_values(by='AP3D', ascending=False)
     df = df.reset_index(drop=True)
     
-    fig, ax = plt.subplots(figsize=(12,8))
+    fig, ax = plt.subplots(figsize=(15,5))
     ax.bar(df['category'], df['AP3D'], color='blue', alpha=0.7, label=f'Cube R-CNN, AP3D: {df["AP3D"].mean():.1f}')
     # ax.bar(df['category'], df['AP3D'], color='blue', alpha=0.7, label='our method 1')
     # 
