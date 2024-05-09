@@ -513,111 +513,94 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             return pred_instances
 
-    def _sample_proposals(
-        self, matched_idxs: torch.Tensor, matched_labels: torch.Tensor, gt_classes: torch.Tensor, matched_ious=None
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Based on the matching between N proposals and M groundtruth,
-        sample the proposals and set their classification labels.
-        Args:
-            matched_idxs (Tensor): a vector of length N, each is the best-matched
-                gt index in [0, M) for each proposal.
-            matched_labels (Tensor): a vector of length N, the matcher's label
-                (one of cfg.MODEL.ROI_HEADS.IOU_LABELS) for each proposal.
-            gt_classes (Tensor): a vector of length M.
-        Returns:
-            Tensor: a vector of indices of sampled proposals. Each is in [0, N).
-            Tensor: a vector of the same length, the classification label for
-                each sampled proposal. Each sample is labeled as either a category in
-                [0, num_classes) or the background (num_classes).
-        """
-        has_gt = gt_classes.numel() > 0
-        # Get the corresponding GT for each proposal
-        if has_gt:
-            gt_classes = gt_classes[matched_idxs]
-            # Label unmatched proposals (0 label from matcher) as background (label=num_classes)
-            gt_classes[matched_labels == 0] = self.num_classes
-            # Label ignore proposals (-1 label)
-            gt_classes[matched_labels == -1] = -1
-        else:
-            gt_classes = torch.zeros_like(matched_idxs) + self.num_classes
+@ROI_HEADS_REGISTRY.register()
+class ROIHeads_Score(StandardROIHeads):
+    '''The score prediction head.'''
 
-        sampled_fg_idxs, sampled_bg_idxs = subsample_labels(
-            gt_classes, self.batch_size_per_image, self.positive_fraction, self.num_classes, matched_ious=matched_ious
+    @configurable
+    def __init__(self, *, 
+                 cube_pooler:nn.Module, mlp:nn.Sequential, 
+                 **kwargs, ):
+        super().__init__(**kwargs)
+
+        self.cube_pooler = cube_pooler
+        self.mlp = mlp
+
+    @classmethod
+    def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec], priors=None):
+        
+        ret = super().from_config(cfg, input_shape)
+        
+        # pass along priors
+        ret["box_predictor"] = FastRCNNOutputs(cfg, ret['box_head'].output_shape)
+        ret.update(cls._init_cube_head(cfg, input_shape))
+        ret["priors"] = priors
+
+        return ret
+    
+    @classmethod
+    def _init_cube_head(self, cfg, input_shape: Dict[str, ShapeSpec]):
+        pooler_scales = (1.0,)
+        pooler_resolution = cfg.MODEL.ROI_CUBE_HEAD.POOLER_RESOLUTION 
+        pooler_sampling_ratio = cfg.MODEL.ROI_CUBE_HEAD.POOLER_SAMPLING_RATIO
+        pooler_type = cfg.MODEL.ROI_CUBE_HEAD.POOLER_TYPE
+
+        cube_pooler = ROIPooler(
+            output_size=pooler_resolution,
+            scales=pooler_scales,
+            sampling_ratio=pooler_sampling_ratio,
+            pooler_type=pooler_type,
         )
 
-        sampled_idxs = torch.cat([sampled_fg_idxs, sampled_bg_idxs], dim=0)
-        return sampled_idxs, gt_classes[sampled_idxs]
+        # TODO: make the sizes configurable
+        res = 7*7*512
+        mlp = nn.Sequential(
+            nn.Linear(res, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.ReLU(),
+        )
     
-    @torch.no_grad()
-    def label_and_sample_proposals(self, proposals: List[Instances], targets: List[Instances]) -> List[Instances]:
+        return {'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED, 
+                'cube_pooler': cube_pooler,
+                'mlp': mlp}
+
+    def forward(self, images, images_raw, proposals, Ks, im_scales_ratio, combined_features):
+        # proposals are GT here
+        im_dims = [image.shape[1:] for image in images]
+
+        if self.training:
+            instances_3d, losses = self._forward_cube(images, images_raw, proposals, Ks, im_dims, im_scales_ratio, combined_features)
+            return instances_3d, losses
+        else:
+            pred_instances = self._forward_cube(images, images_raw, Ks, im_dims, im_scales_ratio, combined_features)
+            return pred_instances
         
-        #separate valid and ignore gts
-        targets_ign = [target[target.gt_classes < 0] for target in targets]
-        targets = [target[target.gt_classes >= 0] for target in targets]
+    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type, proposal_function, combined_features):
+        gt_boxes = torch.cat([p.gt_boxes for p in instances], dim=0,) if len(instances) > 1 else instances[0].gt_boxes
+
+        n_gt = len(gt_boxes)
+        # nothing to do..
+        if n_gt == 0:
+            return (instances, None) if not self.training else (instances, {}) # TODO fix this also
         
-        if self.proposal_append_gt:
-            proposals = add_ground_truth_to_proposals(targets, proposals)
+        Ks_scaled_per_box = (Ks[0]/im_scales_ratio[0]).to(images.device)
+        Ks_scaled_per_box[-1, -1] = 1
 
-        proposals_with_gt = []
-
-        num_fg_samples = []
-        num_bg_samples = []
-
-        for proposals_per_image, targets_per_image, targets_ign_per_image in zip(proposals, targets, targets_ign):
+        
+        if self.training:
+            pred_cubes, pred_boxes = False # TODO load
+            iou2d = [score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes[i]) for i, (gt_box) in enumerate(gt_boxes)]
+            iou2ds = torch.cat(iou2d)#.to(combined_features.device)
+            all_pred_boxes = Boxes.cat(pred_boxes)#.to(combined_features.device)
             
-            has_gt = len(targets_per_image) > 0
+            cube_features = self.cube_pooler([combined_features], [all_pred_boxes]).flatten(1)
+            pred_iou2d_scores = self.mlp(cube_features).flatten()
             
-            match_quality_matrix = pairwise_iou(targets_per_image.gt_boxes, proposals_per_image.proposal_boxes)
-            matched_idxs, matched_labels = self.proposal_matcher(match_quality_matrix)
-            
-            try:
-                if len(targets_ign_per_image) > 0:
+            loss = F.mse_loss(pred_iou2d_scores, iou2ds, reduction='mean')
 
-                    # compute the quality matrix, only on subset of background
-                    background_inds = (matched_labels == 0).nonzero().squeeze()
-
-                    # determine the boxes inside ignore regions with sufficient threshold
-                    if background_inds.numel() > 1:
-                        match_quality_matrix_ign = pairwise_ioa(targets_ign_per_image.gt_boxes, proposals_per_image.proposal_boxes[background_inds])
-                        matched_labels[background_inds[match_quality_matrix_ign.max(0)[0] >= self.ignore_thresh]] = -1
-                    
-                        del match_quality_matrix_ign
-            except:
-                pass
-            
-            gt_arange = torch.arange(match_quality_matrix.shape[1]).to(matched_idxs.device)
-            matched_ious = match_quality_matrix[matched_idxs, gt_arange]
-            sampled_idxs, gt_classes = self._sample_proposals(matched_idxs, matched_labels, targets_per_image.gt_classes, matched_ious=matched_ious)
-
-            # Set target attributes of the sampled proposals:
-            proposals_per_image = proposals_per_image[sampled_idxs]
-            proposals_per_image.gt_classes = gt_classes
-
-            if has_gt:
-                sampled_targets = matched_idxs[sampled_idxs]
-                # We index all the attributes of targets that start with "gt_"
-                # and have not been added to proposals yet (="gt_classes").
-                # NOTE: here the indexing waste some compute, because heads
-                # like masks, keypoints, etc, will filter the proposals again,
-                # (by foreground/background, or number of keypoints in the image, etc)
-                # so we essentially index the data twice.
-                for (trg_name, trg_value) in targets_per_image.get_fields().items():
-                    if trg_name.startswith("gt_") and not proposals_per_image.has(trg_name):
-                        proposals_per_image.set(trg_name, trg_value[sampled_targets])
-            
-
-            num_bg_samples.append((gt_classes == self.num_classes).sum().item())
-            num_fg_samples.append(gt_classes.numel() - num_bg_samples[-1])
-            proposals_with_gt.append(proposals_per_image)
-
-        # Log the number of fg/bg samples that are selected for training ROI heads
-        storage = get_event_storage()
-        storage.put_scalar("roi_head/num_fg_samples", np.mean(num_fg_samples))
-        storage.put_scalar("roi_head/num_bg_samples", np.mean(num_bg_samples))
-
-        return proposals_with_gt
-
+            return None, loss
+    
 
 @ROI_HEADS_REGISTRY.register()
 class ROIHeads3D(StandardROIHeads):
