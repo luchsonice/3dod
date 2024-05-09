@@ -118,7 +118,7 @@ class DatasetMapper3D(DatasetMapper):
 
 
         # dont load ground map and depth map when 
-        if self.mode == 'get_depth_map':
+        if self.mode == 'get_depth_maps':
             dp_img = Image.fromarray(np.load(dataset_dict["depth_image_path"])['depth'])
             dp_img = np.array(dp_img.resize(image.shape[:2][::-1], Image.NEAREST))
             dataset_dict["depth_map"] = torch.as_tensor(np.ascontiguousarray(dp_img))

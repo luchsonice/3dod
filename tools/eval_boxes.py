@@ -471,7 +471,7 @@ def do_train(cfg, model):
     dataset_names = cfg.DATASETS.TRAIN
     data_mapper = DatasetMapper3D(cfg, is_train=False, mode='get_depth_maps')
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
-    print("control what kind of proposal should be saved by setting cfg.TRAIN.pseudo_gt to either 'learn' or 'gt'" )
+    assert cfg.TRAIN.pseudo_gt in ['learn', 'gt'], "control what kind of proposal should be saved by setting TRAIN.pseudo_gt to either 'learn' or 'gt'"
     experiment_type = {}
     experiment_type['use_pred_boxes'] = cfg.PLOT.MODE2D if cfg.PLOT.MODE2D != '' else False
     experiment_type['pseudo_gt'] = cfg.TRAIN.pseudo_gt
@@ -479,7 +479,7 @@ def do_train(cfg, model):
     # this controls the flow of the program in the model class
     model.train()
     for dataset_name in dataset_names:
-        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=4)
+        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=1)
 
         total = len(data_loader)  # inference data loader must have a fixed length
 
