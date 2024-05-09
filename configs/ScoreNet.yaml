@@ -1,14 +1,14 @@
 _BASE_: "Base.yaml"
 SOLVER:
   TYPE: "sgd"
-  IMS_PER_BATCH: 2 #196 -> r=5,6 -> because of dataset size r=5,6 * 10,335/233 = 0,248
-  BASE_LR: 0.0214 #0.12
+  IMS_PER_BATCH: 2
+  BASE_LR: 0.02
   STEPS: (17280, 23040)
-  MAX_ITER: 100000 #116000
-  WARMUP_ITERS: 0 #3625
+  MAX_ITER: 100000 
+  WARMUP_ITERS: 0 
 TEST:
-  EVAL_PERIOD: 7200 #29000
-VIS_PERIOD: 1 #2320
+  EVAL_PERIOD: 7200 
+VIS_PERIOD: 1 
 DATASETS:
   TRAIN: ('SUNRGBD_train_mini', 'SUNRGBD_val_mini')
   TEST: ('SUNRGBD_test_mini',) 

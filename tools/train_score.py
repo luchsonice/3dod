@@ -56,65 +56,6 @@ from cubercnn.evaluation import (
 )
 from tqdm import tqdm
 
-from pytorch_lightning import LightningModule
-from pytorch_lightning import Trainer
-from detectron2.modeling.poolers import ROIPooler
-
-class ScoreModel(LightningModule):
-    def __init__(self):
-        super().__init__()
-
-        # RUN Faster RCNN and extract features
-
-        # RUN Depth Anythin model and extract features
-
-        # Concatenate Features
-
-        # Pool features
-        pooler_scales = (1.0,)
-        pooler_resolution = cfg.MODEL.ROI_CUBE_HEAD.POOLER_RESOLUTION 
-        pooler_sampling_ratio = cfg.MODEL.ROI_CUBE_HEAD.POOLER_SAMPLING_RATIO
-        pooler_type = cfg.MODEL.ROI_CUBE_HEAD.POOLER_TYPE
-
-        self.cube_pooler = ROIPooler(
-            output_size=pooler_resolution,
-            scales=pooler_scales,
-            sampling_ratio=pooler_sampling_ratio,
-            pooler_type=pooler_type,
-        )
-
-        # MLP
-        res = 7*7*512
-        self.mlp = nn.Sequential(
-            nn.Linear(res, 256),
-            nn.ReLU(),
-            nn.Linear(256, 1),
-            nn.ReLU(),
-        )
-
-        self.criterium = nn.CrossEntropyLoss()
-
-        def forward(self, x):
-            self.mlp(self.cube_pooler(x))
-
-        def training_step(self, batch, batch_idx):
-            data, target = batch
-            preds = self(data)
-            loss = self.criterium(preds, target)
-            return loss
-        
-        def configure_optimizers(self):
-            return torch.optim.Adam(self.parameters(),lr=1e-3)
-
-
-
-
-
-
-
-
-
-
 
 def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=False):
 
@@ -122,7 +63,6 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     do_eval = cfg.TEST.EVAL_PERIOD > 0
 
     model.train()
-    segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
 
     optimizer = build_optimizer(cfg, model)
     scheduler = build_lr_scheduler(cfg, optimizer)
@@ -164,7 +104,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             storage.iter = iteration
 
             # forward
-            instances3d, loss = model(data, segmentor, {})
+            instances3d, loss = model(data, {})
             
             # send loss scalars to tensorboard.
             storage.put_scalars(total_loss=loss)
