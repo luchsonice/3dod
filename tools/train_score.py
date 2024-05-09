@@ -104,7 +104,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             storage.iter = iteration
 
             # forward
-            instances3d, loss = model(data, {})
+            instances3d, loss = model(data)
             
             # send loss scalars to tensorboard.
             storage.put_scalars(total_loss=loss)
@@ -136,139 +136,6 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     # success
     return True
 
-def setup(args):
-    """
-    Create configs and perform basic setups.
-    """
-    cfg = get_cfg()
-    get_cfg_defaults(cfg)
-
-    config_file = args.config_file
-    
-    # store locally if needed
-    if config_file.startswith(util.CubeRCNNHandler.PREFIX):    
-        config_file = util.CubeRCNNHandler._get_local_path(util.CubeRCNNHandler, config_file)
-
-    cfg.merge_from_file(config_file)
-    cfg.merge_from_list(args.opts)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    cfg.MODEL.DEVICE = device
-    cfg.SEED = 13
-    cfg.freeze()
-    default_setup(cfg, args)
-
-    setup_logger(output=cfg.OUTPUT_DIR, name="scoring")
-    
-    filter_settings = data.get_filter_settings_from_cfg(cfg)
-
-    for dataset_name in cfg.DATASETS.TRAIN:
-        simple_register(dataset_name, filter_settings, filter_empty=True)
-    
-    dataset_names_test = cfg.DATASETS.TEST
-
-    # filter_ = True if cfg.PLOT.EVAL == 'MABO' else False
-    for dataset_name in dataset_names_test:
-        if not(dataset_name in cfg.DATASETS.TRAIN):
-            # TODO: empties should not be filtering in test normally, or maybe they should??
-            simple_register(dataset_name, filter_settings, filter_empty=True)
-    
-    return cfg
-
-
-def main(args):
-    
-    cfg = setup(args)
-    
-    name = f'learned score {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
-    
-    wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='online')
-
-    priors = None
-    with open('filetransfer/priors.pkl', 'rb') as f:
-        priors, _ = pickle.load(f)
-
-    category_path = 'output/Baseline_sgd/category_meta.json'
-    
-    # store locally if needed
-    if category_path.startswith(util.CubeRCNNHandler.PREFIX):
-        category_path = util.CubeRCNNHandler._get_local_path(util.CubeRCNNHandler, category_path)
-
-    metadata = util.load_json(category_path)
-
-    # register the categories
-    thing_classes = metadata['thing_classes']
-    id_map = {int(key):val for key, val in metadata['thing_dataset_id_to_contiguous_id'].items()}
-    MetadataCatalog.get('omni3d_model').thing_classes = thing_classes
-    MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id  = id_map
-
-    # build the  model.
-    model = build_model(cfg, priors=priors)
-
-    # skip straight to eval mode
-    # load the saved model if using eval boxes
-    
-    filter_settings = data.get_filter_settings_from_cfg(cfg)
-
-    # setup and join the data.
-    dataset_paths = [os.path.join('datasets', 'Omni3D', name + '.json') for name in cfg.DATASETS.TRAIN]
-    datasets = data.Omni3D(dataset_paths, filter_settings=filter_settings)
-
-    # determine the meta data given the datasets used. 
-    data.register_and_store_model_metadata(datasets, cfg.OUTPUT_DIR, filter_settings)
-
-    thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
-    dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
-    
-    '''
-    It may be useful to keep track of which categories are annotated/known
-    for each dataset in use, in case a method wants to use this information.
-    '''
-
-    infos = datasets.dataset['info']
-
-    if type(infos) == dict:
-        infos = [datasets.dataset['info']]
-
-    dataset_id_to_unknown_cats = {}
-    possible_categories = set(i for i in range(cfg.MODEL.ROI_HEADS.NUM_CLASSES + 1))
-    
-    dataset_id_to_src = {}
-
-    for info in infos:
-        dataset_id = info['id']
-        known_category_training_ids = set()
-
-        if not dataset_id in dataset_id_to_src:
-            dataset_id_to_src[dataset_id] = info['source']
-
-        for id in info['known_category_ids']:
-            if id in dataset_id_to_contiguous_id:
-                known_category_training_ids.add(dataset_id_to_contiguous_id[id])
-        
-        # determine and store the unknown categories.
-        unknown_categories = possible_categories - known_category_training_ids
-        dataset_id_to_unknown_cats[dataset_id] = unknown_categories
-
-        # log the per-dataset categories
-        # logger.info('Available categories for {}'.format(info['name']))
-        # logger.info([thing_classes[i] for i in (possible_categories & known_category_training_ids)])
-    
-    # DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(cfg.MODEL.WEIGHTS, resume=False)
-
-    return do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src)
-
-
-if __name__ == "__main__":
-    args = default_argument_parser().parse_args()
-    print("Command Line Args:", args)
-
-    main(args)
-
-
-
-
-
-"""    
 def do_test(cfg, model, iteration='final', storage=None):
         
     filter_settings = data.get_filter_settings_from_cfg(cfg)    
@@ -280,8 +147,6 @@ def do_test(cfg, model, iteration='final', storage=None):
     dataset_names_test = cfg.DATASETS.TEST
     only_2d = cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_3D == 0.0
     output_folder = os.path.join(cfg.OUTPUT_DIR, "inference", 'iter_{}'.format(iteration))
-
-    segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
 
     for dataset_name in dataset_names_test:
         """
@@ -379,4 +244,130 @@ def do_test(cfg, model, iteration='final', storage=None):
         '''  
         eval_helper.summarize_all()
 
-"""
+def setup(args):
+    """
+    Create configs and perform basic setups.
+    """
+    cfg = get_cfg()
+    get_cfg_defaults(cfg)
+
+    config_file = args.config_file
+    
+    # store locally if needed
+    if config_file.startswith(util.CubeRCNNHandler.PREFIX):    
+        config_file = util.CubeRCNNHandler._get_local_path(util.CubeRCNNHandler, config_file)
+
+    cfg.merge_from_file(config_file)
+    cfg.merge_from_list(args.opts)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    cfg.MODEL.DEVICE = device
+    cfg.SEED = 13
+    cfg.freeze()
+    default_setup(cfg, args)
+
+    setup_logger(output=cfg.OUTPUT_DIR, name="scoring")
+    
+    filter_settings = data.get_filter_settings_from_cfg(cfg)
+
+    for dataset_name in cfg.DATASETS.TRAIN:
+        simple_register(dataset_name, filter_settings, filter_empty=True)
+    
+    dataset_names_test = cfg.DATASETS.TEST
+
+    # filter_ = True if cfg.PLOT.EVAL == 'MABO' else False
+    for dataset_name in dataset_names_test:
+        if not(dataset_name in cfg.DATASETS.TRAIN):
+            # TODO: empties should not be filtering in test normally, or maybe they should??
+            simple_register(dataset_name, filter_settings, filter_empty=True)
+    
+    return cfg
+
+
+def main(args):
+    
+    cfg = setup(args)
+    
+    name = f'learned score {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
+    
+    wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='offline')
+
+    category_path = 'output/Baseline_sgd/category_meta.json'
+    
+    # store locally if needed
+    if category_path.startswith(util.CubeRCNNHandler.PREFIX):
+        category_path = util.CubeRCNNHandler._get_local_path(util.CubeRCNNHandler, category_path)
+
+    metadata = util.load_json(category_path)
+
+    # register the categories
+    thing_classes = metadata['thing_classes']
+    id_map = {int(key):val for key, val in metadata['thing_dataset_id_to_contiguous_id'].items()}
+    MetadataCatalog.get('omni3d_model').thing_classes = thing_classes
+    MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id  = id_map
+
+    # build the  model.
+    model = build_model(cfg)
+
+    # skip straight to eval mode
+    # load the saved model if using eval boxes
+    
+    filter_settings = data.get_filter_settings_from_cfg(cfg)
+
+    # setup and join the data.
+    dataset_paths = [os.path.join('datasets', 'Omni3D', name + '.json') for name in cfg.DATASETS.TRAIN]
+    datasets = data.Omni3D(dataset_paths, filter_settings=filter_settings)
+
+    # determine the meta data given the datasets used. 
+    data.register_and_store_model_metadata(datasets, cfg.OUTPUT_DIR, filter_settings)
+
+    thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
+    dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
+    
+    '''
+    It may be useful to keep track of which categories are annotated/known
+    for each dataset in use, in case a method wants to use this information.
+    '''
+
+    infos = datasets.dataset['info']
+
+    if type(infos) == dict:
+        infos = [datasets.dataset['info']]
+
+    dataset_id_to_unknown_cats = {}
+    possible_categories = set(i for i in range(cfg.MODEL.ROI_HEADS.NUM_CLASSES + 1))
+    
+    dataset_id_to_src = {}
+
+    for info in infos:
+        dataset_id = info['id']
+        known_category_training_ids = set()
+
+        if not dataset_id in dataset_id_to_src:
+            dataset_id_to_src[dataset_id] = info['source']
+
+        for id in info['known_category_ids']:
+            if id in dataset_id_to_contiguous_id:
+                known_category_training_ids.add(dataset_id_to_contiguous_id[id])
+        
+        # determine and store the unknown categories.
+        unknown_categories = possible_categories - known_category_training_ids
+        dataset_id_to_unknown_cats[dataset_id] = unknown_categories
+
+        # log the per-dataset categories
+        # logger.info('Available categories for {}'.format(info['name']))
+        # logger.info([thing_classes[i] for i in (possible_categories & known_category_training_ids)])
+    
+    # DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(cfg.MODEL.WEIGHTS, resume=False)
+
+    return do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src)
+
+
+if __name__ == "__main__":
+    args = default_argument_parser().parse_args()
+    print("Command Line Args:", args)
+
+    main(args)
+
+
+
+   

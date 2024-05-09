@@ -94,5 +94,14 @@
             "justMyCode": true,
             "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "AP", "PLOT.MODE2D", "GT"]
         },
+        {
+            "name": "train score",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/train_score.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--config-file", "configs/ScoreNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth"]
+        },
     ]
 }
