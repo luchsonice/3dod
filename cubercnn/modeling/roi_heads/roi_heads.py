@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import logging
 
 import numpy as np
+import pickle as pkl
 
 from typing import Dict, List, Tuple
 import torch
@@ -531,28 +532,36 @@ class ROIHeads_Score(StandardROIHeads):
         return {'cube_pooler': cube_pooler,
                 'mlp': mlp}
 
-    def forward(self, instances, Ks, im_scales_ratio, combined_features):
+    def forward(self, pred_cubes, instances, Ks, im_scales_ratio, combined_features):
         if self.training:
-            instances_3d, losses = self._forward_cube(instances, Ks, im_scales_ratio, combined_features)
+            instances_3d, losses = self._forward_cube(pred_cubes, instances, Ks, im_scales_ratio, combined_features)
             return instances_3d, losses
         else:
-            pred_instances = self._forward_cube(instances, Ks, im_scales_ratio, combined_features)
+            pred_instances = self._forward_cube(pred_cubes, instances, Ks, im_scales_ratio, combined_features)
             return pred_instances
         
-    def _forward_cube(self, instances, Ks, im_scales_ratio, combined_features):
+    def _forward_cube(self, pred_cubes, instances, Ks, im_scales_ratio, combined_features):
         Ks_scaled = (Ks[0]/im_scales_ratio[0]).to(combined_features.device)
         Ks_scaled[-1, -1] = 1
 
         
         if self.training:
-            pred_cubes, iou2ds = False # TODO load
-            pred_boxes = cubes_to_box(Cubes(pred_cubes), Ks_scaled)
-            all_pred_boxes = Boxes.cat(pred_boxes)
+            total_num_of_boxes_per_image = 64
+            balance = 4
+            total_num_of_positive_boxes_per_image = int(total_num_of_boxes_per_image / balance)
+            total_num_of_negative_boxes_per_image = int(((balance-1) * total_num_of_boxes_per_image)/balance)
+            print(pred_cubes.scores)
+            exit()
+            # Choose boxes
+            positive_cubes = 1
+            negative_cubes = 1
+            chosen_cubes = 1
+            chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes), Ks_scaled))
             
-            cube_features = self.cube_pooler([combined_features], [all_pred_boxes]).flatten(1)
+            cube_features = self.cube_pooler([combined_features], [chosen_boxes]).flatten(1)
             pred_iou2d_scores = self.mlp(cube_features).flatten()
             
-            loss = F.mse_loss(pred_iou2d_scores, iou2ds, reduction='mean')
+            loss = F.mse_loss(pred_iou2d_scores, chosen_cubes.scores, reduction='mean')
 
             return None, loss
     

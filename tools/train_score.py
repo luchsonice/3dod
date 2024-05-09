@@ -73,8 +73,9 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     writers = default_writers(cfg.OUTPUT_DIR, max_iter)
 
     # create the dataloader
-    data_mapper = DatasetMapper3D(cfg, is_train=True)
-    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=1)
+    data_mapper = DatasetMapper3D(cfg, is_train=False, mode='load_proposals')
+    dataset_name = cfg.DATASETS.TRAIN[0]
+    data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=1)
 
     # give the mapper access to dataset_ids
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats

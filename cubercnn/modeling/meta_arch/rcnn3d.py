@@ -657,6 +657,10 @@ class ScoreNet(nn.Module):
             else:
                 gt_instances = None
 
+            if "proposals" in batched_inputs[0]:
+                cubes = [x["proposals"].to(self.device) for x in batched_inputs]
+            else:
+                raise ValueError("Dataset does not contain proposals. Make sure to use ' mode='load_proposals ' in DatasetMapper3D.")
             # the backbone is actually a FPN, where the DLA model is the bottom-up structure.
             # FPN: https://arxiv.org/abs/1612.03144v2
             
@@ -671,7 +675,7 @@ class ScoreNet(nn.Module):
             
             combined_features = torch.cat((img_features, d_features), dim=1)
 
-            instances3d, results = self.roi_heads(gt_instances, Ks, im_scales_ratio, combined_features)
+            instances3d, results = self.roi_heads(cubes, gt_instances, Ks, im_scales_ratio, combined_features)
             return instances3d, results
 
     def inference(self,
