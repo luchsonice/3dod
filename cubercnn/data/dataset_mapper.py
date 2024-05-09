@@ -43,7 +43,7 @@ class DatasetMapper3D(DatasetMapper):
 
         Args:
             is_train: whether it's used in training or inference
-            mode: 'eval_with_gt' or 'learn_scoring'
+            mode: 'get_depth_maps' or 'load_proposals'
             augmentations: a list of augmentations or deterministic transforms to apply
             image_format: an image format supported by :func:`detection_utils.read_image`.
             use_instance_mask: whether to process instance segmentation annotations, if available
@@ -131,7 +131,7 @@ class DatasetMapper3D(DatasetMapper):
             else:
                 dataset_dict["ground_map"] = None
         elif self.mode == 'load_proposals':
-            with open(f'datasets/proposals/{dataset_dict['image_id']}', 'rb') as f:
+            with open(f"datasets/proposals/{dataset_dict['image_id']}", 'rb') as f:
                 proposals = pickle.load(f)
             dataset_dict["proposals"] = proposals
                                             

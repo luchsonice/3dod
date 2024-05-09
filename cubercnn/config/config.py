@@ -169,3 +169,6 @@ def get_cfg_defaults(cfg):
 
     cfg.PLOT.SCORING_FUNC = ''
     cfg.PLOT.PROPOSAL_FUNC = ''
+
+    cfg.TRAIN = CN(new_allowed=True)
+    cfg.TRAIN.pseudo_gt = 'learn'

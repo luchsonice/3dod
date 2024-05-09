@@ -471,9 +471,11 @@ def do_train(cfg, model):
     dataset_names = cfg.DATASETS.TRAIN
     data_mapper = DatasetMapper3D(cfg, is_train=False, mode='get_depth_maps')
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
-    os.makedirs('datasets/proposals',exist_ok=True)
+    print("control what kind of proposal should be saved by setting cfg.TRAIN.pseudo_gt to either 'learn' or 'gt'" )
     experiment_type = {}
     experiment_type['use_pred_boxes'] = cfg.PLOT.MODE2D if cfg.PLOT.MODE2D != '' else False
+    experiment_type['pseudo_gt'] = cfg.TRAIN.pseudo_gt
+    os.makedirs(f'datasets/proposals_{cfg.TRAIN.pseudo_gt}',exist_ok=True)
     # this controls the flow of the program in the model class
     model.train()
     for dataset_name in dataset_names:
@@ -581,8 +583,6 @@ def main(args):
 
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
-    # args.opts.append('PLOT.EVAL')
-    # args.opts.append('MABO') or 'AP'
     print("Command Line Args:", args)
 
     main(args)
