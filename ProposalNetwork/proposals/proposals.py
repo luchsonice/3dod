@@ -7,7 +7,7 @@ import numpy as np
 from cubercnn import util
 import sys
 
-def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal:np.ndarray=None):
+def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal:torch.Tensor=None):
     '''
     Proposes a cube. The ranges are largely random, except for that the center needs to be inside the reference box.
     Also, objects have a length, width and height according to priors.
@@ -76,8 +76,8 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     if ground_normal is None:
         rotation_matrices = utils.randn_orthobasis_torch(number_of_proposals, number_of_instances)
     else:
-        angles = torch.linspace(0, np.pi, 36)
-        rotation_matrices_inner = utils.orthobasis_from_normal_t(torch.from_numpy(ground_normal), angles)
+        angles = torch.linspace(0, np.pi, 36, device=ground_normal.device)
+        rotation_matrices_inner = utils.orthobasis_from_normal_t(ground_normal, angles)
         rotation_matrices = rotation_matrices_inner[torch.randint(len(rotation_matrices_inner), (number_of_instances,number_of_proposals))]  
     
     # Check whether it is possible to find gt

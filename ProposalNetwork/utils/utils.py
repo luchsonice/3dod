@@ -10,7 +10,7 @@ from pytorch3d.ops import box3d_overlap
 ##### Proposal
 def normalize_vector(v):
     v_mag = torch.sqrt(v.pow(2).sum())
-    v_mag = torch.max(v_mag, torch.autograd.Variable(torch.FloatTensor([1e-8])))
+    v_mag = torch.max(v_mag, torch.autograd.Variable(torch.FloatTensor([1e-8], device=v.device)))
     v_mag = v_mag.view(1,1).expand(1,v.shape[0])
     v = v/v_mag
 
@@ -115,8 +115,8 @@ def vec_perp_t(vec):
     # https://math.stackexchange.com/a/2450825
     a, b, c = vec
     if a == 0:
-        return torch.tensor([0,c,-b])
-    return normalize_vector(torch.tensor([b,-a,0]))
+        return torch.tensor([0,c,-b], device=vec.device)
+    return normalize_vector(torch.tensor([b,-a,0], device=vec.device))
 
 def orthobasis_from_normal_t(normal:torch.Tensor, yaw_angles:torch.Tensor=0):
     '''generate an orthonormal/Rotation matrix basis from a normal vector in 3d
@@ -167,7 +167,7 @@ def vectorized_linspace(start_tensor, end_tensor, number_of_steps):
     # Calculate spacing
     spacing = (end_tensor - start_tensor) / (number_of_steps - 1)
     # Create linear spaces with arange
-    linear_spaces = torch.arange(start=0, end=number_of_steps, dtype=start_tensor.dtype)
+    linear_spaces = torch.arange(start=0, end=number_of_steps, dtype=start_tensor.dtype, device=start_tensor.device)
     linear_spaces = linear_spaces.repeat(start_tensor.size(0),1)
     linear_spaces = linear_spaces * spacing[:,None] + start_tensor[:,None]
     return linear_spaces

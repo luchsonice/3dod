@@ -383,16 +383,15 @@ class BoxNet(nn.Module):
             # images_raw are normalised to [0,1] and not resized here
             pred_o = self.depth_model(images_raw.tensor.float()/255.0)
             d_features = pred_o['depth_features']
-            path_1 = d_features['path_1']
-            p1 = F.interpolate(path_1, size=features['p2'].shape[-2:], mode='bilinear', align_corners=False)
+            img_features = features['p5']
+            img_features = F.interpolate(img_features, size=d_features.shape[-2:], mode='bilinear', align_corners=False)
 
-            combined_features = torch.cat((features['p2'], p1), dim=1)
+            combined_features = torch.cat((img_features, d_features), dim=1)
 
             gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
             instances3d, results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, gt_instances, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, combined_features)
             return instances3d, results
 
-    
     def inference(self,
         batched_inputs: List[Dict[str, torch.Tensor]],
         detected_instances: Optional[List[Instances]] = None, do_postprocess: bool = True, segmentor=None, experiment_type={}, proposal_function='propose'):
