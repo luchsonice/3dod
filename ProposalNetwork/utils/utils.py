@@ -10,7 +10,7 @@ from pytorch3d.ops import box3d_overlap
 ##### Proposal
 def normalize_vector(v):
     v_mag = torch.sqrt(v.pow(2).sum())
-    v_mag = torch.max(v_mag, torch.autograd.Variable(torch.FloatTensor([1e-8], device=v.device)))
+    v_mag = torch.max(v_mag, torch.tensor([1e-8], device=v.device))
     v_mag = v_mag.view(1,1).expand(1,v.shape[0])
     v = v/v_mag
 

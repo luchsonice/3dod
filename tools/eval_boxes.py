@@ -1,4 +1,8 @@
 import warnings
+
+import pandas as pd
+
+from cubercnn.data.build import build_detection_train_loader
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_512 in registry")
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_384 in registry")
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_224 in registry")
@@ -401,6 +405,91 @@ def do_test(cfg, model, iteration='final', storage=None):
         '''  
         eval_helper.summarize_all()
 
+def do_train(cfg, model):
+    """
+    Run model on the data_loader. 
+    Also benchmark the inference speed of `model.__call__` accurately.
+    The model will be used in train mode.
+
+    Args:
+        model (callable): a callable which takes an object from
+            `data_loader` and returns some outputs.
+
+            If it's an nn.Module, it will be temporarily set to `eval` mode.
+            If you wish to evaluate a model in `training` mode instead, you can
+            wrap the given model and override its behavior of `.eval()` and `.train()`.
+        data_loader: an iterable object with a length.
+            The elements it generates will be the inputs to the model.
+
+    Returns:
+        The return value of `evaluator.evaluate()`
+    """
+    segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
+
+    filter_settings = data.get_filter_settings_from_cfg(cfg)
+
+    # setup and join the data.
+    dataset_paths = [os.path.join('datasets', 'Omni3D', name + '.json') for name in cfg.DATASETS.TRAIN]
+    datasets = data.Omni3D(dataset_paths, filter_settings=filter_settings)
+
+    # determine the meta data given the datasets used. 
+    data.register_and_store_model_metadata(datasets, cfg.OUTPUT_DIR, filter_settings)
+
+    thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
+    dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
+    
+    '''
+    It may be useful to keep track of which categories are annotated/known
+    for each dataset in use, in case a method wants to use this information.
+    '''
+
+    infos = datasets.dataset['info']
+
+    if type(infos) == dict:
+        infos = [datasets.dataset['info']]
+
+    dataset_id_to_unknown_cats = {}
+    possible_categories = set(i for i in range(cfg.MODEL.ROI_HEADS.NUM_CLASSES + 1))
+    
+    dataset_id_to_src = {}
+
+    for info in infos:
+        dataset_id = info['id']
+        known_category_training_ids = set()
+
+        if not dataset_id in dataset_id_to_src:
+            dataset_id_to_src[dataset_id] = info['source']
+
+        for id in info['known_category_ids']:
+            if id in dataset_id_to_contiguous_id:
+                known_category_training_ids.add(dataset_id_to_contiguous_id[id])
+        
+        # determine and store the unknown categories.
+        unknown_categories = possible_categories - known_category_training_ids
+        dataset_id_to_unknown_cats[dataset_id] = unknown_categories
+
+    # we need the dataset mapper to get 
+    dataset_names = cfg.DATASETS.TRAIN
+    data_mapper = DatasetMapper3D(cfg, is_train=False)
+    data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
+    os.makedirs('datasets/proposals',exist_ok=True)
+    experiment_type = {}
+    experiment_type['use_pred_boxes'] = cfg.PLOT.MODE2D if cfg.PLOT.MODE2D != '' else False
+    # this controls the flow of the program in the model class
+    model.train()
+    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=1)
+
+    total = len(datasets.imgs)  # inference data loader must have a fixed length
+
+    for idx, inputs in track(enumerate(data_loader), description="Generating pseudo GT", total=total):
+        cubes = model(inputs, segmentor, experiment_type)
+        input_ = inputs[0]
+        img_id = input_['image_id']
+        with open(f'datasets/proposals/{img_id}.pkl', 'wb') as f:
+            pickle.dump(cubes, f)
+
+    return True
+
 
 def setup(args):
     """
@@ -445,10 +534,11 @@ def main(args):
     
     cfg = setup(args)
 
-    assert cfg.PLOT.MODE2D in ['GT', 'PRED'], 'MODE2D must be either GT or PRED'
-    assert cfg.PLOT.EVAL in ['AP', 'MABO'], 'EVAL must be either AP or MABO'
-    if cfg.PLOT.EVAL == 'MABO':
-        assert cfg.PLOT.MODE2D == 'GT', 'MABO only works with GT boxes'
+    if args.eval_only:
+        assert cfg.PLOT.MODE2D in ['GT', 'PRED'], 'MODE2D must be either GT or PRED'
+        assert cfg.PLOT.EVAL in ['AP', 'MABO'], 'EVAL must be either AP or MABO'
+        if cfg.PLOT.EVAL == 'MABO':
+            assert cfg.PLOT.MODE2D == 'GT', 'MABO only works with GT boxes'
     
     name = f'cube {datetime.datetime.now().isoformat()}'
     # wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
@@ -477,12 +567,16 @@ def main(args):
     model = build_model(cfg, priors=priors)
 
 
-    # skip straight to eval mode
-    # load the saved model if using eval boxes
-    if cfg.PLOT.MODE2D == 'PRED':
-        DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
-            cfg.MODEL.WEIGHTS, resume=False)
-    return do_test(cfg, model)
+    if args.eval_only:
+        # skip straight to eval mode
+        # load the saved model if using eval boxes
+        if cfg.PLOT.MODE2D == 'PRED':
+            DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
+                cfg.MODEL.WEIGHTS, resume=False)
+        return do_test(cfg, model)
+    else:
+        logger.info('Making pseudo GT')
+        return do_train(cfg, model)
 
 
 if __name__ == "__main__":
