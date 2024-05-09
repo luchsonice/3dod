@@ -589,9 +589,8 @@ class ROIHeads_Score(StandardROIHeads):
 
         
         if self.training:
-            pred_cubes, pred_boxes = False # TODO load
-            iou2d = [score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes[i]) for i, (gt_box) in enumerate(gt_boxes)]
-            iou2ds = torch.cat(iou2d)#.to(combined_features.device)
+            pred_cubes, iou2ds = False # TODO load
+            pred_boxes = Ks_scaled_per_box # TODO find boxes out of cubes
             all_pred_boxes = Boxes.cat(pred_boxes)#.to(combined_features.device)
             
             cube_features = self.cube_pooler([combined_features], [all_pred_boxes]).flatten(1)
