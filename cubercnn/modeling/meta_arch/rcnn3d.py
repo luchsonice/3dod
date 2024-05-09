@@ -264,7 +264,6 @@ class BoxNet(nn.Module):
     def __init__(
         self,
         *,
-        depth_model: nn.Module,
         backbone: Backbone,
         proposal_generator: nn.Module,
         roi_heads: nn.Module,
@@ -284,7 +283,6 @@ class BoxNet(nn.Module):
             vis_period: the period to run visualization. Set to 0 to disable.
         """
         super().__init__()
-        self.depth_model = depth_model
         self.backbone = backbone
         self.proposal_generator = proposal_generator
         self.roi_heads = roi_heads
@@ -303,12 +301,11 @@ class BoxNet(nn.Module):
     @classmethod
     def from_config(cls, cfg, priors=None):
         backbone = build_backbone(cfg, priors=priors)
-        depth_model = 'zoedepth'
-        pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
-        d_model = setup_depth_model(depth_model, pretrained_resource) #NOTE maybe make the depth model be learnable as well
+        # depth_model = 'zoedepth'
+        # pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
+        # d_model = setup_depth_model(depth_model, pretrained_resource) #NOTE maybe make the depth model be learnable as well
         return {
             "backbone": backbone,
-            "depth_model": d_model,
             "proposal_generator": build_proposal_generator(cfg, backbone.output_shape()),
             "roi_heads": build_roi_heads(cfg, backbone.output_shape(), priors=priors),
             "input_format": cfg.INPUT.FORMAT,
@@ -368,29 +365,11 @@ class BoxNet(nn.Module):
             im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
             # The unmodified intrinsics for the image
             Ks = [torch.FloatTensor(info['K']) for info in batched_inputs]
-
-            if "instances" in batched_inputs[0]:
-                gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
-            else:
-                gt_instances = None
-
-            # the backbone is actually a FPN, where the DLA model is the bottom-up structure.
-            # FPN: https://arxiv.org/abs/1612.03144v2
-            # backbone and proposal generator only work on 2D images and annotations.
-            features = self.backbone(images.tensor)
-            # proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
-
-            # images_raw are normalised to [0,1] and not resized here
-            pred_o = self.depth_model(images_raw.tensor.float()/255.0)
-            d_features = pred_o['depth_features']
-            img_features = features['p5']
-            img_features = F.interpolate(img_features, size=d_features.shape[-2:], mode='bilinear', align_corners=False)
-
-            combined_features = torch.cat((img_features, d_features), dim=1)
+            features = None
 
             gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
-            instances3d, results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, gt_instances, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, combined_features)
-            return instances3d, results
+            results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, gt_instances, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function)
+            return results
 
     def inference(self,
         batched_inputs: List[Dict[str, torch.Tensor]],
@@ -435,7 +414,7 @@ class BoxNet(nn.Module):
 
         # use the mask and the 2D box to predict the 3D box
         # proposals are ground truth for MABO plots and predictions for AP plots
-        results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, combined_features=None)
+        results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function)
         return results
     
     def visualize_training(self, batched_inputs, proposals, instances):

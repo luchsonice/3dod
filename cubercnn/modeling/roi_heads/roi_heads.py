@@ -76,7 +76,6 @@ class ROIHeads_Boxer(StandardROIHeads):
 
     @configurable
     def __init__(self, *, 
-                 cube_pooler:nn.Module, mlp:nn.Sequential,
                  dims_priors_enabled = None, priors=None, 
                  **kwargs, ):
         super().__init__(**kwargs)
@@ -88,9 +87,6 @@ class ROIHeads_Boxer(StandardROIHeads):
             self.priors_dims_per_cat = nn.Parameter(torch.FloatTensor(priors['priors_dims_per_cat']).unsqueeze(0))
         else:
             self.priors_dims_per_cat = nn.Parameter(torch.ones(1, self.num_classes, 2, 3))
-
-        self.cube_pooler = cube_pooler
-        self.mlp = mlp
 
     @classmethod
     def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec], priors=None):
@@ -106,40 +102,18 @@ class ROIHeads_Boxer(StandardROIHeads):
     
     @classmethod
     def _init_cube_head(self, cfg, input_shape: Dict[str, ShapeSpec]):
-        pooler_scales = (1.0,)
-        pooler_resolution = cfg.MODEL.ROI_CUBE_HEAD.POOLER_RESOLUTION 
-        pooler_sampling_ratio = cfg.MODEL.ROI_CUBE_HEAD.POOLER_SAMPLING_RATIO
-        pooler_type = cfg.MODEL.ROI_CUBE_HEAD.POOLER_TYPE
-
-        cube_pooler = ROIPooler(
-            output_size=pooler_resolution,
-            scales=pooler_scales,
-            sampling_ratio=pooler_sampling_ratio,
-            pooler_type=pooler_type,
-        )
-
-        # TODO: make the sizes configurable
-        res = 7*7*512
-        mlp = nn.Sequential(
-            nn.Linear(res, 256),
-            nn.ReLU(),
-            nn.Linear(256, 1),
-            nn.ReLU(),
-        )
     
-        return {'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED, 
-                'cube_pooler': cube_pooler,
-                'mlp': mlp}
+        return {'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED,}
 
-    def forward(self, images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, combined_features, targets=None):
+    def forward(self, images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, targets=None):
         # proposals are GT here
         im_dims = [image.shape[1:] for image in images]
 
         if self.training:
             masks = self.object_masks(images_raw.tensor, proposals, segmentor, {'use_pred_boxes': False})
             experiment_type['use_pred_boxes'] = False
-            instances_3d, losses = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, proposals, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function, combined_features)
-            return instances_3d, losses
+            results = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, proposals, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function)
+            return results
         
         else:
 
@@ -206,7 +180,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 if len(target_instances[0].pred_boxes) == 0:
                     return target_instances
             masks = self.object_masks(images_raw.tensor, target_instances, segmentor, experiment_type) # over all images in batch
-            pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function, combined_features)
+            pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function)
             return pred_instances
         
     def object_masks(self, images, instances, segmentor, ex):
@@ -303,7 +277,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         pred_boxes = cubes_to_box(pred_cubes, K)
         return pred_cubes, pred_boxes, stats_instance, stats_ranges
     
-    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type, proposal_function, combined_features):
+    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type, proposal_function):
 
         # send all objects to cpu
         # images_raw = images_raw.to('cpu')
@@ -415,28 +389,15 @@ class ROIHeads_Boxer(StandardROIHeads):
                 
         pred_cubes_out = Cubes(torch.zeros(len(gt_boxes), 1, 15, device=images_raw.device), scores=torch.zeros(len(gt_boxes), device=images_raw.device),labels=gt_box_classes)
         
-        if self.training:
-            number_of_train_proposals = 100
-            pred_cubes, pred_boxes, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps, im_shape, Ks_scaled_per_box, number_of_train_proposals, proposal_function, normal_vec)
-        
-            iou2d = [score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes[i]) for i, (gt_box) in enumerate(gt_boxes)]
-            iou2ds = torch.cat(iou2d)#.to(combined_features.device)
-            all_pred_boxes = Boxes.cat(pred_boxes)#.to(combined_features.device)
-            
-            cube_features = self.cube_pooler([combined_features], [all_pred_boxes]).flatten(1)
-            pred_iou2d_scores = self.mlp(cube_features).flatten()
-            
-            loss = F.mse_loss(pred_iou2d_scores, iou2ds, reduction='mean')
+        if self.training: # generate and save all proposals
+            assert not experiment_type['use_pred_boxes'], 'must use GT boxes for training'
 
-            # split up to have X per instance
-            scores_per_instance = torch.split(pred_iou2d_scores, len(pred_boxes[0]))
-            for i, score in enumerate(scores_per_instance):
-                best_cube = torch.argmax(score)
-                pred_cubes_out.tensor[i] = pred_cubes[i,best_cube].tensor[0]
-                pred_cubes_out.scores[i] = scores_per_instance[i][best_cube]
+            pred_cubes, many_pred_boxes, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec)
+            for i, (gt_box, pred_boxes) in enumerate(zip(gt_boxes, many_pred_boxes)):
+                IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes)
+                pred_cubes.scores = IoU2D_scores
 
-            return pred_cubes_out, loss
-
+            return pred_cubes
 
         if experiment_type['use_pred_boxes']:
             pred_cubes, pred_boxes, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec)
