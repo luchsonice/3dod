@@ -651,7 +651,7 @@ class ScoreNet(nn.Module):
             im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
             # The unmodified intrinsics for the image
             Ks = [torch.FloatTensor(info['K']) for info in batched_inputs]
-
+            
             if "instances" in batched_inputs[0]:
                 gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
             else:
@@ -670,9 +670,7 @@ class ScoreNet(nn.Module):
             
             combined_features = torch.cat((img_features, d_features), dim=1)
 
-            gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
-
-            instances3d, results = self.roi_heads(images, images_raw, gt_instances, Ks, im_scales_ratio, combined_features)
+            instances3d, results = self.roi_heads(gt_instances, Ks, im_scales_ratio, combined_features)
             return instances3d, results
 
     def inference(self,

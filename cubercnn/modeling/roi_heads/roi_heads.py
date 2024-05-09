@@ -526,33 +526,23 @@ class ROIHeads_Score(StandardROIHeads):
                 'cube_pooler': cube_pooler,
                 'mlp': mlp}
 
-    def forward(self, images, images_raw, proposals, Ks, im_scales_ratio, combined_features):
-        # proposals are GT here
-        im_dims = [image.shape[1:] for image in images]
-
+    def forward(self, instances, Ks, im_scales_ratio, combined_features):
         if self.training:
-            instances_3d, losses = self._forward_cube(images, images_raw, proposals, Ks, im_dims, im_scales_ratio, combined_features)
+            instances_3d, losses = self._forward_cube(instances, Ks, im_scales_ratio, combined_features)
             return instances_3d, losses
         else:
-            pred_instances = self._forward_cube(images, images_raw, Ks, im_dims, im_scales_ratio, combined_features)
+            pred_instances = self._forward_cube(instances, Ks, im_scales_ratio, combined_features)
             return pred_instances
         
-    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type, proposal_function, combined_features):
-        gt_boxes = torch.cat([p.gt_boxes for p in instances], dim=0,) if len(instances) > 1 else instances[0].gt_boxes
-
-        n_gt = len(gt_boxes)
-        # nothing to do..
-        if n_gt == 0:
-            return (instances, None) if not self.training else (instances, {}) # TODO fix this also
-        
-        Ks_scaled_per_box = (Ks[0]/im_scales_ratio[0]).to(images.device)
-        Ks_scaled_per_box[-1, -1] = 1
+    def _forward_cube(self, instances, Ks, im_scales_ratio, combined_features):
+        Ks_scaled = (Ks[0]/im_scales_ratio[0]).to(combined_features.device)
+        Ks_scaled[-1, -1] = 1
 
         
         if self.training:
             pred_cubes, iou2ds = False # TODO load
-            pred_boxes = Ks_scaled_per_box # TODO find boxes out of cubes
-            all_pred_boxes = Boxes.cat(pred_boxes)#.to(combined_features.device)
+            pred_boxes = cubes_to_box(Cubes(pred_cubes), Ks_scaled)
+            all_pred_boxes = Boxes.cat(pred_boxes)
             
             cube_features = self.cube_pooler([combined_features], [all_pred_boxes]).flatten(1)
             pred_iou2d_scores = self.mlp(cube_features).flatten()
