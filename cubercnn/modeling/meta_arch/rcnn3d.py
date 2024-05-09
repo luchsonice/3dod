@@ -23,7 +23,7 @@ from cubercnn.modeling.roi_heads import build_roi_heads
 
 from detectron2.data import MetadataCatalog
 from pytorch3d.transforms import rotation_6d_to_matrix
-from cubercnn.modeling.roi_heads import build_roi_heads
+from cubercnn.modeling.roi_heads import build_roi_heads, build_roi_heads_score
 from cubercnn import util, vis
 import torch.nn.functional as F
 from detectron2.config import configurable
@@ -602,7 +602,7 @@ class ScoreNet(nn.Module):
             "backbone": backbone,
             "depth_model": d_model,
             "proposal_generator": build_proposal_generator(cfg, backbone.output_shape()),
-            "roi_heads": build_roi_heads(cfg, backbone.output_shape(), priors=priors),
+            "roi_heads": build_roi_heads_score(cfg, backbone.output_shape()),
             "input_format": cfg.INPUT.FORMAT,
             "pixel_mean": cfg.MODEL.PIXEL_MEAN,
             "pixel_std": cfg.MODEL.PIXEL_STD,
@@ -638,7 +638,7 @@ class ScoreNet(nn.Module):
         )
         return images
 
-    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor, experiment_type, proposal_function='propose'):
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]]):
         if not self.training:
             return self.inference(batched_inputs, do_postprocess=True)
 
@@ -659,14 +659,15 @@ class ScoreNet(nn.Module):
 
             # the backbone is actually a FPN, where the DLA model is the bottom-up structure.
             # FPN: https://arxiv.org/abs/1612.03144v2
-            # backbone and proposal generator only work on 2D images and annotations.
-            features = self.backbone(images.tensor)
-            img_features = features['p5']
-            img_features = F.interpolate(img_features, size=d_features.shape[-2:], mode='bilinear', align_corners=False)
             
             # images_raw are normalised to [0,1] and not resized here
             pred_o = self.depth_model(images_raw.tensor.float()/255.0)
             d_features = pred_o['depth_features']
+
+            # backbone and proposal generator only work on 2D images and annotations.
+            features = self.backbone(images.tensor)
+            img_features = features['p5']
+            img_features = F.interpolate(img_features, size=d_features.shape[-2:], mode='bilinear', align_corners=False)
             
             combined_features = torch.cat((img_features, d_features), dim=1)
 

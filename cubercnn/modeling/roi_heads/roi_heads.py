@@ -70,6 +70,13 @@ def build_roi_heads(cfg, input_shape, priors=None):
     name = cfg.MODEL.ROI_HEADS.NAME
     return ROI_HEADS_REGISTRY.get(name)(cfg, input_shape, priors=priors)
 
+def build_roi_heads_score(cfg, input_shape):
+    """
+    Build ROIHeads defined by `cfg.MODEL.ROI_HEADS.NAME`.
+    """
+    name = cfg.MODEL.ROI_HEADS.NAME
+    return ROI_HEADS_REGISTRY.get(name)(cfg, input_shape)
+
 @ROI_HEADS_REGISTRY.register()
 class ROIHeads_Boxer(StandardROIHeads):
     '''The 3D box prediction head.'''
@@ -488,14 +495,13 @@ class ROIHeads_Score(StandardROIHeads):
         self.mlp = mlp
 
     @classmethod
-    def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec], priors=None):
+    def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec]):
         
         ret = super().from_config(cfg, input_shape)
         
         # pass along priors
         ret["box_predictor"] = FastRCNNOutputs(cfg, ret['box_head'].output_shape)
         ret.update(cls._init_cube_head(cfg, input_shape))
-        ret["priors"] = priors
 
         return ret
     
@@ -522,8 +528,7 @@ class ROIHeads_Score(StandardROIHeads):
             nn.ReLU(),
         )
     
-        return {'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED, 
-                'cube_pooler': cube_pooler,
+        return {'cube_pooler': cube_pooler,
                 'mlp': mlp}
 
     def forward(self, instances, Ks, im_scales_ratio, combined_features):
