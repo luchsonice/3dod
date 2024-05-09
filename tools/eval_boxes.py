@@ -1,7 +1,5 @@
 import warnings
 
-import pandas as pd
-
 from cubercnn.data.build import build_detection_train_loader
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_512 in registry")
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_384 in registry")
@@ -32,7 +30,8 @@ from detectron2.engine import (
 )
 from detectron2.utils.logger import setup_logger
 import torch.nn as nn
-from rich.progress import track
+# from rich.progress import track
+from tqdm import tqdm
 import pickle
 
 from ProposalNetwork.utils.utils import show_mask2
@@ -477,11 +476,11 @@ def do_train(cfg, model):
     experiment_type['use_pred_boxes'] = cfg.PLOT.MODE2D if cfg.PLOT.MODE2D != '' else False
     # this controls the flow of the program in the model class
     model.train()
-    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=1)
+    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=4)
 
-    total = len(datasets.imgs)  # inference data loader must have a fixed length
+    total = len(datasets.imgToAnns)  # inference data loader must have a fixed length
 
-    for idx, inputs in track(enumerate(data_loader), description="Generating pseudo GT", total=total):
+    for idx, inputs in tqdm(enumerate(data_loader), desc="Generating pseudo GT", total=total):
         cubes = model(inputs, segmentor, experiment_type)
         input_ = inputs[0]
         img_id = input_['image_id']
