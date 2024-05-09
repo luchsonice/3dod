@@ -537,7 +537,7 @@ class ROIHeads_Score(StandardROIHeads):
             pred_instances = self._forward_cube(images, images_raw, Ks, im_dims, im_scales_ratio, combined_features)
             return pred_instances
         
-    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type, proposal_function, combined_features):
+    def _forward_cube(self, images, images_raw, instances, Ks, im_current_dims, im_scales_ratio, combined_features):
         gt_boxes = torch.cat([p.gt_boxes for p in instances], dim=0,) if len(instances) > 1 else instances[0].gt_boxes
 
         n_gt = len(gt_boxes)
