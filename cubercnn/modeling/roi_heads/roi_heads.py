@@ -26,7 +26,7 @@ from detectron2.modeling.roi_heads import (
     StandardROIHeads, ROI_HEADS_REGISTRY, select_foreground_proposals,
 )
 from detectron2.modeling.poolers import ROIPooler
-from ProposalNetwork.proposals.proposals import propose, propose_random_xy, propose_random_xy_patch, propose_random_rotation
+from ProposalNetwork.proposals.proposals import propose, propose_random, propose_z, propose_xy_patch, propose_random_dim, propose_random_rotation
 from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation
 from ProposalNetwork.utils.conversions import cube_to_box, cubes_to_box
 from ProposalNetwork.utils.spaces import Cubes
@@ -395,10 +395,14 @@ class ROIHeads_Boxer(StandardROIHeads):
         def predict_cubes(gt_boxes, priors, gt_3d=None):
             '''wrap propose'''
             reference_box = Boxes(gt_boxes)
+            if proposal_function == 'random':
+                pred_cubes, stats_instance, stats_ranges = propose_random(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+            if proposal_function == 'z':
+                pred_cubes, stats_instance, stats_ranges = propose_z(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
             if proposal_function == 'xy':
-                pred_cubes, stats_instance, stats_ranges = propose_random_xy(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
-            elif proposal_function == 'xy_patch':
-                pred_cubes, stats_instance, stats_ranges = propose_random_xy_patch(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+                pred_cubes, stats_instance, stats_ranges = propose_xy_patch(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+            elif proposal_function == 'dim':
+                pred_cubes, stats_instance, stats_ranges = propose_random_dim(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
             elif proposal_function == 'rotation':
                 pred_cubes, stats_instance, stats_ranges = propose_random_rotation(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, Ks_scaled_per_box, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
             else:
