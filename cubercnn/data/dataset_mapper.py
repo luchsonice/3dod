@@ -1,6 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates
 import copy
 import logging
+import pickle
 from detectron2.config.config import configurable
 import torch
 import numpy as np
@@ -26,10 +27,10 @@ class DatasetMapper3D(DatasetMapper):
     def __init__(
         self,
         is_train: bool,
-        mode:str,
         *,
         augmentations: List[Union[T.Augmentation, T.Transform]],
         image_format: str,
+        mode:str=None,
         use_instance_mask: bool = False,
         use_keypoint: bool = False,
         instance_mask_format: str = "polygon",
@@ -42,6 +43,7 @@ class DatasetMapper3D(DatasetMapper):
 
         Args:
             is_train: whether it's used in training or inference
+            mode: 'eval_with_gt' or 'learn_scoring'
             augmentations: a list of augmentations or deterministic transforms to apply
             image_format: an image format supported by :func:`detection_utils.read_image`.
             use_instance_mask: whether to process instance segmentation annotations, if available
@@ -109,23 +111,30 @@ class DatasetMapper3D(DatasetMapper):
         
         image = detection_utils.read_image(dataset_dict["file_name"], format=self.image_format)
         detection_utils.check_image_size(dataset_dict, image)
-        dp_img = Image.fromarray(np.load(dataset_dict["depth_image_path"])['depth'])
 
         aug_input = T.AugInput(image)
         transforms = self.augmentations(aug_input)
         image = aug_input.image
 
-        dp_img = np.array(dp_img.resize(image.shape[:2][::-1], Image.NEAREST))
-        dataset_dict["depth_map"] = torch.as_tensor(np.ascontiguousarray(dp_img))
-        image_shape = image.shape[:2]  # h, w
 
-        # ground image
-        if 'ground_image_path' in dataset_dict:
-            ground_img = Image.fromarray(np.load(dataset_dict["ground_image_path"])['mask'])
-            ground_img = np.array(ground_img.resize(image.shape[:2][::-1], Image.NEAREST))
-            dataset_dict["ground_map"] = torch.as_tensor(np.ascontiguousarray(ground_img))
-        else:
-            dataset_dict["ground_map"] = None
+        # dont load ground map and depth map when 
+        if self.mode == 'get_depth_map':
+            dp_img = Image.fromarray(np.load(dataset_dict["depth_image_path"])['depth'])
+            dp_img = np.array(dp_img.resize(image.shape[:2][::-1], Image.NEAREST))
+            dataset_dict["depth_map"] = torch.as_tensor(np.ascontiguousarray(dp_img))
+            image_shape = image.shape[:2]  # h, w
+            #  ground image
+            if 'ground_image_path' in dataset_dict:
+                ground_img = Image.fromarray(np.load(dataset_dict["ground_image_path"])['mask'])
+                ground_img = np.array(ground_img.resize(image.shape[:2][::-1], Image.NEAREST))
+                dataset_dict["ground_map"] = torch.as_tensor(np.ascontiguousarray(ground_img))
+            else:
+                dataset_dict["ground_map"] = None
+        elif self.mode == 'load_proposals':
+            with open(f'datasets/proposals/{dataset_dict['image_id']}', 'rb') as f:
+                proposals = pickle.load(f)
+            dataset_dict["proposals"] = proposals
+                                            
 
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
@@ -133,9 +142,9 @@ class DatasetMapper3D(DatasetMapper):
         dataset_dict["image"] = torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1)))
 
         # no need for additional processing at inference
-        if not self.mode == 'eval_with_gt':
-            if not self.is_train:
-                return dataset_dict
+        # if not self.mode == 'eval_with_gt':
+        if not self.is_train:
+            return dataset_dict
 
         if "annotations" in dataset_dict:
 
