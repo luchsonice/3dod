@@ -550,6 +550,166 @@ class BoxNet(nn.Module):
 
             break 
 
+@META_ARCH_REGISTRY.register()
+class ScoreNet(nn.Module):
+
+    @configurable
+    def __init__(
+        self,
+        *,
+        depth_model: nn.Module,
+        backbone: Backbone,
+        proposal_generator: nn.Module,
+        roi_heads: nn.Module,
+        pixel_mean: tuple[float],
+        pixel_std: tuple[float],
+        input_format: Optional[str] = None
+    ):
+        """
+        Args:
+            backbone: a backbone module, must follow detectron2's backbone interface
+            proposal_generator: a module that generates proposals using backbone features
+            roi_heads: a ROI head that performs per-region computation
+            pixel_mean, pixel_std: list or tuple with #channels element, representing
+                the per-channel mean and std to be used to normalize the input image
+            input_format: describe the meaning of channels of input. Needed by visualization
+            vis_period: the period to run visualization. Set to 0 to disable.
+        """
+        super().__init__()
+        self.depth_model = depth_model
+        self.backbone = backbone
+        self.proposal_generator = proposal_generator
+        self.roi_heads = roi_heads
+
+        self.input_format = input_format
+        
+        self.register_buffer("pixel_mean", torch.tensor(pixel_mean).view(-1, 1, 1), False)
+        self.register_buffer("pixel_std", torch.tensor(pixel_std).view(-1, 1, 1), False)
+        assert (
+            self.pixel_mean.shape == self.pixel_std.shape
+        ), f"{self.pixel_mean} and {self.pixel_std} have different shapes!"
+    
+    @classmethod
+    def from_config(cls, cfg, priors=None):
+        backbone = build_backbone(cfg, priors=priors)
+        depth_model = 'zoedepth'
+        pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
+        d_model = setup_depth_model(depth_model, pretrained_resource) #NOTE maybe make the depth model be learnable as well
+        return {
+            "backbone": backbone,
+            "depth_model": d_model,
+            "proposal_generator": build_proposal_generator(cfg, backbone.output_shape()),
+            "roi_heads": build_roi_heads(cfg, backbone.output_shape(), priors=priors),
+            "input_format": cfg.INPUT.FORMAT,
+            "pixel_mean": cfg.MODEL.PIXEL_MEAN,
+            "pixel_std": cfg.MODEL.PIXEL_STD,
+        }
+            
+    @property
+    def device(self):
+        return self.pixel_mean.device
+
+    def _move_to_current_device(self, x):
+        return move_device_like(x, self.pixel_mean)
+
+    def preprocess_image(self, batched_inputs: List[Dict[str, torch.Tensor]], normalise=True, img_type="image", convert=False, NoOp=False, to_float=False):
+        """
+        Normalize, pad and batch the input images.
+        """
+        images = [self._move_to_current_device(x[img_type]) for x in batched_inputs]
+        if normalise:
+            images = [(x - self.pixel_mean) / self.pixel_std for x in images]
+        else:
+            if convert:
+                # convert from BGR to RGB
+                images = [x[[2,1,0],:,:] for x in images]
+            if to_float:
+                images = [x.float()/255.0 for x in images]
+            if NoOp:
+                images = ImageList.from_tensors(images,0,)
+                return images
+        images = ImageList.from_tensors(
+            images,
+            self.backbone.size_divisibility,
+            padding_constraints=self.backbone.padding_constraints,
+        )
+        return images
+
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor, experiment_type, proposal_function='propose'):
+        if not self.training:
+            return self.inference(batched_inputs, do_postprocess=True)
+
+        if self.training:
+            images = self.preprocess_image(batched_inputs, img_type='image', convert=False)
+            images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
+            
+            # scaling factor for the sample relative to its original scale
+            # e.g., how much has the image been upsampled by? or downsampled?
+            im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
+            # The unmodified intrinsics for the image
+            Ks = [torch.FloatTensor(info['K']) for info in batched_inputs]
+
+            if "instances" in batched_inputs[0]:
+                gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
+            else:
+                gt_instances = None
+
+            # the backbone is actually a FPN, where the DLA model is the bottom-up structure.
+            # FPN: https://arxiv.org/abs/1612.03144v2
+            # backbone and proposal generator only work on 2D images and annotations.
+            features = self.backbone(images.tensor)
+            img_features = features['p5']
+            img_features = F.interpolate(img_features, size=d_features.shape[-2:], mode='bilinear', align_corners=False)
+            
+            # images_raw are normalised to [0,1] and not resized here
+            pred_o = self.depth_model(images_raw.tensor.float()/255.0)
+            d_features = pred_o['depth_features']
+            
+            combined_features = torch.cat((img_features, d_features), dim=1)
+
+            gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
+
+            instances3d, results = self.roi_heads(images, images_raw, gt_instances, Ks, im_scales_ratio, combined_features)
+            return instances3d, results
+
+    def inference(self,
+        batched_inputs: List[Dict[str, torch.Tensor]],
+        detected_instances: Optional[List[Instances]] = None, do_postprocess: bool = True):
+        assert not self.training
+
+        # must apply the same preprocessing to both the image, the depth map, and the mask
+        # except don't normalise the input for the segmentation method
+        images = self.preprocess_image(batched_inputs, img_type='image', convert=False)
+        images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
+       
+        # scaling factor for the sample relative to its original scale
+        # e.g., how much has the image been upsampled by? or downsampled?
+        im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
+        
+        # The unmodified intrinsics for the image
+        Ks = [torch.FloatTensor(info['K']) for info in batched_inputs]
+
+        # do_postprocess is the same as using predicted boxes
+        if do_postprocess:
+            # gt_instances should be None in inference mode
+            features = self.backbone(images.tensor)
+            # normal inference
+            proposals, _ = self.proposal_generator(images, features, None)
+        else:
+            if "instances" in batched_inputs[0]:
+                gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
+            else:
+                gt_instances = None
+            features, proposals = None, gt_instances
+
+        # is it necessary to resize images back???
+
+        # use the mask and the 2D box to predict the 3D box
+        # proposals are ground truth for MABO plots and predictions for AP plots
+        results = self.roi_heads(images, images_raw, proposals, Ks, im_scales_ratio, combined_features=None)
+        return results
+    
+
 def build_model(cfg, priors=None):
     """
     Build the whole model architecture, defined by ``cfg.MODEL.META_ARCHITECTURE``.

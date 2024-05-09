@@ -1,0 +1,22 @@
+_BASE_: "Base.yaml"
+SOLVER:
+  TYPE: "sgd"
+  IMS_PER_BATCH: 2 #196 -> r=5,6 -> because of dataset size r=5,6 * 10,335/233 = 0,248
+  BASE_LR: 0.0214 #0.12
+  STEPS: (17280, 23040)
+  MAX_ITER: 100000 #116000
+  WARMUP_ITERS: 0 #3625
+TEST:
+  EVAL_PERIOD: 7200 #29000
+VIS_PERIOD: 1 #2320
+DATASETS:
+  TRAIN: ('SUNRGBD_train_mini', 'SUNRGBD_val_mini')
+  TEST: ('SUNRGBD_test_mini',) 
+  CATEGORY_NAMES: ('chair', 'table', 'cabinet', 'car', 'lamp', 'books', 'sofa', 'pedestrian', 'picture', 'window', 'pillow', 'truck', 'door', 'blinds', 'sink', 'shelves', 'television', 'shoes', 'cup', 'bottle', 'bookcase', 'laptop', 'desk', 'cereal box', 'floor mat', 'traffic cone', 'mirror', 'barrier', 'counter', 'camera', 'bicycle', 'toilet', 'bus', 'bed', 'refrigerator', 'trailer', 'box', 'oven', 'clothes', 'van', 'towel', 'motorcycle', 'night stand', 'stove', 'machine', 'stationery', 'bathtub', 'cyclist', 'curtain', 'bin')
+MODEL:
+  ROI_HEADS:
+    NAME: 'ROIHeads_Score' # name of the class that is the 3d predictor
+    NUM_CLASSES: 50
+  ROI_CUBE_HEAD:
+    NAME: 'CubeHead_vanilla' # name of the 3d head
+  META_ARCHITECTURE: 'ScoreNet' # name of the overall arch that calls the ROI_HEADS.NAME and ROI_CUBE_HEAD.NAME
