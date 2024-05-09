@@ -405,7 +405,24 @@ class ROIHeads_Boxer(StandardROIHeads):
                 IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes)
                 pred_cubes.scores = IoU2D_scores
 
-            return pred_cubes
+            if experiment_type['pseudo_gt'] == 'learn':
+                return pred_cubes
+
+            elif experiment_type['pseudo_gt'] == 'gt':
+                for i, (gt_box) in enumerate(gt_boxes):
+                    segment_scores = score_segmentation(mask_per_image[i][0], pred_cubes[i].get_bube_corners(Ks_scaled_per_box))
+                    segment_scores = torch.stack(segment_scores)
+                    dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0])
+                    combined_score = IoU2D_scores*dim_scores*segment_scores
+                    
+                    score_to_use = combined_score
+                    highest_score = torch.argmax(score_to_use)
+                    pred_cube = pred_cubes[i,highest_score]
+                    pred_cubes_out.scores[i] = score_to_use[highest_score]
+                    pred_cubes_out.tensor[i] = pred_cube.tensor[0]
+                return pred_cubes_out
+
+
 
         if experiment_type['use_pred_boxes']:
             pred_cubes, pred_boxes, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec)

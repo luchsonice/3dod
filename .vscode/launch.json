@@ -95,6 +95,15 @@
             "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "AP", "PLOT.MODE2D", "GT"]
         },
         {
+            "name": "BoxNet generate pseudo GT",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/eval_boxes.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--config-file", "configs/BoxNet.yaml", "OUTPUT_DIR", "output/BoxNet_gt"]
+        },
+        {
             "name": "train score",
             "type": "python",
             "request": "launch",

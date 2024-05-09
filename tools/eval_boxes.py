@@ -353,7 +353,7 @@ def do_test(cfg, model, iteration='final', storage=None):
 
 
         # we need the dataset mapper to get 
-        data_mapper = DatasetMapper3D(cfg, is_train=False, mode='eval_with_gt')
+        data_mapper = DatasetMapper3D(cfg, is_train=False, mode='get_depth_map')
         data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
 
         data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, batch_size=cfg.SOLVER.IMS_PER_BATCH, num_workers=1)
@@ -469,23 +469,26 @@ def do_train(cfg, model):
 
     # we need the dataset mapper to get 
     dataset_names = cfg.DATASETS.TRAIN
-    data_mapper = DatasetMapper3D(cfg, is_train=False)
+    data_mapper = DatasetMapper3D(cfg, is_train=False, mode='get_depth_maps')
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
-    os.makedirs('datasets/proposals',exist_ok=True)
+    print("control what kind of proposal should be saved by setting cfg.TRAIN.pseudo_gt to either 'learn' or 'gt'" )
     experiment_type = {}
     experiment_type['use_pred_boxes'] = cfg.PLOT.MODE2D if cfg.PLOT.MODE2D != '' else False
+    experiment_type['pseudo_gt'] = cfg.TRAIN.pseudo_gt
+    os.makedirs(f'datasets/proposals_{cfg.TRAIN.pseudo_gt}',exist_ok=True)
     # this controls the flow of the program in the model class
     model.train()
-    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=4)
+    for dataset_name in dataset_names:
+        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=4)
 
-    total = len(datasets.imgToAnns)  # inference data loader must have a fixed length
+        total = len(data_loader)  # inference data loader must have a fixed length
 
-    for idx, inputs in tqdm(enumerate(data_loader), desc="Generating pseudo GT", total=total):
-        cubes = model(inputs, segmentor, experiment_type)
-        input_ = inputs[0]
-        img_id = input_['image_id']
-        with open(f'datasets/proposals/{img_id}.pkl', 'wb') as f:
-            pickle.dump(cubes, f)
+        for idx, inputs in tqdm(enumerate(data_loader), desc="Generating pseudo GT", total=total):
+            cubes = model(inputs, segmentor, experiment_type)
+            input_ = inputs[0]
+            img_id = input_['image_id']
+            with open(f'datasets/proposals/{img_id}.pkl', 'wb') as f:
+                pickle.dump(cubes, f)
 
     return True
 
@@ -580,8 +583,6 @@ def main(args):
 
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
-    # args.opts.append('PLOT.EVAL')
-    # args.opts.append('MABO') or 'AP'
     print("Command Line Args:", args)
 
     main(args)
