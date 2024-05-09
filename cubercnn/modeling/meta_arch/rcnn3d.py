@@ -357,6 +357,9 @@ class BoxNet(nn.Module):
             depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False, NoOp=True)
             if batched_inputs[0]['ground_map'] is not None:
                 ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
+                if not torch.count_nonzero(ground_maps.tensor):
+                    print('no_ground for', batched_inputs[0]['image_id'])
+                    ground_maps = None
             else:
                 #logger.info("ground map file not found, setting to None")
                 ground_maps = None
