@@ -143,7 +143,7 @@ class DatasetMapper3D(DatasetMapper):
 
         # no need for additional processing at inference
         # if not self.mode == 'eval_with_gt':
-        if not self.mode == 'load_proposals':
+        if self.mode == 'cube_rcnn':
             if not self.is_train:
                 return dataset_dict
 
