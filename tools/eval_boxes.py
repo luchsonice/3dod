@@ -471,7 +471,7 @@ def do_train(cfg, model):
     dataset_names = cfg.DATASETS.TRAIN
     data_mapper = DatasetMapper3D(cfg, is_train=False, mode='get_depth_maps')
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
-    assert cfg.TRAIN.pseudo_gt in ['learn', 'gt'], "control what kind of proposal should be saved by setting TRAIN.pseudo_gt to either 'learn' or 'gt'"
+    assert cfg.TRAIN.pseudo_gt in ['learn', 'pseudo'], "control what kind of proposal should be saved by setting TRAIN.pseudo_gt to either 'learn' or 'pseudo'"
     experiment_type = {}
     experiment_type['use_pred_boxes'] = cfg.PLOT.MODE2D if cfg.PLOT.MODE2D != '' else False
     experiment_type['pseudo_gt'] = cfg.TRAIN.pseudo_gt
@@ -487,8 +487,7 @@ def do_train(cfg, model):
             cubes = model(inputs, segmentor, experiment_type)
             input_ = inputs[0]
             img_id = input_['image_id']
-            with open(f'datasets/proposals/{img_id}.pkl', 'wb') as f:
-                pickle.dump(cubes, f)
+            torch.save(cubes.cpu(), f'datasets/proposals_{cfg.TRAIN.pseudo_gt}/{img_id}.pt')
 
     return True
 
