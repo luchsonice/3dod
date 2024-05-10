@@ -143,8 +143,9 @@ class DatasetMapper3D(DatasetMapper):
 
         # no need for additional processing at inference
         # if not self.mode == 'eval_with_gt':
-        if not self.is_train:
-            return dataset_dict
+        if not self.mode == 'load_proposals':
+            if not self.is_train:
+                return dataset_dict
 
         if "annotations" in dataset_dict:
 
