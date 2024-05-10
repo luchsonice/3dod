@@ -110,7 +110,7 @@
             "program": "tools/train_score.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--config-file", "configs/ScoreNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth"]
+            "args": ["--config-file", "configs/ScoreNet.yaml"]//, "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth"]
         },
     ]
 }
