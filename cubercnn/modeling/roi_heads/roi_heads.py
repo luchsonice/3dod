@@ -560,7 +560,7 @@ class ROIHeads_Score(StandardROIHeads):
     def _forward_cube(self, pred_cubes, instances, Ks, im_scales_ratio, combined_features):
         Ks_scaled = (Ks[0]/im_scales_ratio[0]).to(combined_features.device)
         Ks_scaled[-1, -1] = 1
-
+        pred_cubes = pred_cubes[0] # NOTE Batchsize 1?? Or is this part of the code ment to be as if it's 1? next(data_iter) gives image in one by one
         
         if self.training:
             total_num_of_boxes_per_image = 64
@@ -569,15 +569,49 @@ class ROIHeads_Score(StandardROIHeads):
             total_num_of_negative_boxes_per_image = int(((balance-1) * total_num_of_boxes_per_image)/balance)
             
             # Choose boxes
-            positive_cubes = 1
-            negative_cubes = 1
-            chosen_cubes = 1
-            chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes), Ks_scaled))
-            
+            all_scores = pred_cubes.scores
+            all_scores = torch.rand(pred_cubes.num_instances, 1000)
+
+            threshold = 0.5
+            positive_mask = all_scores > threshold
+            negative_mask = all_scores < threshold
+
+            # Get indices of positive and negative cubes
+            positive_indices = torch.nonzero(positive_mask, as_tuple=False)
+            negative_indices = torch.nonzero(negative_mask, as_tuple=False)
+
+            # Randomly shuffle the indices
+            positive_indices_shuffled = positive_indices[torch.randperm(positive_indices.size(0))]
+            negative_indices_shuffled = negative_indices[torch.randperm(negative_indices.size(0))] # TODO check that these are valid permutations (because of 2d)
+
+            # Repeat positive indices if needed to meet the required number
+            num_positive_samples = min(total_num_of_positive_boxes_per_image, positive_indices_shuffled.size(0))
+            num_repeats = total_num_of_positive_boxes_per_image // num_positive_samples
+            remaining_repeats = total_num_of_positive_boxes_per_image % num_positive_samples
+
+            positive_cubes_indices = positive_indices_shuffled[:num_positive_samples].repeat(num_repeats,1)
+            if remaining_repeats > 0:
+                positive_cubes_indices = torch.cat([positive_cubes_indices, positive_indices_shuffled[:remaining_repeats]], dim=0)
+
+            # Sample negative indices
+            negative_cubes_indices = negative_indices_shuffled[:total_num_of_negative_boxes_per_image]
+
+            positive_cubes = pred_cubes.tensor[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
+            negative_cubes = pred_cubes.tensor[negative_cubes_indices[:, 0], negative_cubes_indices[:, 1]]
+
+            chosen_cubes = torch.cat([positive_cubes, negative_cubes], dim=0).unsqueeze(1)
+
+            positive_scores = all_scores[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
+
+            negative_scores = all_scores[negative_cubes_indices[:, 0], negative_cubes_indices[:, 1]]
+            chosen_cubes_scores = torch.cat([positive_scores, negative_scores], dim=0)
+
+            chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes, chosen_cubes_scores), Ks_scaled))
+            exit()
             cube_features = self.cube_pooler([combined_features], [chosen_boxes]).flatten(1)
             pred_iou2d_scores = self.mlp(cube_features).flatten()
             
-            loss = F.mse_loss(pred_iou2d_scores, chosen_cubes.scores, reduction='mean')
+            loss = F.mse_loss(pred_iou2d_scores, chosen_cubes_scores, reduction='mean')
 
             return None, loss
     
