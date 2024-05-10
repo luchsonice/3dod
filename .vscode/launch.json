@@ -101,7 +101,7 @@
             "program": "tools/eval_boxes.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--config-file", "configs/BoxNet.yaml", "OUTPUT_DIR", "output/BoxNet_gt"]
+            "args": ["--config-file", "configs/BoxNet.yaml", "OUTPUT_DIR", "output/BoxNet_gt", "TRAIN.pseudo_gt", "learn"]
         },
         {
             "name": "train score",
