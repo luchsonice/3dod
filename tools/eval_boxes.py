@@ -479,7 +479,7 @@ def do_train(cfg, model):
     # this controls the flow of the program in the model class
     model.train()
     for dataset_name in dataset_names:
-        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=1)
+        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=4)
 
         total = len(data_loader)  # inference data loader must have a fixed length
 
