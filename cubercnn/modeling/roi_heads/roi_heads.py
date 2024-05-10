@@ -9,7 +9,6 @@ from dataclasses import dataclass
 import logging
 
 import numpy as np
-import pickle as pkl
 
 from typing import Dict, List, Tuple
 import torch
@@ -27,6 +26,7 @@ from detectron2.modeling.roi_heads import (
     StandardROIHeads, ROI_HEADS_REGISTRY, select_foreground_proposals,
 )
 from detectron2.modeling.poolers import ROIPooler
+from detectron2.layers import ROIAlign
 import ProposalNetwork.proposals.proposals as proposals
 from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation
 from ProposalNetwork.utils.conversions import cube_to_box, cubes_to_box
@@ -526,7 +526,7 @@ class ROIHeads_Score(StandardROIHeads):
     
     @classmethod
     def _init_cube_head(self, cfg, input_shape: Dict[str, ShapeSpec]):
-        pooler_scales = (1.0,)
+        pooler_scales = (1/32,)#(1.0,)
         pooler_resolution = cfg.MODEL.ROI_CUBE_HEAD.POOLER_RESOLUTION 
         pooler_sampling_ratio = cfg.MODEL.ROI_CUBE_HEAD.POOLER_SAMPLING_RATIO
         pooler_type = cfg.MODEL.ROI_CUBE_HEAD.POOLER_TYPE
@@ -539,7 +539,7 @@ class ROIHeads_Score(StandardROIHeads):
         )
 
         # TODO: make the sizes configurable
-        res = 7*7*512
+        res = pooler_resolution*pooler_resolution*512
         mlp = nn.Sequential(
             nn.Linear(res, 256),
             nn.ReLU(),
@@ -571,7 +571,6 @@ class ROIHeads_Score(StandardROIHeads):
             
             # Choose boxes
             all_scores = pred_cubes.scores
-            all_scores = torch.rand(pred_cubes.num_instances, 1000)
 
             threshold = 0.5
             positive_mask = all_scores > threshold
@@ -603,13 +602,14 @@ class ROIHeads_Score(StandardROIHeads):
             chosen_cubes = torch.cat([positive_cubes, negative_cubes], dim=0).unsqueeze(1)
 
             positive_scores = all_scores[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
-
             negative_scores = all_scores[negative_cubes_indices[:, 0], negative_cubes_indices[:, 1]]
             chosen_cubes_scores = torch.cat([positive_scores, negative_scores], dim=0)
 
-            chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes, chosen_cubes_scores), Ks_scaled))
-            exit()
+            chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes, chosen_cubes_scores.unsqueeze(1)), Ks_scaled))
+
             cube_features = self.cube_pooler([combined_features], [chosen_boxes]).flatten(1)
+            print(cube_features.shape)
+
             pred_iou2d_scores = self.mlp(cube_features).flatten()
             
             loss = F.mse_loss(pred_iou2d_scores, chosen_cubes_scores, reduction='mean')
