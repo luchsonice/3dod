@@ -487,7 +487,7 @@ def do_train(cfg, model):
             cubes = model(inputs, segmentor, experiment_type)
             input_ = inputs[0]
             img_id = input_['image_id']
-            torch.save(cubes.cpu(), f'datasets/proposals_{cfg.TRAIN.pseudo_gt}/{img_id}.pt')
+            torch.save(cubes.to('cpu'), f'datasets/proposals/proposals_{cfg.TRAIN.pseudo_gt}/{img_id}.pt')
 
     return True
 
