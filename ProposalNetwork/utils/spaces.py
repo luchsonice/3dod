@@ -131,6 +131,8 @@ class Cubes:
     def __init__(self,tensor: torch.Tensor, scores=None, labels=None) -> None:
 
         # score and label are meant as auxiliary information
+        if scores is not None:
+            assert scores.ndim == 2, f"scores.shape must be (n_instances, n_proposals), but was {scores.shape}" 
         self.scores = scores
         self.labels = labels
         self.num_instances = tensor.size(0)
@@ -229,7 +231,11 @@ class Cubes:
     
     def to(self, device: torch.device):
         # Cubes are assumed float32 and does not support to(dtype)
-        return Cubes(self.tensor.to(device=device))
+        if isinstance(self.scores, torch.Tensor):
+            self.scores = self.scores.to(device=device)
+        if isinstance(self.labels, torch.Tensor):
+            self.labels = self.labels.to(device=device)
+        return Cubes(self.tensor.to(device=device), self.scores, self.labels)
     
     def __getitem__(self, item) -> "Cubes":
         """

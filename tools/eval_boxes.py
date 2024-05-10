@@ -479,7 +479,7 @@ def do_train(cfg, model):
     # this controls the flow of the program in the model class
     model.train()
     for dataset_name in dataset_names:
-        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=1)
+        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=4)
 
         total = len(data_loader)  # inference data loader must have a fixed length
 
@@ -487,7 +487,7 @@ def do_train(cfg, model):
             cubes = model(inputs, segmentor, experiment_type)
             input_ = inputs[0]
             img_id = input_['image_id']
-            torch.save(cubes.cpu(), f'datasets/proposals_{cfg.TRAIN.pseudo_gt}/{img_id}.pt')
+            torch.save(cubes.to('cpu'), f'datasets/proposals/proposals_{cfg.TRAIN.pseudo_gt}/{img_id}.pt')
 
     return True
 
