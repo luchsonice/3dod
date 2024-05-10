@@ -131,8 +131,8 @@ class DatasetMapper3D(DatasetMapper):
             else:
                 dataset_dict["ground_map"] = None
         elif self.mode == 'load_proposals':
-            with open(f"datasets/proposals/{dataset_dict['image_id']}", 'rb') as f:
-                proposals = pickle.load(f)
+            f = f"datasets/proposals/proposals_learn/{dataset_dict['image_id']}.pkl"
+            proposals = torch.load(f, map_location=torch.device('cpu'))
             dataset_dict["proposals"] = proposals
                                             
 
