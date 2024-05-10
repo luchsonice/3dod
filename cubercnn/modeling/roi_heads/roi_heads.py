@@ -403,7 +403,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             pred_cubes, many_pred_boxes, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec)
             for i, (gt_box, pred_boxes) in enumerate(zip(gt_boxes, many_pred_boxes)):
                 IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes)
-                pred_cubes.scores = IoU2D_scores
+                pred_cubes.scores[i] = IoU2D_scores
 
             if experiment_type['pseudo_gt'] == 'learn':
                 return pred_cubes
@@ -567,8 +567,7 @@ class ROIHeads_Score(StandardROIHeads):
             balance = 4
             total_num_of_positive_boxes_per_image = int(total_num_of_boxes_per_image / balance)
             total_num_of_negative_boxes_per_image = int(((balance-1) * total_num_of_boxes_per_image)/balance)
-            print(pred_cubes.scores)
-            exit()
+            
             # Choose boxes
             positive_cubes = 1
             negative_cubes = 1
