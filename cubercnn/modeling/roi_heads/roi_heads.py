@@ -544,7 +544,7 @@ class ROIHeads_Score(StandardROIHeads):
             nn.Linear(res, 256),
             nn.ReLU(),
             nn.Linear(256, 1),
-            nn.ReLU(),
+            nn.Sigmoid(),
         )
     
         return {'cube_pooler': cube_pooler,
@@ -604,6 +604,7 @@ class ROIHeads_Score(StandardROIHeads):
             positive_scores = all_scores[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
             negative_scores = all_scores[negative_cubes_indices[:, 0], negative_cubes_indices[:, 1]]
             chosen_cubes_scores = torch.cat([positive_scores, negative_scores], dim=0)
+            binary_chosen_cubes_scores = (chosen_cubes_scores > 0.5).float()
 
             chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes, chosen_cubes_scores.unsqueeze(1)), Ks_scaled))
 
@@ -611,8 +612,10 @@ class ROIHeads_Score(StandardROIHeads):
             print(cube_features.shape)
 
             pred_iou2d_scores = self.mlp(cube_features).flatten()
-            
-            loss = F.mse_loss(pred_iou2d_scores, chosen_cubes_scores, reduction='mean')
+
+            criterion = nn.BCELoss()
+            loss = criterion(pred_iou2d_scores, binary_chosen_cubes_scores)
+            #loss = F.mse_loss(pred_iou2d_scores, chosen_cubes_scores, reduction='mean')
 
             return None, loss
     
