@@ -21,7 +21,6 @@ from detectron2.engine import (
     default_setup, 
 )
 from detectron2.utils.logger import setup_logger
-from rich.progress import track
 
 from cubercnn.data.dataset_mapper import DatasetMapper3D
 
