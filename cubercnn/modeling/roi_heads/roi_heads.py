@@ -270,15 +270,17 @@ class ROIHeads_Boxer(StandardROIHeads):
         '''wrap propose'''
         reference_box = gt_boxes
         if proposal_function == 'random':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_random(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, K, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+            pred_cubes, stats_instance, stats_ranges = proposals.propose_random(reference_box, None, None, None, None, number_of_proposals=number_of_proposals)
         elif proposal_function == 'z':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_z(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, K, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+            pred_cubes, stats_instance, stats_ranges = proposals.propose_z(reference_box, depth_maps.tensor.squeeze(), None, None, None, number_of_proposals=number_of_proposals)
         elif proposal_function == 'xy':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_xy_patch(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, K, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+            pred_cubes, stats_instance, stats_ranges = proposals.propose_xy_patch(reference_box, depth_maps.tensor.squeeze(), None, im_shape, None, number_of_proposals=number_of_proposals)
         elif proposal_function == 'dim':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_random_dim(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, K, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+            pred_cubes, stats_instance, stats_ranges = proposals.propose_random_dim(reference_box, depth_maps.tensor.squeeze(), None, None, K, number_of_proposals=number_of_proposals)
         elif proposal_function == 'rotation':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_random_rotation(reference_box, depth_maps.tensor.cpu().squeeze(), priors, im_shape, K, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+            pred_cubes, stats_instance, stats_ranges = proposals.propose_random_rotation(reference_box, depth_maps.tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals)
+        elif proposal_function == 'aspect':
+            pred_cubes, stats_instance, stats_ranges = proposals.propose_aspect_ratio(reference_box, depth_maps.tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals)
         else:
             pred_cubes, stats_instance, stats_ranges = proposals.propose(reference_box, depth_maps.tensor.squeeze(), priors, im_shape, K, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
         
@@ -419,7 +421,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                     score_to_use = combined_score
                     highest_score = torch.argmax(score_to_use)
                     pred_cube = pred_cubes[i,highest_score]
-                    pred_cubes_out.scores[i] = score_to_use[highest_score]
+                    pred_cubes_out.scores[i] = torch.as_tensor(score_to_use[highest_score])
                     pred_cubes_out.tensor[i] = pred_cube.tensor[0]
                 return pred_cubes_out
 
@@ -438,7 +440,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 score_to_use = combined_score
                 highest_score = torch.argmax(score_to_use)
                 pred_cube = pred_cubes[i,highest_score]
-                pred_cubes_out.scores[i] = score_to_use[highest_score]
+                pred_cubes_out.scores[i] = torch.as_tensor(score_to_use[highest_score])
                 pred_cubes_out.tensor[i] = pred_cube.tensor[0]
         else:
             assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
@@ -451,7 +453,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
                 # scoring
                 IoU2D_scores = score_iou(cubes_to_box(gt_cubes[i], Ks_scaled_per_box)[0], pred_boxes[i])
-                point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground), pred_cubes[i])
+                point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground).to(pred_cubes.device), pred_cubes[i])
                 segment_scores = score_segmentation(mask_per_image[i][0], pred_cubes[i].get_bube_corners(Ks_scaled_per_box))
                 dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0])
                 combined_score = np.array(IoU2D_scores)*np.array(dim_scores)*np.array(segment_scores)
@@ -468,7 +470,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 highest_score = np.argmax(score_to_use)
                 pred_cube = pred_cubes[i,highest_score]
                 gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
-                pred_cubes_out.scores[i] = score_to_use[highest_score]
+                pred_cubes_out.scores[i] = torch.as_tensor(score_to_use[highest_score])
                 pred_cubes_out.tensor[i] = pred_cube.tensor[0]
 
                 # stats

@@ -30,7 +30,6 @@ from detectron2.engine import (
 )
 from detectron2.utils.logger import setup_logger
 import torch.nn as nn
-# from rich.progress import track
 from tqdm import tqdm
 import pickle
 
@@ -103,8 +102,7 @@ def inference_on_dataset(model, data_loader, segmentor, experiment_type, proposa
             stack.enter_context(inference_context(model))
         stack.enter_context(torch.no_grad())
 
-        for idx, inputs in track(enumerate(data_loader), description="Average Precision", total=total):
-            logger.info("Image {}".format(idx))
+        for idx, inputs in tqdm(enumerate(data_loader), desc="Average Precision", total=total):
             outputs = model(inputs, segmentor, experiment_type, proposal_function)
             for input, output in zip(inputs, outputs):
 
@@ -125,7 +123,7 @@ def inference_on_dataset(model, data_loader, segmentor, experiment_type, proposa
 
     return inference_json
 
-def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
+def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, proposal_function):
         
     total = len(data_loader)  # inference data loader must have a fixed length
 
@@ -135,8 +133,9 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         stack.enter_context(torch.no_grad())
 
         outputs = []
-        for i, inputs in track(enumerate(data_loader), description="Mean average best overlap plots", total=total):
-            output = model(inputs, segmentor, experiment_type)
+        for i, inputs in tqdm(enumerate(data_loader), desc="Mean average best overlap plots", total=total):
+            if i > 1: break
+            output = model(inputs, segmentor, experiment_type, proposal_function)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off, stats_off_impro
             if output is not None:
                 outputs.append(output)
@@ -246,7 +245,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type):
         
         # ## for vis
         d_iter = iter(data_loader)
-        for i , _ in track(enumerate(outputs), description="Plotting every single image", total=len(outputs)):
+        for i , _ in tqdm(enumerate(outputs), desc="Plotting every single image", total=len(outputs)):
             p_info = outputs[i][0]
             pred_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[label] for label in p_info.pred_cubes.labels.numpy()]
             box_size = p_info.pred_cubes.num_instances
@@ -353,10 +352,10 @@ def do_test(cfg, model, iteration='final', storage=None):
 
 
         # we need the dataset mapper to get 
-        data_mapper = DatasetMapper3D(cfg, is_train=False, mode='get_depth_map')
+        data_mapper = DatasetMapper3D(cfg, is_train=False, mode='get_depth_maps')
         data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
 
-        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, batch_size=cfg.SOLVER.IMS_PER_BATCH, num_workers=1)
+        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, batch_size=cfg.SOLVER.IMS_PER_BATCH, num_workers=2)
 
         experiment_type = {}
 
@@ -525,7 +524,7 @@ def setup(args):
     # filter_ = True if cfg.PLOT.EVAL == 'MABO' else False
     for dataset_name in dataset_names_test:
         if not(dataset_name in cfg.DATASETS.TRAIN):
-            # TODO: empties should not be filtering in test normally, or maybe they should??
+            # empties should be filtering in test normally
             simple_register(dataset_name, filter_settings, filter_empty=True)
     
     return cfg

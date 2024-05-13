@@ -13,7 +13,6 @@ from detectron2.engine import (
 )
 from detectron2.utils.logger import setup_logger
 import torch.nn as nn
-from rich.progress import track
 import pickle
 
 from cubercnn.data.dataset_mapper import DatasetMapper3D

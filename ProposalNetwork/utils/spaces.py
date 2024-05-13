@@ -161,6 +161,10 @@ class Cubes:
     def rotations(self):
         shape = self.tensor.shape
         return self.tensor[:, :, 6:].reshape(shape[0],shape[1], 3, 3)
+    
+    @property
+    def device(self):
+        return self.tensor.device
 
     def clone(self) -> "Cubes":
         """

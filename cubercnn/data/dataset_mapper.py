@@ -43,7 +43,7 @@ class DatasetMapper3D(DatasetMapper):
 
         Args:
             is_train: whether it's used in training or inference
-            mode: 'get_depth_maps' or 'load_proposals'
+            mode: 'get_depth_maps' (default) or 'load_proposals'
             augmentations: a list of augmentations or deterministic transforms to apply
             image_format: an image format supported by :func:`detection_utils.read_image`.
             use_instance_mask: whether to process instance segmentation annotations, if available
@@ -75,7 +75,7 @@ class DatasetMapper3D(DatasetMapper):
         self.mode = mode
 
     @classmethod
-    def from_config(cls, cfg, is_train: bool = True, mode='eval_with_gt'):
+    def from_config(cls, cfg, is_train: bool = True, mode='get_depth_maps'):
         augs = detection_utils.build_augmentation(cfg, is_train)
         if cfg.INPUT.CROP.ENABLED and is_train:
             augs.insert(0, T.RandomCrop(cfg.INPUT.CROP.TYPE, cfg.INPUT.CROP.SIZE))
@@ -116,13 +116,13 @@ class DatasetMapper3D(DatasetMapper):
         transforms = self.augmentations(aug_input)
         image = aug_input.image
 
+        image_shape = image.shape[:2]  # h, w
 
         # dont load ground map and depth map when 
         if self.mode == 'get_depth_maps':
             dp_img = Image.fromarray(np.load(dataset_dict["depth_image_path"])['depth'])
             dp_img = np.array(dp_img.resize(image.shape[:2][::-1], Image.NEAREST))
             dataset_dict["depth_map"] = torch.as_tensor(np.ascontiguousarray(dp_img))
-            image_shape = image.shape[:2]  # h, w
             #  ground image
             if 'ground_image_path' in dataset_dict:
                 ground_img = Image.fromarray(np.load(dataset_dict["ground_image_path"])['mask'])
