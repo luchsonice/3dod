@@ -1,4 +1,13 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates
+import warnings
+
+from cubercnn.data.build import build_detection_train_loader
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_512 in registry")
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_384 in registry")
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_224 in registry")
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_11m_224 in registry")
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_5m_224 in registry")
+
 import logging
 import os
 import torch

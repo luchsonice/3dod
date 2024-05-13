@@ -115,7 +115,6 @@ class DatasetMapper3D(DatasetMapper):
         aug_input = T.AugInput(image)
         transforms = self.augmentations(aug_input)
         image = aug_input.image
-
         image_shape = image.shape[:2]  # h, w
 
         # dont load ground map and depth map when 
@@ -131,7 +130,7 @@ class DatasetMapper3D(DatasetMapper):
             else:
                 dataset_dict["ground_map"] = None
         elif self.mode == 'load_proposals':
-            f = f"datasets/proposals/proposals_learn/{dataset_dict['image_id']}.pkl"
+            f = f"datasets/proposals/proposals_learn/{dataset_dict['image_id']}.pt"
             proposals = torch.load(f, map_location=torch.device('cpu'))
             dataset_dict["proposals"] = proposals
                                             
