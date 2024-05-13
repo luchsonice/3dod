@@ -664,10 +664,8 @@ class ScoreNet(nn.Module):
             # the backbone is actually a FPN, where the DLA model is the bottom-up structure.
             # FPN: https://arxiv.org/abs/1612.03144v2
             
-            # images_raw are normalised to [0,1] and not resized here
             pred_o = self.depth_model(images_raw.tensor.float()/255.0)
             d_features = pred_o['depth_features']
-
             # backbone and proposal generator only work on 2D images and annotations.
             features = self.backbone(images.tensor)
             img_features = features['p5']
@@ -683,8 +681,7 @@ class ScoreNet(nn.Module):
         detected_instances: Optional[List[Instances]] = None, do_postprocess: bool = True):
         assert not self.training
 
-        # must apply the same preprocessing to both the image, the depth map, and the mask
-        # except don't normalise the input for the segmentation method
+        # must apply the same preprocessing to both the image, the depth map
         images = self.preprocess_image(batched_inputs, img_type='image', convert=False)
         images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
        
@@ -708,10 +705,6 @@ class ScoreNet(nn.Module):
                 gt_instances = None
             features, proposals = None, gt_instances
 
-        # is it necessary to resize images back???
-
-        # use the mask and the 2D box to predict the 3D box
-        # proposals are ground truth for MABO plots and predictions for AP plots
         results = self.roi_heads(images, images_raw, proposals, Ks, im_scales_ratio, combined_features=None)
         return results
     

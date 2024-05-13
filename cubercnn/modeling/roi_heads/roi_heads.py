@@ -607,12 +607,14 @@ class ROIHeads_Score(StandardROIHeads):
             binary_chosen_cubes_scores = (chosen_cubes_scores > 0.5).float()
 
             chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes, chosen_cubes_scores.unsqueeze(1)), Ks_scaled))
-
+            
+            # Cube Pooler
             cube_features = self.cube_pooler([combined_features], [chosen_boxes]).flatten(1)
-            print(cube_features.shape)
 
+            # MLP
             pred_iou2d_scores = self.mlp(cube_features).flatten()
 
+            # Loss
             criterion = nn.BCELoss()
             loss = criterion(pred_iou2d_scores, binary_chosen_cubes_scores)
             #loss = F.mse_loss(pred_iou2d_scores, chosen_cubes_scores, reduction='mean')

@@ -1,12 +1,12 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates
 import warnings
 
-from cubercnn.data.build import build_detection_train_loader
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_512 in registry")
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_384 in registry")
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_224 in registry")
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_11m_224 in registry")
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_5m_224 in registry")
+
 
 import logging
 import os
@@ -21,25 +21,19 @@ from detectron2.engine import (
     default_setup, 
 )
 from detectron2.utils.logger import setup_logger
-import torch.nn as nn
 from rich.progress import track
-import pickle
 
 from cubercnn.data.dataset_mapper import DatasetMapper3D
 
 logger = logging.getLogger("scoring")
 
 from cubercnn.config import get_cfg_defaults
-from cubercnn.evaluation import (
-    Omni3DEvaluationHelper,
-)
 from cubercnn.modeling.meta_arch import build_model
 from cubercnn import util, vis, data
 # even though this import is unused, it initializes the backbone registry
 from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
 
 # Below imports followed with do_train
-import torch.distributed as dist
 from detectron2.engine import (
     default_argument_parser, 
     default_setup, 
@@ -67,7 +61,6 @@ from tqdm import tqdm
 
 
 def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=False):
-
     max_iter = cfg.SOLVER.MAX_ITER
     do_eval = cfg.TEST.EVAL_PERIOD > 0
 
@@ -125,11 +118,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             optimizer.step()
             storage.put_scalar("lr", optimizer.param_groups[0]["lr"], smoothing_hint=False)
             scheduler.step()
-
-            # if (do_eval and ((iteration + 1) % cfg.TEST.EVAL_PERIOD) == 0 and iteration != (max_iter - 1)):
-            #     logger.info('Starting test for iteration {}'.format(iteration+1))
-            #     do_test(cfg, model, iteration=iteration+1, storage=storage)
-                
+    
             periodic_checkpointer.step(iteration)
 
             # logging stuff 
@@ -145,7 +134,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     
     # success
     return True
-
+"""
 def do_test(cfg, model, iteration='final', storage=None):
         
     filter_settings = data.get_filter_settings_from_cfg(cfg)    
@@ -159,13 +148,11 @@ def do_test(cfg, model, iteration='final', storage=None):
     output_folder = os.path.join(cfg.OUTPUT_DIR, "inference", 'iter_{}'.format(iteration))
 
     for dataset_name in dataset_names_test:
-        """
-        Cycle through each dataset and test them individually.
-        This loop keeps track of each per-image evaluation result, 
-        so that it doesn't need to be re-computed for the collective.
-        """
+        #Cycle through each dataset and test them individually.
+        #This loop keeps track of each per-image evaluation result, 
+        #so that it doesn't need to be re-computed for the collective.
 
-        '''
+        #'''
         Distributed Cube R-CNN inference
         '''
         dataset_paths = [os.path.join('datasets', 'Omni3D', name + '.json') for name in cfg.DATASETS.TEST]
@@ -253,6 +240,7 @@ def do_test(cfg, model, iteration='final', storage=None):
         Summarize each Omni3D Evaluation metric
         '''  
         eval_helper.summarize_all()
+"""
 
 def setup(args):
     """
@@ -318,9 +306,6 @@ def main(args):
     # build the  model.
     model = build_model(cfg)
 
-    # skip straight to eval mode
-    # load the saved model if using eval boxes
-    
     filter_settings = data.get_filter_settings_from_cfg(cfg)
 
     # setup and join the data.
