@@ -43,7 +43,7 @@ class DatasetMapper3D(DatasetMapper):
 
         Args:
             is_train: whether it's used in training or inference
-            mode: 'get_depth_maps' (default) or 'load_proposals'
+            mode: 'get_depth_maps' (default), 'load_proposals', 'cube_rcnn'
             augmentations: a list of augmentations or deterministic transforms to apply
             image_format: an image format supported by :func:`detection_utils.read_image`.
             use_instance_mask: whether to process instance segmentation annotations, if available

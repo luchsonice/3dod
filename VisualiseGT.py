@@ -2,6 +2,7 @@ import os
 import random
 from io import StringIO
 
+from detectron2.utils.visualizer import Visualizer
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -18,11 +19,14 @@ from detectron2.structures.boxes import BoxMode
 from detectron2.utils.logger import setup_logger
 
 
-def load_gt(dataset='SUNRGBD', mode='test', single_im=True):
+def load_gt(dataset='SUNRGBD', mode='test', single_im=True, filter=False):
 
     # we can do this block of code to get the categories reduced number of categories in the sunrgbd dataset as there normally is 83 categories, however we only work with 38.
     config_file = 'configs/Base_Omni3D.yaml'
-    cfg, filter_settings = get_config_and_filter_settings(config_file)
+    if filter:
+        cfg, filter_settings = get_config_and_filter_settings(config_file)
+    else:
+        filter_settings = None
 
     if mode == 'test':
         dataset_paths_to_json = ['datasets/Omni3D/'+dataset+'_test.json']
@@ -38,8 +42,8 @@ def load_gt(dataset='SUNRGBD', mode='test', single_im=True):
     imgIds = dataset.getImgIds()
     imgs = dataset.loadImgs(imgIds)
     if single_im:
-        img = random.choice(imgs)
-        # img = imgs[1]
+        # img = random.choice(imgs)
+        img = imgs[730]
         annIds = dataset.getAnnIds(imgIds=img['id'])
     else:
         # get all annotations
@@ -53,17 +57,30 @@ def load_gt(dataset='SUNRGBD', mode='test', single_im=True):
     center_cams = []
     dimensions_all = []
     cats = []
-    for instance in range(len(anns)):
-        R_cams.append(anns[instance]['R_cam'])
-        center_cams.append(anns[instance]['center_cam'])
-        dimensions_all.append(anns[instance]['dimensions'])
-        cats.append(anns[instance]['category_name'])
+    bboxes = []
+    for instance in anns:
+        if 'bbox2D_tight' in instance and instance['bbox2D_tight'][0] != -1:
+            bboxes.append(instance['bbox2D_tight']) # boxes are XYXY_ABS by default
+
+        elif 'bbox2D_trunc' in instance and not np.all([val==-1 for val in instance['bbox2D_trunc']]):
+            bboxes.append(instance['bbox2D_trunc']) # boxes are XYXY_ABS by default
+
+        elif 'bbox2D_proj' in instance:
+            bboxes.append(instance['bbox2D_proj']) # boxes are XYXY_ABS by default
+
+        else:
+            continue
+
+        R_cams.append(instance['R_cam'])
+        center_cams.append(instance['center_cam'])
+        dimensions_all.append(instance['dimensions'])
+        cats.append(instance['category_name'])
     
-    return img, R_cams, center_cams, dimensions_all, cats
+    return img, R_cams, center_cams, dimensions_all, cats, bboxes
     
 
 
-def plot_scene(image_path, output_dir, center_cams, dimensions_all, Rs, K, cats, filter_invalid):
+def plot_scene(image_path, output_dir, center_cams, dimensions_all, Rs, K, cats, bboxes):
     # TODO: currently this function does not filter out invalid annotations, but it should have the option to do so.
     # Compute meshes
     meshes = []
@@ -91,28 +108,30 @@ def plot_scene(image_path, output_dir, center_cams, dimensions_all, Rs, K, cats,
 
         util.imwrite(im_drawn_rgb, os.path.join(output_dir, image_name+'_boxes.jpg'))
         util.imwrite(im_topdown, os.path.join(output_dir, image_name+'_novel.jpg'))
+        v_pred = Visualizer(image, None)
+        v_pred = v_pred.overlay_instances(boxes=np.array(bboxes),)
+        util.imwrite(v_pred.get_image(), os.path.join(output_dir, image_name+'_pred_boxes.jpg'))
     else:
         print('No meshes')
         util.imwrite(image, os.path.join(output_dir, image_name+'_boxes.jpg'))
 
 
 
-def show_data(dataset, filter_invalid=False):
+def show_data(dataset, filter_invalid=False, output_dir='output/playground'):
     # Load Image and Ground Truths
-    image, Rs, center_cams, dimensions_all, cats = load_gt(dataset)
+    image, Rs, center_cams, dimensions_all, cats, bboxes = load_gt(dataset, filter=filter_invalid)
 
     # Create Output Directory
-    output_dir = 'output/playground/' + dataset
     util.mkdir_if_missing(output_dir)
     
-    plot_scene(image['file_path'], output_dir, center_cams, dimensions_all, Rs, image['K'], cats, filter_invalid)
+    plot_scene(image['file_path'], output_dir, center_cams, dimensions_all, Rs, image['K'], cats, bboxes)
 
 
 def category_distribution(dataset):
     '''Plot a histogram of the category distribution in the dataset.'''
     # Load Image and Ground Truths
-    image, Rs, center_cams, dimensions_all, cats = load_gt(dataset, mode='train', single_im=False)
-    image_t, Rs_t, center_cams_t, dimensions_all_t, cats_t = load_gt(dataset, mode='test', single_im=False)
+    image, Rs, center_cams, dimensions_all, cats, bboxes = load_gt(dataset, mode='train', single_im=False)
+    image_t, Rs_t, center_cams_t, dimensions_all_t, cats_t, bboxes = load_gt(dataset, mode='test', single_im=False)
 
     output_dir = 'output/figures/' + dataset
     util.mkdir_if_missing(output_dir)
@@ -183,7 +202,8 @@ def spatial_statistics(dataset):
                 anno['bbox2D_tight'][2] *= scale_x
                 anno['bbox2D_tight'][3] *= scale_y
                 # get the centerpoint of the annotation as (x, y)
-                x0, y0, x1, y1 = BoxMode.convert(anno['bbox2D_tight'], BoxMode.XYWH_ABS, BoxMode.XYXY_ABS)
+                # x0, y0, x1, y1 = BoxMode.convert(anno['bbox2D_tight'], BoxMode.XYWH_ABS, BoxMode.XYXY_ABS)
+                x0, y0, x1, y1 = anno['bbox2D_tight']
                 x_m, y_m = int((x0+x1)/2), int((y0+y1)/2)
                 if x_m >= std_image_size[1] or x_m < 0:
                     # print(f'x out of line {x_m}')
@@ -207,6 +227,7 @@ def spatial_statistics(dataset):
     plt.imshow(img, cmap='gray_r', vmin=0, vmax=1)
     plt.xticks([]); plt.yticks([])
     plt.title('Histogram of 2D box centre points')
+    # plt.box(False)
     plt.savefig(os.path.join(output_dir, '2d_histogram.png'),dpi=300, bbox_inches='tight')
     plt.close()
     return
@@ -409,8 +430,8 @@ def vol_over_cat(dataset):
     Errorbarplot of volume of object category
     '''
     # Load Image and Ground Truths
-    image, Rs, center_cams, dimensions_all, cats = load_gt(dataset, mode='train', single_im=False)
-    image_t, Rs_t, center_cams_t, dimensions_all_t, cats_t = load_gt(dataset, mode='test', single_im=False)
+    image, Rs, center_cams, dimensions_all, cats, bboxes = load_gt(dataset, mode='train', single_im=False)
+    image_t, Rs_t, center_cams_t, dimensions_all_t, cats_t, bboxes = load_gt(dataset, mode='test', single_im=False)
 
     output_dir = 'output/figures/' + dataset
     util.mkdir_if_missing(output_dir)
@@ -462,10 +483,11 @@ def vol_over_cat(dataset):
 
     return True
 if __name__ == '__main__':
-    # show_data('SUNRGBD')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
+    # show_data('SUNRGBD', filter_invalid=False, output_dir='output/playground/no_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
+    # show_data('SUNRGBD', filter_invalid=True, output_dir='output/playground/with_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
     # _ = category_distribution('SUNRGBD')
     # AP_vs_no_of_classes('SUNRGBD')
-    # spatial_statistics('SUNRGBD')
+    spatial_statistics('SUNRGBD')
     # AP3D_vs_AP2D('SUNRGBD')
     # init_dataloader()
-    vol_over_cat('SUNRGBD')
+    # vol_over_cat('SUNRGBD')

@@ -134,7 +134,6 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
 
         outputs = []
         for i, inputs in tqdm(enumerate(data_loader), desc="Mean average best overlap plots", total=total):
-            if i > 1: break
             output = model(inputs, segmentor, experiment_type, proposal_function)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off, stats_off_impro
             if output is not None:
@@ -247,7 +246,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         d_iter = iter(data_loader)
         for i , _ in tqdm(enumerate(outputs), desc="Plotting every single image", total=len(outputs)):
             p_info = outputs[i][0]
-            pred_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[label] for label in p_info.pred_cubes.labels.numpy()]
+            pred_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[label] for label in p_info.pred_cubes.labels.cpu().numpy()]
             box_size = p_info.pred_cubes.num_instances
             for x in range(box_size-len(pred_box_classes_names)):
                 pred_box_classes_names.append(f'z={p_info.pred_cubes[x].dimensions[2]}, s={p_info.pred_cubes[x].scores}')
@@ -355,7 +354,7 @@ def do_test(cfg, model, iteration='final', storage=None):
         data_mapper = DatasetMapper3D(cfg, is_train=False, mode='get_depth_maps')
         data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
 
-        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, batch_size=cfg.SOLVER.IMS_PER_BATCH, num_workers=2)
+        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, batch_size=cfg.SOLVER.IMS_PER_BATCH, num_workers=4)
 
         experiment_type = {}
 
@@ -544,7 +543,7 @@ def main(args):
     # wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
 
     priors = None
-    with open('filetransfer/priors.pkl', 'rb') as f:
+    with open('tools/priors.pkl', 'rb') as f:
         priors, _ = pickle.load(f)
 
     category_path = 'output/Baseline_sgd/category_meta.json'

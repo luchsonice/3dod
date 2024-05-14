@@ -54,9 +54,9 @@ def score_segmentation(segmentation_mask, bube_corners):
     segmentation_mask   : Mask
     bube_corners        : List of Lists
     '''
-
-    scores = []
+    bube_corners = bube_corners.to(device=segmentation_mask.device)
     bube_corners = bube_corners.squeeze(0) # remove instance dim
+    scores = torch.zeros(len(bube_corners), device=segmentation_mask.device)
     for i in range(len(bube_corners)):
         bube_mask = np.zeros(segmentation_mask.shape, dtype='uint8')
 
@@ -65,7 +65,7 @@ def score_segmentation(segmentation_mask, bube_corners):
         polygon_points = cv2.convexHull(np.array(bube_corners[i]))
         polygon_points = np.array([polygon_points],dtype=np.int32)
         cv2.fillPoly(bube_mask, polygon_points, 1)
-        scores.append(mask_iou(segmentation_mask[::4,::4], bube_mask[::4,::4])) # TODO I think we should try diving by gt as its unfair in combined
+        scores[i] = mask_iou(segmentation_mask[::4,::4], bube_mask[::4,::4]) # TODO I think we should try diving by gt as its unfair in combined
 
     return scores
 
