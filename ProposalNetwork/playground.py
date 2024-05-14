@@ -111,7 +111,7 @@ depth_patch = depth_image[int(reference_box.x1):int(reference_box.x2),int(refere
 x_points = [1]#, 10, 100]#, 1000, 10000]#, 100000]
 number_of_proposals = x_points[-1]
 
-with open('filetransfer/priors.pkl', 'rb') as f:
+with open('tools/priors.pkl', 'rb') as f:
         priors, Metadatacatalog = pickle.load(f)
 category = gt_instances[image].gt_classes[gt_obj]
 priors_propose = priors['priors_dims_per_cat'][category]

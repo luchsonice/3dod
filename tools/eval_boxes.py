@@ -543,7 +543,7 @@ def main(args):
     # wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
 
     priors = None
-    with open('filetransfer/priors.pkl', 'rb') as f:
+    with open('tools/priors.pkl', 'rb') as f:
         priors, _ = pickle.load(f)
 
     category_path = 'output/Baseline_sgd/category_meta.json'
