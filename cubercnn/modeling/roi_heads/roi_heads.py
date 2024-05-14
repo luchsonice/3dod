@@ -556,7 +556,6 @@ class ROIHeads_Score(StandardROIHeads):
             pooler_type=pooler_type,
         )
 
-        # TODO: make the sizes configurable
         res = pooler_resolution*pooler_resolution*512
         mlp = MLP(res, 1)
     
@@ -579,7 +578,7 @@ class ROIHeads_Score(StandardROIHeads):
         if self.training:
             boxes = []
             total_num_of_boxes_per_image = 64
-            balance = 2
+            balance = 2   # 1/this number as ratio of positives
             y_true = torch.zeros(total_num_of_boxes_per_image, len(im_scales_ratio), device=combined_features.device)
             for i, pred_cube in enumerate(pred_cubes):
                 total_num_of_positive_boxes_per_image = int(total_num_of_boxes_per_image / balance)

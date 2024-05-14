@@ -111,16 +111,10 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
         
             # backward and step
             # simulate a batch size
-            if cfg.SOLVER.IMS_PER_BATCH == 1:
-                nth = 5
-            else:
-                nth = 1
-            
-            if iteration % nth == 0:
-                loss.backward()
-                optimizer.step()
-                optimizer.zero_grad()
-                scheduler.step()
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            scheduler.step()
     
             storage.put_scalar("lr", optimizer.param_groups[0]["lr"], smoothing_hint=False)
             periodic_checkpointer.step(iteration)
