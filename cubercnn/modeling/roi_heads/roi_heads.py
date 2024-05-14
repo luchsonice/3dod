@@ -528,7 +528,7 @@ class ROIHeads_Score(StandardROIHeads):
     
     @classmethod
     def _init_cube_head(self, cfg, input_shape: Dict[str, ShapeSpec]):
-        pooler_scales = (1/32,)#(1.0,)
+        pooler_scales = (1/32,)#(1.0,) # TODO Because stride according to input_shape in p5 is 32. Hmm gives different kind of errors (memory/ too large vector size) depending on value)
         pooler_resolution = cfg.MODEL.ROI_CUBE_HEAD.POOLER_RESOLUTION 
         pooler_sampling_ratio = cfg.MODEL.ROI_CUBE_HEAD.POOLER_SAMPLING_RATIO
         pooler_type = cfg.MODEL.ROI_CUBE_HEAD.POOLER_TYPE
@@ -559,7 +559,7 @@ class ROIHeads_Score(StandardROIHeads):
         else:
             pred_instances = self._forward_cube(pred_cubes, instances, Ks, im_scales_ratio, combined_features)
             return pred_instances
-        
+    
     def _forward_cube(self, pred_cubes, instances, Ks, im_scales_ratio, combined_features):
         Ks_scaled = (Ks[0]/im_scales_ratio[0]).to(combined_features.device)
         Ks_scaled[-1, -1] = 1
@@ -609,12 +609,15 @@ class ROIHeads_Score(StandardROIHeads):
             binary_chosen_cubes_scores = (chosen_cubes_scores > 0.5).float()
 
             chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes, chosen_cubes_scores.unsqueeze(1)), Ks_scaled))
-
+            
+            # Cube Pooler
+            #print(sum(sum(sum(sum(combined_features)))))
             cube_features = self.cube_pooler([combined_features], [chosen_boxes]).flatten(1)
-            print(cube_features.shape)
-
+            #print(sum(sum(cube_features)))
+            # MLP
             pred_iou2d_scores = self.mlp(cube_features).flatten()
 
+            # Loss
             criterion = nn.BCELoss()
             loss = criterion(pred_iou2d_scores, binary_chosen_cubes_scores)
             #loss = F.mse_loss(pred_iou2d_scores, chosen_cubes_scores, reduction='mean')
