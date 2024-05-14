@@ -203,7 +203,7 @@ def propose_aspect_ratio(reference_box, depth_image, priors, im_shape, K, number
     # Dimensions
     w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), 0.05, 2)
     #
-    ratios = [0.33, 0.5, 0.66, 1, 1.33, 1.5, 1.67, 2]
+    ratios = [0.33, 0.5, 0.66, 1, 1.33, 1.5, 1.67, 2, 3]
     h = torch.zeros_like(w)
     l = torch.zeros_like(w)
     for i in range(number_of_instances):
