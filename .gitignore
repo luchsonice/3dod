@@ -13,6 +13,8 @@ hpc_logs/
 depth/checkpoints/
 ProposalNetwork/proposals/network_out.pkl
 .vscode/settings.json
+submit.sh
+profiling/
 
 # filetypes
 *.pyc
