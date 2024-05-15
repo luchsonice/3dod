@@ -511,10 +511,10 @@ class MLP(nn.Module):
             nn.ReLU(),
             nn.Linear(256, out_features),
         )
-        self.softmax = nn.Softmax(dim=1)
+        self.sigmoid = nn.Sigmoid()
     def forward(self, x):
         x = self.mlp(x)
-        x = self.softmax(x)
+        x = self.sigmoid(x)
         x = x.flatten()
         return x
 
@@ -545,7 +545,7 @@ class ROIHeads_Score(StandardROIHeads):
     
     @classmethod
     def _init_cube_head(self, cfg, input_shape: Dict[str, ShapeSpec]):
-        pooler_scales = (1/32,) # TODO Because stride according to input_shape in p5 is 32. Hmm gives different kind of errors (memory/ too large vector size) depending on value. Should features be transposed? And the interpolation!? puuh
+        pooler_scales = (1/32,) # Because stride according to input_shape in p5 is 32.
         pooler_resolution = cfg.MODEL.ROI_CUBE_HEAD.POOLER_RESOLUTION 
         pooler_sampling_ratio = cfg.MODEL.ROI_CUBE_HEAD.POOLER_SAMPLING_RATIO
         pooler_type = cfg.MODEL.ROI_CUBE_HEAD.POOLER_TYPE
@@ -579,12 +579,11 @@ class ROIHeads_Score(StandardROIHeads):
         if self.training:
             boxes = []
             total_num_of_boxes_per_image = 64
-            balance = 2   # 1/this number as ratio of positives
+            balance = 4   # 1/this number as ratio of positives
+            total_num_of_positive_boxes_per_image = int(total_num_of_boxes_per_image / balance)
+            total_num_of_negative_boxes_per_image = int(((balance-1) * total_num_of_boxes_per_image)/balance)
             y_true = torch.zeros(total_num_of_boxes_per_image, len(im_scales_ratio), device=combined_features.device)
             for i, pred_cube in enumerate(pred_cubes):
-                total_num_of_positive_boxes_per_image = int(total_num_of_boxes_per_image / balance)
-                total_num_of_negative_boxes_per_image = int(((balance-1) * total_num_of_boxes_per_image)/balance)
-                
                 # Choose boxes
                 all_scores = pred_cube.scores
 
