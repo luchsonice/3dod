@@ -529,7 +529,7 @@ class ROIHeads_Score(StandardROIHeads):
     
     @classmethod
     def _init_cube_head(self, cfg, input_shape: Dict[str, ShapeSpec]):
-        pooler_scales = (1/32,)#(1.0,) # TODO Because stride according to input_shape in p5 is 32. Hmm gives different kind of errors (memory/ too large vector size) depending on value)
+        pooler_scales = (1/32,) # TODO Because stride according to input_shape in p5 is 32. Hmm gives different kind of errors (memory/ too large vector size) depending on value. Should features be transposed? And the interpolation!? puuh
         pooler_resolution = cfg.MODEL.ROI_CUBE_HEAD.POOLER_RESOLUTION 
         pooler_sampling_ratio = cfg.MODEL.ROI_CUBE_HEAD.POOLER_SAMPLING_RATIO
         pooler_type = cfg.MODEL.ROI_CUBE_HEAD.POOLER_TYPE
