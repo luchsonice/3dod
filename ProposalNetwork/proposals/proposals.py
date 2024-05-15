@@ -207,12 +207,10 @@ def propose_aspect_ratio(reference_box, depth_image, priors, im_shape, K, number
     h = torch.zeros_like(w)
     l = torch.zeros_like(w)
     for i in range(number_of_instances):
-        ratio1, ratio2 = torch.randperm(len(ratios))[0:2]
+        # must
+        ratio1, ratio2 = torch.randperm(len(ratios))[0], torch.randperm(len(ratios))[0]
         h[i] = w[i] * ratios[ratio1]
         l[i] = w[i] * ratios[ratio2]
-
-    # h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), 0.05, 2)
-    # l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), 0.05, 2)
 
     # Finish center
     # x

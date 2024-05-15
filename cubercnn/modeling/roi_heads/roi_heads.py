@@ -510,10 +510,11 @@ class MLP(nn.Module):
             nn.Linear(in_features, 256),
             nn.ReLU(),
             nn.Linear(256, out_features),
-            nn.Sigmoid(),
         )
+        self.softmax = nn.Softmax(dim=1)
     def forward(self, x):
         x = self.mlp(x)
+        x = self.softmax(x)
         x = x.flatten()
         return x
 
