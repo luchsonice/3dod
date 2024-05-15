@@ -1,10 +1,10 @@
 _BASE_: "Base.yaml"
 SOLVER:
   TYPE: "sgd"
-  IMS_PER_BATCH: 2
-  BASE_LR: 0.001
-  STEPS: (2000, 3500)
-  MAX_ITER: 5000
+  IMS_PER_BATCH: 4
+  BASE_LR: 0.0001
+  STEPS: (1248, 1249)
+  MAX_ITER: 1250 #4972
   WARMUP_ITERS: 0 
 TEST:
   EVAL_PERIOD: 1000
@@ -21,5 +21,5 @@ MODEL:
     NAME: 'CubeHead_vanilla' # name of the 3d head
     DIMS_PRIORS_ENABLED: False
     POOLER_TYPE: 'ROIAlignV2'
-    POOLER_RESOLUTION: 7
+    POOLER_RESOLUTION: 1
   META_ARCHITECTURE: 'ScoreNet' # name of the overall arch that calls the ROI_HEADS.NAME and ROI_CUBE_HEAD.NAME
