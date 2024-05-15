@@ -673,6 +673,7 @@ class ScoreNet(nn.Module):
             d_features = F.interpolate(d_features, size=img_features.shape[-2:], mode='bilinear', align_corners=False)
             
             combined_features = torch.cat((img_features, d_features), dim=1)
+            combined_features = torch.transpose(combined_features,2,3)
 
             instances3d, results, acc = self.roi_heads(cubes, gt_instances, Ks, im_scales_ratio, combined_features)
             return instances3d, results, acc
