@@ -76,7 +76,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     # create the dataloader
     data_mapper = DatasetMapper3D(cfg, is_train=False, mode='load_proposals')
     dataset_name = cfg.DATASETS.TRAIN[0]
-    data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=1)
+    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=0)
 
     # give the mapper access to dataset_ids
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
@@ -97,35 +97,34 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
 
     data_iter = iter(data_loader)
     pbar = tqdm(range(start_iter, max_iter), initial=start_iter, total=max_iter, desc="Training", smoothing=0.05)
-
+    
     with EventStorage(start_iter) as storage:
         
         while True:
-
             data = next(data_iter)
             storage.iter = iteration
 
             # forward
-            instances3d, loss = model(data)
-            
+            instances3d, loss, acc = model(data)
             # send loss scalars to tensorboard.
             storage.put_scalars(total_loss=loss)
         
             # backward and step
-            optimizer.zero_grad()
+            # simulate a batch size
             loss.backward()
             optimizer.step()
-            storage.put_scalar("lr", optimizer.param_groups[0]["lr"], smoothing_hint=False)
+            optimizer.zero_grad()
             scheduler.step()
     
+            storage.put_scalar("lr", optimizer.param_groups[0]["lr"], smoothing_hint=False)
             periodic_checkpointer.step(iteration)
 
             # logging stuff 
             pbar.update(1)
-            pbar.set_postfix({"loss": loss.item()})
-            if iteration - start_iter > 5 and ((iteration + 1) % 2 == 0 or iteration == max_iter - 1):
-                for writer in writers:
-                    writer.write()
+            pbar.set_postfix({"loss": loss.item(), "acc": acc.item()})
+            # if iteration - start_iter > 5 and ((iteration + 1) % 2 == 0 or iteration == max_iter - 1):
+            #     for writer in writers:
+            #         writer.write()
             
             iteration += 1
             if iteration >= max_iter:
@@ -286,7 +285,7 @@ def main(args):
     
     name = f'learned score {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
     
-    wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='offline')
+    # wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='offline')
 
     category_path = 'output/Baseline_sgd/category_meta.json'
     
@@ -353,7 +352,7 @@ def main(args):
     
     # DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(cfg.MODEL.WEIGHTS, resume=False)
 
-    return do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src)
+    return do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=args.resume)
 
 
 if __name__ == "__main__":

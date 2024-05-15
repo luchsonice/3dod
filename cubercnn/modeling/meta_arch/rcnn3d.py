@@ -669,12 +669,13 @@ class ScoreNet(nn.Module):
             # backbone and proposal generator only work on 2D images and annotations.
             features = self.backbone(images.tensor)
             img_features = features['p5']
-            img_features = F.interpolate(img_features, size=d_features.shape[-2:], mode='bilinear', align_corners=False)
+            # we must scale the depth map to the same size as the conv feature, otherwise the scale will not correspond correctly in the roi pooling
+            d_features = F.interpolate(d_features, size=img_features.shape[-2:], mode='bilinear', align_corners=False)
             
             combined_features = torch.cat((img_features, d_features), dim=1)
 
-            instances3d, results = self.roi_heads(cubes, gt_instances, Ks, im_scales_ratio, combined_features)
-            return instances3d, results
+            instances3d, results, acc = self.roi_heads(cubes, gt_instances, Ks, im_scales_ratio, combined_features)
+            return instances3d, results, acc
 
     def inference(self,
         batched_inputs: List[Dict[str, torch.Tensor]],

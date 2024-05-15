@@ -502,6 +502,21 @@ class ROIHeads_Boxer(StandardROIHeads):
                 instances_i.pred_center_2D = instances_i.pred_boxes.get_centers()  
 
             return pred_instances
+        
+class MLP(nn.Module):
+    def __init__(self, in_features, out_features):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(in_features, 256),
+            nn.ReLU(),
+            nn.Linear(256, out_features),
+        )
+        self.softmax = nn.Softmax(dim=1)
+    def forward(self, x):
+        x = self.mlp(x)
+        x = self.softmax(x)
+        x = x.flatten()
+        return x
 
 @ROI_HEADS_REGISTRY.register()
 class ROIHeads_Score(StandardROIHeads):
@@ -509,12 +524,13 @@ class ROIHeads_Score(StandardROIHeads):
 
     @configurable
     def __init__(self, *, 
-                 cube_pooler:nn.Module, mlp:nn.Sequential, 
+                 cube_pooler:nn.Module, mlp:nn.Sequential, criterion,
                  **kwargs, ):
         super().__init__(**kwargs)
 
         self.cube_pooler = cube_pooler
         self.mlp = mlp
+        self.criterion = criterion
 
     @classmethod
     def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec]):
@@ -541,89 +557,84 @@ class ROIHeads_Score(StandardROIHeads):
             pooler_type=pooler_type,
         )
 
-        # TODO: make the sizes configurable
         res = pooler_resolution*pooler_resolution*512
-        mlp = nn.Sequential(
-            nn.Linear(res, 256),
-            nn.ReLU(),
-            nn.Linear(256, 1),
-            nn.Sigmoid(),
-        )
+        mlp = MLP(res, 1)
     
         return {'cube_pooler': cube_pooler,
-                'mlp': mlp}
+                'mlp': mlp,
+                'criterion': nn.BCELoss()}
 
     def forward(self, pred_cubes, instances, Ks, im_scales_ratio, combined_features):
         if self.training:
-            instances_3d, losses = self._forward_cube(pred_cubes, instances, Ks, im_scales_ratio, combined_features)
-            return instances_3d, losses
+            instances_3d, losses, acc = self._forward_cube(pred_cubes, instances, Ks, im_scales_ratio, combined_features)
+            return instances_3d, losses, acc
         else:
-            pred_instances = self._forward_cube(pred_cubes, instances, Ks, im_scales_ratio, combined_features)
+            pred_instances, _, _ = self._forward_cube(pred_cubes, instances, Ks, im_scales_ratio, combined_features)
             return pred_instances
     
     def _forward_cube(self, pred_cubes, instances, Ks, im_scales_ratio, combined_features):
-        Ks_scaled = (Ks[0]/im_scales_ratio[0]).to(combined_features.device)
-        Ks_scaled[-1, -1] = 1
-        pred_cubes = pred_cubes[0] # NOTE Batchsize 1?? Or is this part of the code ment to be as if it's 1? next(data_iter) gives image in one by one
+        Ks_scaled = torch.cat([(K/scale).unsqueeze(0) for K, scale in zip(Ks, im_scales_ratio)]).to(combined_features.device)
+        Ks_scaled[:, -1, -1] = 1
         
         if self.training:
+            boxes = []
             total_num_of_boxes_per_image = 64
-            balance = 4
-            total_num_of_positive_boxes_per_image = int(total_num_of_boxes_per_image / balance)
-            total_num_of_negative_boxes_per_image = int(((balance-1) * total_num_of_boxes_per_image)/balance)
-            
-            # Choose boxes
-            all_scores = pred_cubes.scores
+            balance = 2   # 1/this number as ratio of positives
+            y_true = torch.zeros(total_num_of_boxes_per_image, len(im_scales_ratio), device=combined_features.device)
+            for i, pred_cube in enumerate(pred_cubes):
+                total_num_of_positive_boxes_per_image = int(total_num_of_boxes_per_image / balance)
+                total_num_of_negative_boxes_per_image = int(((balance-1) * total_num_of_boxes_per_image)/balance)
+                
+                # Choose boxes
+                all_scores = pred_cube.scores
 
-            threshold = 0.5
-            positive_mask = all_scores > threshold
-            negative_mask = all_scores < threshold
+                threshold = 0.5
+                positive_mask = all_scores > threshold
+                negative_mask = all_scores <= threshold
 
-            # Get indices of positive and negative cubes
-            positive_indices = torch.nonzero(positive_mask, as_tuple=False)
-            negative_indices = torch.nonzero(negative_mask, as_tuple=False)
+                # Get indices of positive and negative cubes
+                positive_indices = torch.nonzero(positive_mask, as_tuple=False)
+                negative_indices = torch.nonzero(negative_mask, as_tuple=False)
 
-            # Randomly shuffle the indices
-            positive_indices_shuffled = positive_indices[torch.randperm(positive_indices.size(0))]
-            negative_indices_shuffled = negative_indices[torch.randperm(negative_indices.size(0))] # TODO check that these are valid permutations (because of 2d)
+                # Randomly shuffle the indices
+                positive_indices_shuffled = positive_indices[torch.randperm(positive_indices.size(0))]
+                negative_indices_shuffled = negative_indices[torch.randperm(negative_indices.size(0))] # TODO check that these are valid permutations (because of 2d)
 
-            # Repeat positive indices if needed to meet the required number
-            num_positive_samples = min(total_num_of_positive_boxes_per_image, positive_indices_shuffled.size(0))
-            num_repeats = total_num_of_positive_boxes_per_image // num_positive_samples
-            remaining_repeats = total_num_of_positive_boxes_per_image % num_positive_samples
+                # Repeat positive indices if needed to meet the required number
+                num_positive_samples = min(total_num_of_positive_boxes_per_image, positive_indices_shuffled.size(0))
+                num_repeats = total_num_of_positive_boxes_per_image // num_positive_samples
+                remaining_repeats = total_num_of_positive_boxes_per_image % num_positive_samples
 
-            positive_cubes_indices = positive_indices_shuffled[:num_positive_samples].repeat(num_repeats,1)
-            if remaining_repeats > 0:
-                positive_cubes_indices = torch.cat([positive_cubes_indices, positive_indices_shuffled[:remaining_repeats]], dim=0)
+                positive_cubes_indices = positive_indices_shuffled[:num_positive_samples].repeat(num_repeats,1)
+                if remaining_repeats > 0:
+                    positive_cubes_indices = torch.cat([positive_cubes_indices, positive_indices_shuffled[:remaining_repeats]], dim=0)
 
-            # Sample negative indices
-            negative_cubes_indices = negative_indices_shuffled[:total_num_of_negative_boxes_per_image]
+                # Sample negative indices
+                negative_cubes_indices = negative_indices_shuffled[:total_num_of_negative_boxes_per_image]
 
-            positive_cubes = pred_cubes.tensor[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
-            negative_cubes = pred_cubes.tensor[negative_cubes_indices[:, 0], negative_cubes_indices[:, 1]]
+                positive_cubes = pred_cube.tensor[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
+                negative_cubes = pred_cube.tensor[negative_cubes_indices[:, 0], negative_cubes_indices[:, 1]]
 
-            chosen_cubes = torch.cat([positive_cubes, negative_cubes], dim=0).unsqueeze(1)
+                chosen_cubes = torch.cat([positive_cubes, negative_cubes], dim=0).unsqueeze(1)
 
-            positive_scores = all_scores[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
-            negative_scores = all_scores[negative_cubes_indices[:, 0], negative_cubes_indices[:, 1]]
-            chosen_cubes_scores = torch.cat([positive_scores, negative_scores], dim=0)
-            binary_chosen_cubes_scores = (chosen_cubes_scores > 0.5).float()
+                positive_scores = all_scores[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
+                negative_scores = all_scores[negative_cubes_indices[:, 0], negative_cubes_indices[:, 1]]
+                chosen_cubes_scores = torch.cat([positive_scores, negative_scores], dim=0)
+                binary_chosen_cubes_scores = (chosen_cubes_scores > 0.5).float()
 
-            chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes, chosen_cubes_scores.unsqueeze(1)), Ks_scaled))
-            
+                chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes, chosen_cubes_scores.unsqueeze(1)), Ks_scaled[i]))
+                boxes.append(chosen_boxes)
+                y_true[:, i] = binary_chosen_cubes_scores
             # Cube Pooler
-            #print(sum(sum(sum(sum(combined_features)))))
-            cube_features = self.cube_pooler([combined_features], [chosen_boxes]).flatten(1)
-            #print(sum(sum(cube_features)))
-            # MLP
-            pred_iou2d_scores = self.mlp(cube_features).flatten()
-
+            cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
+            pred_iou2d_scores = self.mlp(cube_features)
             # Loss
-            criterion = nn.BCELoss()
-            loss = criterion(pred_iou2d_scores, binary_chosen_cubes_scores)
+            y_true = y_true.t().ravel()
+            loss = self.criterion(pred_iou2d_scores, y_true)
             #loss = F.mse_loss(pred_iou2d_scores, chosen_cubes_scores, reduction='mean')
 
-            return None, loss
+            acc = (pred_iou2d_scores.round() == y_true).float().mean()
+            return None, loss, acc
     
 
 @ROI_HEADS_REGISTRY.register()
