@@ -16,7 +16,8 @@ from detectron2.data.catalog import MetadataCatalog
 from groundingdino.util.inference import load_image, load_model, predict
 from priors import get_config_and_filter_settings
 import supervision as sv
-
+from segment_anything import sam_model_registry
+from segment_anything.modeling import Sam
 
 def init_dataset():
     ''' dataloader stuff.
@@ -94,20 +95,22 @@ def annotate(image_source: np.ndarray, boxes: torch.Tensor, logits: torch.Tensor
 
 
 
-
-def init_segmentation(device='cpu') -> SamPredictor:
+def init_segmentation(device='cpu') -> Sam:
     # 1) first cd into the segment_anything and pip install -e .
     # to get the model stary in the root foler folder and run the download_model.sh 
     # 2) chmod +x download_model.sh && ./download_model.sh
     # the largest model: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
     # this is the smallest model
-    sam_checkpoint = "segment-anything/sam_vit_b_01ec64.pth"
-    model_type = "vit_b"
+    if os.path.exists('sam-hq/sam_hq_vit_b.pth'):
+        sam_checkpoint = "sam-hq/sam_hq_vit_b.pth"
+        model_type = "vit_b"
+    else:
+        sam_checkpoint = "sam-hq/sam_hq_vit_tiny.pth"
+        model_type = "vit_tiny"
+    logger.info(f'SAM device: {device}, model_type: {model_type}')
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
-
-    predictor = SamPredictor(sam)
-    return predictor
+    return sam
 
 def load_image(image_path: str, device) -> tuple[torch.Tensor, torch.Tensor]:
     transform = T.Compose(

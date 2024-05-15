@@ -135,7 +135,6 @@ class Cubes:
             assert scores.ndim == 2, f"scores.shape must be (n_instances, n_proposals), but was {scores.shape}" 
         self.scores = scores
         self.labels = labels
-        self.num_instances = tensor.size(0)
 
         if not isinstance(tensor, torch.Tensor):
             if not isinstance(tensor, np.ndarray):
@@ -146,6 +145,8 @@ class Cubes:
         if tensor.numel() == 0:
             tensor = tensor.reshape((-1, 15)).to(dtype=torch.float32)
         self.tensor = tensor
+        if self.tensor.dim() == 1:
+            self.tensor = self.tensor.unsqueeze(0)
         if self.tensor.dim() == 2:
             self.tensor = self.tensor.unsqueeze(0)
 
@@ -165,6 +166,10 @@ class Cubes:
     @property
     def device(self):
         return self.tensor.device
+    
+    @property
+    def num_instances(self):
+        return self.tensor.shape[0]
 
     def clone(self) -> "Cubes":
         """
