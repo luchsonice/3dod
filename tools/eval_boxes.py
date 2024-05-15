@@ -16,8 +16,7 @@ from detectron2.evaluation.evaluator import inference_context
 from detectron2.utils.visualizer import Visualizer
 from matplotlib import pyplot as plt
 import numpy as np
-from segment_anything import sam_model_registry
-from segment_anything.modeling import Sam
+from cubercnn.data.generate_ground_segmentations import init_segmentation
 import torch
 import datetime
 import detectron2.utils.comm as comm
@@ -51,24 +50,6 @@ from cubercnn.modeling.meta_arch import build_model
 from cubercnn import util, vis, data
 # even though this import is unused, it initializes the backbone registry
 from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
-
-
-def init_segmentation(device='cpu') -> Sam:
-    # 1) first cd into the segment_anything and pip install -e .
-    # to get the model stary in the root foler folder and run the download_model.sh 
-    # 2) chmod +x download_model.sh && ./download_model.sh
-    # the largest model: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
-    # this is the smallest model
-    if os.path.exists('sam-hq/sam_hq_vit_b.pth'):
-        sam_checkpoint = "sam-hq/sam_hq_vit_b.pth"
-        model_type = "vit_b"
-    else:
-        sam_checkpoint = "sam-hq/sam_hq_vit_tiny.pth"
-        model_type = "vit_tiny"
-    logger.info(f'SAM device: {device}, model_type: {model_type}')
-    sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
-    sam.to(device=device)
-    return sam
 
 
 def inference_on_dataset(model, data_loader, segmentor, experiment_type, proposal_function):

@@ -515,7 +515,6 @@ class MLP(nn.Module):
     def forward(self, x):
         x = self.mlp(x)
         x = self.softmax(x)
-        x = x.flatten()
         return x
 
 @ROI_HEADS_REGISTRY.register()
@@ -629,7 +628,6 @@ class ROIHeads_Score(StandardROIHeads):
             cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
             pred_iou2d_scores = self.mlp(cube_features)
             # Loss
-            y_true = y_true.t().ravel()
             loss = self.criterion(pred_iou2d_scores, y_true)
             #loss = F.mse_loss(pred_iou2d_scores, chosen_cubes_scores, reduction='mean')
 
