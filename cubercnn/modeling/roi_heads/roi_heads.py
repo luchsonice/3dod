@@ -599,28 +599,37 @@ class ROIHeads_Score(StandardROIHeads):
                 positive_indices_shuffled = positive_indices[torch.randperm(positive_indices.size(0))]
                 negative_indices_shuffled = negative_indices[torch.randperm(negative_indices.size(0))] # TODO check that these are valid permutations (because of 2d)
 
-                # Repeat positive indices if needed to meet the required number
-                num_positive_samples = min(total_num_of_positive_boxes_per_image, positive_indices_shuffled.size(0))
-                num_repeats = total_num_of_positive_boxes_per_image // num_positive_samples
-                remaining_repeats = total_num_of_positive_boxes_per_image % num_positive_samples
-
-                positive_cubes_indices = positive_indices_shuffled[:num_positive_samples].repeat(num_repeats,1)
-                if remaining_repeats > 0:
-                    positive_cubes_indices = torch.cat([positive_cubes_indices, positive_indices_shuffled[:remaining_repeats]], dim=0)
-
                 # Sample negative indices
                 negative_cubes_indices = negative_indices_shuffled[:total_num_of_negative_boxes_per_image]
-
-                positive_cubes = pred_cube.tensor[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
                 negative_cubes = pred_cube.tensor[negative_cubes_indices[:, 0], negative_cubes_indices[:, 1]]
-
-                chosen_cubes = torch.cat([positive_cubes, negative_cubes], dim=0).unsqueeze(1)
-
-                positive_scores = all_scores[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
                 negative_scores = all_scores[negative_cubes_indices[:, 0], negative_cubes_indices[:, 1]]
-                chosen_cubes_scores = torch.cat([positive_scores, negative_scores], dim=0)
-                binary_chosen_cubes_scores = (chosen_cubes_scores > 0.5).float()
+                
+                # Repeat positive indices if needed to meet the required number
+                num_positive_samples = min(total_num_of_positive_boxes_per_image, positive_indices_shuffled.size(0))
+                # Not a single positive prediction
+                if num_positive_samples == 0: 
+                    print("Image without single positive prediction")
+                    add_negative_cubes_indices = negative_indices_shuffled[total_num_of_negative_boxes_per_image:total_num_of_negative_boxes_per_image+total_num_of_positive_boxes_per_image]
+                    add_negative_cubes = pred_cube.tensor[add_negative_cubes_indices[:, 0], add_negative_cubes_indices[:, 1]]
+                    chosen_cubes = torch.cat([add_negative_cubes, negative_cubes], dim=0).unsqueeze(1)
+                    add_negative_scores = all_scores[add_negative_cubes_indices[:, 0], add_negative_cubes_indices[:, 1]]
+                    chosen_cubes_scores = torch.cat([add_negative_scores, negative_scores], dim=0)
+                else:
+                    # In case that less than total_num_of_positive_boxes_per_image exist, repeat the ones that do
+                    num_repeats = total_num_of_positive_boxes_per_image // num_positive_samples
+                    remaining_repeats = total_num_of_positive_boxes_per_image % num_positive_samples
+                    positive_cubes_indices = positive_indices_shuffled[:num_positive_samples].repeat(num_repeats,1)
+                    if remaining_repeats > 0:
+                        positive_cubes_indices = torch.cat([positive_cubes_indices, positive_indices_shuffled[:remaining_repeats]], dim=0)
+                    
+                    # Sample positive cubes
+                    positive_cubes = pred_cube.tensor[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
+                    chosen_cubes = torch.cat([positive_cubes, negative_cubes], dim=0).unsqueeze(1)
+                    positive_scores = all_scores[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
+                    chosen_cubes_scores = torch.cat([positive_scores, negative_scores], dim=0)
+                
 
+                binary_chosen_cubes_scores = (chosen_cubes_scores > 0.5).float()
                 chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes, chosen_cubes_scores.unsqueeze(1)), Ks_scaled[i]))
                 boxes.append(chosen_boxes)
                 y_true[:, i] = binary_chosen_cubes_scores
