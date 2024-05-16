@@ -28,6 +28,7 @@ from cubercnn import util, vis
 import torch.nn.functional as F
 from detectron2.config import configurable
 import torch.nn as nn
+from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger(__name__)
 
@@ -667,14 +668,31 @@ class ScoreNet(nn.Module):
                 pred_o = self.depth_model(images_raw.tensor.float()/255.0)
                 # backbone and proposal generator only work on 2D images and annotations.
                 features = self.backbone(images.tensor)
-                
+
             d_features = pred_o['depth_features']
             img_features = features['p5']
             # we must scale the depth map to the same size as the conv feature, otherwise the scale will not correspond correctly in the roi pooling
             d_features = F.interpolate(d_features, size=img_features.shape[-2:], mode='bilinear', align_corners=False)
             
-            combined_features = torch.cat((img_features, d_features), dim=1)
-            combined_features = torch.transpose(combined_features,2,3)
+            # Standardize features
+            img_features_np = img_features.cpu().detach().numpy()
+            d_features_np = d_features.cpu().detach().numpy()
+            img_features_reshaped = img_features_np.reshape(-1, img_features_np.shape[-1])
+            d_features_reshaped = d_features_np.reshape(-1, d_features_np.shape[-1])
+            
+            img_scaler = StandardScaler()
+            d_scaler = StandardScaler()
+            img_scaler.fit(img_features_reshaped)
+            d_scaler.fit(d_features_reshaped)
+            
+            img_features_scaled = torch.tensor(img_scaler.transform(img_features_reshaped),device=img_features.device).reshape(img_features_np.shape)
+            d_features_scaled = torch.tensor(d_scaler.transform(d_features_reshaped),device=d_features.device).reshape(d_features_np.shape)
+
+            # Reshape the features back to their original sizes
+            img_features_scaled = img_features_scaled.reshape(img_features_np.shape)
+            d_features_scaled = d_features_scaled.reshape(d_features_np.shape)
+            
+            combined_features = torch.cat((img_features_scaled, d_features_scaled), dim=1)
 
             instances3d, results, acc = self.roi_heads(cubes, gt_instances, Ks, im_scales_ratio, combined_features)
             return instances3d, results, acc
