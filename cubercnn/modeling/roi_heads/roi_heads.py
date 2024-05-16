@@ -446,12 +446,21 @@ class ROIHeads_Boxer(StandardROIHeads):
         else:
             assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
             gt_cubes = Cubes(torch.cat((gt_boxes3D[:,6:].unsqueeze(0),gt_boxes3D[:,3:6].unsqueeze(0), gt_poses.view(n_gt,9).unsqueeze(0)),dim=2).permute(1,0,2))
-            pred_cubes, pred_boxes, stats_instance, stats_ranges = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec, gt_cubes)
             
+            # many proposal functions at once.
+            if isinstance(proposal_function, list):
+                IoU3Ds = np.zeros((n_gt, number_of_proposals, len(proposal_function)))
+                for j, proposal_function_ in enumerate(proposal_function):
+                    for i in range(n_gt):
+                        pred_cubes, _, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function_, normal_vec, gt_cubes)
+                        IoU3D = iou_3d(gt_cubes[i], pred_cubes[i]).cpu().numpy()
+                        IoU3Ds[i, :, j] = IoU3D
+                return IoU3Ds
+            else:
+                pred_cubes, pred_boxes, stats_instance, stats_ranges = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec, gt_cubes)
             for i in range(n_gt):
                 # iou
                 IoU3D = iou_3d(gt_cubes[i], pred_cubes[i]).cpu().numpy()
-
                 # scoring
                 IoU2D_scores = score_iou(cubes_to_box(gt_cubes[i], Ks_scaled_per_box)[0], pred_boxes[i])
                 point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground).to(pred_cubes.device), pred_cubes[i])
@@ -482,7 +491,6 @@ class ROIHeads_Boxer(StandardROIHeads):
             stat_empty_boxes = sum_percentage_empty_boxes/n_gt
             p_info = Plotinfo(pred_cubes_out, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
 
-            
         if experiment_type['output_recall_scores']: # MABO
             return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off
         

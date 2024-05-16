@@ -107,7 +107,7 @@ def init_segmentation(device='cpu') -> Sam:
     else:
         sam_checkpoint = "sam-hq/sam_hq_vit_tiny.pth"
         model_type = "vit_tiny"
-    logger.info(f'SAM device: {device}, model_type: {model_type}')
+    print(f'SAM device: {device}, model_type: {model_type}')
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
     return sam

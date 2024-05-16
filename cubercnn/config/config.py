@@ -167,8 +167,9 @@ def get_cfg_defaults(cfg):
     cfg.PLOT.EVAL = ''
     cfg.PLOT.MODE2D = '' #either GT or PRED
 
-    cfg.PLOT.SCORING_FUNC = ''
-    cfg.PLOT.PROPOSAL_FUNC = ''
+    cfg.PLOT.SCORING_FUNC = None
+    cfg.PLOT.PROPOSAL_FUNC = None
+    cfg.PLOT.number_of_proposals = 1000
 
     cfg.TRAIN = CN(new_allowed=True)
     cfg.TRAIN.pseudo_gt = 'learn'
