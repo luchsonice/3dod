@@ -1,98 +1,7 @@
-import os
 
-import numpy as np
-import pandas as pd
-import torch
-import torchvision.transforms as T2
-from matplotlib import pyplot as plt
-from PIL import Image
-from rich.progress import track
-from segment_anything import SamPredictor, sam_model_registry
-from torchvision.ops import box_convert
-
-import groundingdino.datasets.transforms as T
-from cubercnn import data
-from detectron2.data.catalog import MetadataCatalog
-from groundingdino.util.inference import load_image, load_model, predict
-from priors import get_config_and_filter_settings
-import supervision as sv
 from segment_anything import sam_model_registry
 from segment_anything.modeling import Sam
-
-def init_dataset():
-    ''' dataloader stuff.
-    currently not used anywhere, because I'm not sure what the difference between the omni3d dataset and load omni3D json functions are. this is a 3rd alternative to this. The train script calls something similar to this.'''
-    cfg, filter_settings = get_config_and_filter_settings()
-
-    dataset_names = ['SUNRGBD_train','SUNRGBD_val','SUNRGBD_test']
-    dataset_paths_to_json = ['datasets/Omni3D/'+dataset_name+'.json' for dataset_name in dataset_names]
-    # for dataset_name in dataset_names:
-    #     simple_register(dataset_name, filter_settings, filter_empty=True)
-
-    # Get Image and annotations
-    datasets = data.Omni3D(dataset_paths_to_json, filter_settings=filter_settings)
-    data.register_and_store_model_metadata(datasets, cfg.OUTPUT_DIR, filter_settings)
-
-
-    thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
-    dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
-
-    infos = datasets.dataset['info']
-
-    dataset_id_to_unknown_cats = {}
-    possible_categories = set(i for i in range(cfg.MODEL.ROI_HEADS.NUM_CLASSES + 1))
-    
-    dataset_id_to_src = {}
-
-    for info in infos:
-        dataset_id = info['id']
-        known_category_training_ids = set()
-        
-        if not dataset_id in dataset_id_to_src:
-            dataset_id_to_src[dataset_id] = info['source']
-
-        for id in info['known_category_ids']:
-            if id in dataset_id_to_contiguous_id:
-                known_category_training_ids.add(dataset_id_to_contiguous_id[id])
-        
-        # determine and store the unknown categories.
-        unknown_categories = possible_categories - known_category_training_ids
-        dataset_id_to_unknown_cats[dataset_id] = unknown_categories
-
-    return datasets
-
-
-
-def annotate(image_source: np.ndarray, boxes: torch.Tensor, logits: torch.Tensor, phrases: list[str]) -> np.ndarray:
-    """    
-    This function annotates an image with bounding boxes and labels.
-
-    Parameters:
-    image_source (np.ndarray): The source image to be annotated.
-    boxes (torch.Tensor): A tensor containing bounding box coordinates.
-    logits (torch.Tensor): A tensor containing confidence scores for each bounding box.
-    phrases (List[str]): A list of labels for each bounding box.
-
-    Returns:
-    np.ndarray: The annotated image.
-    """
-    h, w, _ = image_source.shape
-    boxes = boxes * torch.Tensor([w, h, w, h])
-    xyxy = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy").numpy()
-    detections = sv.Detections(xyxy=xyxy)
-
-    labels = [
-        f"{phrase} {logit:.2f}"
-        for phrase, logit
-        in zip(phrases, logits)
-    ]
-
-    box_annotator = sv.BoxAnnotator()
-    # annotated_frame = cv2.cvtColor(image_source, cv2.COLOR_RGB2BGR)
-    annotated_frame = image_source.copy()
-    annotated_frame = box_annotator.annotate(scene=annotated_frame, detections=detections, labels=labels)
-    return annotated_frame
-
+import os
 
 
 def init_segmentation(device='cpu') -> Sam:
@@ -112,21 +21,118 @@ def init_segmentation(device='cpu') -> Sam:
     sam.to(device=device)
     return sam
 
-def load_image(image_path: str, device) -> tuple[torch.Tensor, torch.Tensor]:
-    transform = T.Compose(
-        [
-            # T.RandomResize([800], max_size=1333),
-            T.ToTensor(),
-            T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ]
-    )
-    transform2 = T2.ToTensor()
-    image_source = Image.open(image_path).convert("RGB")
-    image = transform2(image_source).to(device)
-    image_transformed, _ = transform(image_source, None)
-    return image, image_transformed.to(device)
+
+
+
+
 
 if __name__ == '__main__':
+
+    import numpy as np
+    import pandas as pd
+    import torch
+    import torchvision.transforms as T2
+    from matplotlib import pyplot as plt
+    from PIL import Image
+    from rich.progress import track
+    from segment_anything import SamPredictor, sam_model_registry
+    from torchvision.ops import box_convert
+
+    import groundingdino.datasets.transforms as T
+    from cubercnn import data
+    from detectron2.data.catalog import MetadataCatalog
+    from groundingdino.util.inference import load_image, load_model, predict
+    from priors import get_config_and_filter_settings
+    import supervision as sv
+    
+    def init_dataset():
+        ''' dataloader stuff.
+        currently not used anywhere, because I'm not sure what the difference between the omni3d dataset and load omni3D json functions are. this is a 3rd alternative to this. The train script calls something similar to this.'''
+        cfg, filter_settings = get_config_and_filter_settings()
+
+        dataset_names = ['SUNRGBD_train','SUNRGBD_val','SUNRGBD_test']
+        dataset_paths_to_json = ['datasets/Omni3D/'+dataset_name+'.json' for dataset_name in dataset_names]
+        # for dataset_name in dataset_names:
+        #     simple_register(dataset_name, filter_settings, filter_empty=True)
+
+        # Get Image and annotations
+        datasets = data.Omni3D(dataset_paths_to_json, filter_settings=filter_settings)
+        data.register_and_store_model_metadata(datasets, cfg.OUTPUT_DIR, filter_settings)
+
+
+        thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
+        dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
+
+        infos = datasets.dataset['info']
+
+        dataset_id_to_unknown_cats = {}
+        possible_categories = set(i for i in range(cfg.MODEL.ROI_HEADS.NUM_CLASSES + 1))
+        
+        dataset_id_to_src = {}
+
+        for info in infos:
+            dataset_id = info['id']
+            known_category_training_ids = set()
+            
+            if not dataset_id in dataset_id_to_src:
+                dataset_id_to_src[dataset_id] = info['source']
+
+            for id in info['known_category_ids']:
+                if id in dataset_id_to_contiguous_id:
+                    known_category_training_ids.add(dataset_id_to_contiguous_id[id])
+            
+            # determine and store the unknown categories.
+            unknown_categories = possible_categories - known_category_training_ids
+            dataset_id_to_unknown_cats[dataset_id] = unknown_categories
+
+        return datasets
+
+    def load_image(image_path: str, device) -> tuple[torch.Tensor, torch.Tensor]:
+        transform = T.Compose(
+            [
+                # T.RandomResize([800], max_size=1333),
+                T.ToTensor(),
+                T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            ]
+        )
+        transform2 = T2.ToTensor()
+        image_source = Image.open(image_path).convert("RGB")
+        image = transform2(image_source).to(device)
+        image_transformed, _ = transform(image_source, None)
+        return image, image_transformed.to(device)
+
+
+    def annotate(image_source: np.ndarray, boxes: torch.Tensor, logits: torch.Tensor, phrases: list[str]) -> np.ndarray:
+        """    
+        This function annotates an image with bounding boxes and labels.
+
+        Parameters:
+        image_source (np.ndarray): The source image to be annotated.
+        boxes (torch.Tensor): A tensor containing bounding box coordinates.
+        logits (torch.Tensor): A tensor containing confidence scores for each bounding box.
+        phrases (List[str]): A list of labels for each bounding box.
+
+        Returns:
+        np.ndarray: The annotated image.
+        """
+        h, w, _ = image_source.shape
+        boxes = boxes * torch.Tensor([w, h, w, h])
+        xyxy = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy").numpy()
+        detections = sv.Detections(xyxy=xyxy)
+
+        labels = [
+            f"{phrase} {logit:.2f}"
+            for phrase, logit
+            in zip(phrases, logits)
+        ]
+
+        box_annotator = sv.BoxAnnotator()
+        # annotated_frame = cv2.cvtColor(image_source, cv2.COLOR_RGB2BGR)
+        annotated_frame = image_source.copy()
+        annotated_frame = box_annotator.annotate(scene=annotated_frame, detections=detections, labels=labels)
+        return annotated_frame
+
+
     datasets = init_dataset()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
