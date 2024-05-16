@@ -16,14 +16,14 @@ def lin_fun(x,coef):
 def propose_random(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal:torch.Tensor=None):
     number_of_instances = len(reference_box)
     # Center
-    x = torch.rand(number_of_instances,number_of_proposals, device=reference_box) * 2 - 1
-    y = torch.rand(number_of_instances,number_of_proposals, device=reference_box) * 2 - 1
-    z = torch.rand(number_of_instances,number_of_proposals, device=reference_box) * 5
+    x = torch.rand(number_of_instances,number_of_proposals, device=reference_box.device) * 2 - 1
+    y = torch.rand(number_of_instances,number_of_proposals, device=reference_box.device) * 2 - 1
+    z = torch.rand(number_of_instances,number_of_proposals, device=reference_box.device) * 5
 
     # Dimensions
-    w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box), 0.05, 2)
-    h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box), 0.05, 2)
-    l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box), 0.05, 2)
+    w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), 0.05, 2)
+    h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), 0.05, 2)
+    l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), 0.05, 2)
 
     xyzwhl = torch.stack([x, y, z, w, h, l], 2)
     

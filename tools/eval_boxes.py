@@ -104,6 +104,68 @@ def inference_on_dataset(model, data_loader, segmentor, experiment_type, proposa
 
     return inference_json
 
+def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_functions):
+    '''make the detection that have a certain 3D IoU score plots
+    if you give the proposal function as input to argparser as:
+    
+    `PLOT.PROPOSAL_FUNC, ['random', 'z', 'xy', 'dim', 'rotation', 'aspect' ,'full']`
+    
+    it will work
+    '''
+    total = len(data_loader)  # inference data loader must have a fixed length
+
+    with ExitStack() as stack:
+        if isinstance(model, nn.Module):
+            stack.enter_context(inference_context(model))
+        stack.enter_context(torch.no_grad())
+
+        outputs = []
+        for i, inputs in tqdm(enumerate(data_loader), desc=f"IoU3D plots, proposal method: {proposal_functions}", total=total):
+            output = model(inputs, segmentor, experiment_type, proposal_functions)
+            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off, stats_off_impro
+            if output is not None:
+                outputs.append(output)
+
+        xlim=[0.2,1]
+        fig, axes = plt.subplots(1,2, figsize=(15,5))
+        for ax in axes:
+            ax.set_ylabel('Detection rate')
+            ax.set_ylim([0,1])
+            ax.grid(True)
+        axes[0].set_xlabel('3D Intersection over Union')
+        axes[0].set_xlim(xlim)
+        axes[0].set_title('Varying proposal method, 1000 proposals')
+        axes[1].set_title('Variants, IoU3D = 0.25')
+        axes[1].set_xlim([1,1000])
+        axes[1].set_xlabel('Number of Proposals')
+        for k, proposal_function in enumerate(proposal_functions):
+            IoU3Ds = np.concatenate([x[:,:,k] for x in outputs])
+            maxIOU_per_instance = np.max(IoU3Ds,axis=1)
+            # detection rate vs. IoU3D
+            thresholds = np.arange(xlim[0],xlim[1],0.025)
+            detection_rate = np.zeros(len(thresholds))
+            for i in range(len(thresholds)):
+                detection_rate[i] = np.mean(maxIOU_per_instance > thresholds[i],axis=0)
+
+            IoUat = [0.15, 0.25, 0.5]
+            # detection rate vs. no. of proposals
+            detection_rate2 = np.zeros(IoU3Ds.shape[1])
+            # for IoU in IoUat:
+            IoU = IoUat[1]
+            sorted_IoU3D = np.sort(IoU3Ds,axis=1)
+            detection_rate2 = np.mean(sorted_IoU3D > IoU,axis=0)
+
+
+            axes[0].plot(thresholds, detection_rate, label=f'{proposal_function}')
+            axes[1].plot(list(range(1, 1001)),detection_rate2, label=f'{proposal_function}')
+
+    for ax in axes:
+        ax.legend()
+    fig.savefig('ProposalNetwork/output/percent_of_boxes.png', dpi=300, bbox_inches='tight')
+
+    return
+            
+
 def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, proposal_function):
         
     total = len(data_loader)  # inference data loader must have a fixed length
@@ -344,10 +406,13 @@ def do_test(cfg, model, iteration='final', storage=None):
         # either use pred_boxes or GT boxes
         if cfg.PLOT.MODE2D == 'PRED': experiment_type['use_pred_boxes'] = True
         else: experiment_type['use_pred_boxes'] = False
+        if cfg.PLOT.SCORING_FUNC == False:
+            experiment_type['scoring_func'] = False
         # define proposal function to use
-        if experiment_type['output_recall_scores']:
+        if not cfg.PLOT.SCORING_FUNC:
+            _ = percent_of_boxes(model, data_loader, segmentor, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
+        elif experiment_type['output_recall_scores']:
             _ = mean_average_best_overlap(model, data_loader, segmentor, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
-        
         else:
             results_json = inference_on_dataset(model, data_loader, segmentor, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
 
@@ -377,7 +442,7 @@ def do_test(cfg, model, iteration='final', storage=None):
             logger.info(log_str)
 
         
-    if cfg.PLOT.EVAL != 'MABO':
+    if cfg.PLOT.EVAL == 'AP':
         '''
         Summarize each Omni3D Evaluation metric
         '''  
@@ -516,7 +581,7 @@ def main(args):
 
     if args.eval_only:
         assert cfg.PLOT.MODE2D in ['GT', 'PRED'], 'MODE2D must be either GT or PRED'
-        assert cfg.PLOT.EVAL in ['AP', 'MABO'], 'EVAL must be either AP or MABO'
+        assert cfg.PLOT.EVAL in ['AP', 'MABO', 'IoU3D'], 'EVAL must be either AP or MABO'
         if cfg.PLOT.EVAL == 'MABO':
             assert cfg.PLOT.MODE2D == 'GT', 'MABO only works with GT boxes'
     
