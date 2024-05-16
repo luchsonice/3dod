@@ -515,15 +515,16 @@ class MLP(nn.Module):
     def __init__(self, in_features, out_features):
         super().__init__()
         self.mlp = nn.Sequential(
-            nn.Linear(in_features, 256),
+            nn.Linear(in_features, 64),
             nn.ReLU(),
-            nn.Linear(256, out_features),
+            nn.Linear(64, out_features),
         )
         self.sigmoid = nn.Sigmoid()
     def forward(self, x):
         x = self.mlp(x)
-        x = self.sigmoid(x)
-        return x
+        x_scores = self.sigmoid(x)
+        x_logits = x.flatten()
+        return x_logits, x_scores
 
 @ROI_HEADS_REGISTRY.register()
 class ROIHeads_Score(StandardROIHeads):
@@ -569,7 +570,7 @@ class ROIHeads_Score(StandardROIHeads):
     
         return {'cube_pooler': cube_pooler,
                 'mlp': mlp,
-                'criterion': nn.BCELoss()}
+                'criterion': nn.BCEWithLogitsLoss()}
 
     def forward(self, pred_cubes, instances, Ks, im_scales_ratio, combined_features):
         if self.training:
@@ -642,11 +643,11 @@ class ROIHeads_Score(StandardROIHeads):
                 y_true[:, i] = binary_chosen_cubes_scores
             # Cube Pooler
             cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
-            pred_iou2d_scores = self.mlp(cube_features)
+            pred_iou2d_logits, pred_iou2d_scores = self.mlp(cube_features)
             # Loss
-            loss = self.criterion(pred_iou2d_scores, y_true)
-            #loss = F.mse_loss(pred_iou2d_scores, chosen_cubes_scores, reduction='mean')
-
+            y_true = y_true.t().ravel()
+            loss = self.criterion(pred_iou2d_logits, y_true)
+            
             acc = (pred_iou2d_scores.round() == y_true).float().mean()
             return None, loss, acc
     

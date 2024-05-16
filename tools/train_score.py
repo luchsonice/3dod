@@ -76,7 +76,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     # create the dataloader
     data_mapper = DatasetMapper3D(cfg, is_train=False, mode='load_proposals')
     dataset_name = cfg.DATASETS.TRAIN[0]
-    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=0)
+    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=4)
 
     # give the mapper access to dataset_ids
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
@@ -97,7 +97,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
 
     data_iter = iter(data_loader)
     pbar = tqdm(range(start_iter, max_iter), initial=start_iter, total=max_iter, desc="Training", smoothing=0.05)
-    
+
     with EventStorage(start_iter) as storage:
         
         while True:
@@ -107,7 +107,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             # forward
             instances3d, loss, acc = model(data)
             # send loss scalars to tensorboard.
-            storage.put_scalars(total_loss=loss)
+            storage.put_scalars(total_loss=loss, accuracy=acc)
         
             # backward and step
             # simulate a batch size
@@ -122,9 +122,9 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             # logging stuff 
             pbar.update(1)
             pbar.set_postfix({"loss": loss.item(), "acc": acc.item()})
-            # if iteration - start_iter > 5 and ((iteration + 1) % 2 == 0 or iteration == max_iter - 1):
-            #     for writer in writers:
-            #         writer.write()
+            #if iteration - start_iter > 5 and ((iteration + 1) % 2 == 0 or iteration == max_iter - 1):
+            #    for writer in writers:
+            #        writer.write()
             
             iteration += 1
             if iteration >= max_iter:
@@ -285,7 +285,7 @@ def main(args):
     
     name = f'learned score {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
     
-    # wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='offline')
+    #wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='online')
 
     category_path = 'output/Baseline_sgd/category_meta.json'
     

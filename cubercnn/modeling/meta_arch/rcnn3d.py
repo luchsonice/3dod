@@ -663,11 +663,12 @@ class ScoreNet(nn.Module):
                 raise ValueError("Dataset does not contain proposals. Make sure to use ' mode='load_proposals ' in DatasetMapper3D.")
             # the backbone is actually a FPN, where the DLA model is the bottom-up structure.
             # FPN: https://arxiv.org/abs/1612.03144v2
-            
-            pred_o = self.depth_model(images_raw.tensor.float()/255.0)
+            with torch.no_grad():
+                pred_o = self.depth_model(images_raw.tensor.float()/255.0)
+                # backbone and proposal generator only work on 2D images and annotations.
+                features = self.backbone(images.tensor)
+                
             d_features = pred_o['depth_features']
-            # backbone and proposal generator only work on 2D images and annotations.
-            features = self.backbone(images.tensor)
             img_features = features['p5']
             # we must scale the depth map to the same size as the conv feature, otherwise the scale will not correspond correctly in the roi pooling
             d_features = F.interpolate(d_features, size=img_features.shape[-2:], mode='bilinear', align_corners=False)
