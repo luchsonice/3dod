@@ -123,8 +123,6 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
         for i, inputs in tqdm(enumerate(data_loader), desc=f"IoU3D plots, proposal method: {proposal_functions}", total=total):
             output = model(inputs, segmentor, experiment_type, proposal_functions)
             outputs.append(output.cpu().numpy())
-            if i > 1:
-                break
 
         xlim = [0.2,1]
         IoUat = [0.15, 0.25, 0.4]
