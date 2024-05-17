@@ -383,7 +383,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         normal_vec = torch.from_numpy(normal_vec).to(images_raw.device)
 
-        number_of_proposals = 1000
+        number_of_proposals = 2000
         mask_per_image = mask_per_image[0] # this should be looped over
         mask_per_image_cpu = mask_per_image.cpu()
         gt_cube_meshes = []
@@ -445,19 +445,17 @@ class ROIHeads_Boxer(StandardROIHeads):
                 pred_cubes_out.tensor[i] = pred_cube.tensor[0]
         else:
             assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
-            gt_cubes_o = Cubes(torch.cat((gt_boxes3D[:,6:].unsqueeze(0),gt_boxes3D[:,3:6].unsqueeze(0), gt_poses.view(n_gt,9).unsqueeze(0)),dim=2).permute(1,0,2))
-            gt_cubes_cpu = gt_cubes_o.to('cpu')
+            gt_cubes = Cubes(torch.cat((gt_boxes3D[:,6:].unsqueeze(0),gt_boxes3D[:,3:6].unsqueeze(0), gt_poses.view(n_gt,9).unsqueeze(0)),dim=2).permute(1,0,2))
+            gt_cubes_cpu = gt_cubes.to('cpu')
             
             # many proposal functions at once.
             if isinstance(proposal_function, list):
-                IoU3Ds = torch.zeros((n_gt, len(proposal_function), number_of_proposals), device=images_raw.device)
+                IoU3Ds = torch.zeros((n_gt, len(proposal_function), number_of_proposals), device='cpu')
                 for i, iter_proposal_function in enumerate(proposal_function):
-                    pred_cubes, _, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps, im_shape, Ks_scaled_per_box, number_of_proposals, iter_proposal_function, normal_vec, gt_cubes_o)
-                    if iter_proposal_function == 'dim': # the dim methods fails in the iou_3d function on CUDA for some inexplicable reason, so this is a dirty fix
-                        gt_cubes = gt_cubes_cpu; pred_cubes = pred_cubes.to('cpu')
-                    else: gt_cubes = gt_cubes_o
+                    pred_cubes, _, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps, im_shape, Ks_scaled_per_box, number_of_proposals, iter_proposal_function, normal_vec, gt_cubes)
+                    pred_cubes = pred_cubes.to('cpu')
                     for j in range(n_gt):
-                        IoU3D = iou_3d(gt_cubes[j], pred_cubes[j])
+                        IoU3D = iou_3d(gt_cubes_cpu[j], pred_cubes[j])
                         IoU3Ds[j, i, :] = IoU3D
                 return IoU3Ds
             else:

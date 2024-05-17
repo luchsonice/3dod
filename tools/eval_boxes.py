@@ -119,10 +119,11 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
             stack.enter_context(inference_context(model))
         stack.enter_context(torch.no_grad())
 
+        torch.set_float32_matmul_precision('high')
         outputs = []
         for i, inputs in tqdm(enumerate(data_loader), desc=f"IoU3D plots, proposal method: {proposal_functions}", total=total):
             output = model(inputs, segmentor, experiment_type, proposal_functions)
-            outputs.append(output.cpu().numpy())
+            outputs.append(output)
 
         xlim = [0.2,1]
         IoUat = [0.15, 0.25, 0.4]
@@ -146,6 +147,7 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
         for k, proposal_function in enumerate(proposal_functions):
             IoU3Ds = np.concatenate([x[:,k,:] for x in outputs])
             maxIOU_per_instance = np.max(IoU3Ds,axis=1)
+            sorted_IoU3D = np.sort(IoU3Ds,axis=1)
             # detection rate vs. IoU3D
             thresholds = np.arange(xlim[0],xlim[1],0.025)
             detection_rate = np.zeros(len(thresholds))
@@ -154,7 +156,6 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
 
             # detection rate vs. no. of proposals
             detection_rates = np.zeros((len(IoUat), IoU3Ds.shape[1]))
-            sorted_IoU3D = np.sort(IoU3Ds,axis=1)
             for i, IoU in enumerate(IoUat):
                 detection_rates[i] = np.mean(sorted_IoU3D > IoU,axis=0)
 
@@ -414,10 +415,10 @@ def do_test(cfg, model, iteration='final', storage=None):
         if cfg.PLOT.SCORING_FUNC == False:
             experiment_type['scoring_func'] = False
         # define proposal function to use
-        if not cfg.PLOT.SCORING_FUNC:
-            _ = percent_of_boxes(model, data_loader, segmentor, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
-        elif experiment_type['output_recall_scores']:
+        if experiment_type['output_recall_scores']:
             _ = mean_average_best_overlap(model, data_loader, segmentor, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
+        elif not cfg.PLOT.SCORING_FUNC:
+            _ = percent_of_boxes(model, data_loader, segmentor, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
         else:
             results_json = inference_on_dataset(model, data_loader, segmentor, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
 
