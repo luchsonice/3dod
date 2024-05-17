@@ -519,9 +519,9 @@ class MLP(nn.Module):
     def __init__(self, in_features, out_features):
         super().__init__()
         self.mlp = nn.Sequential(
-            nn.Linear(in_features, 64),
+            nn.Linear(in_features, 256),
             nn.ReLU(),
-            nn.Linear(64, out_features),
+            nn.Linear(256, out_features),
         )
         self.sigmoid = nn.Sigmoid()
     def forward(self, x):
@@ -651,8 +651,9 @@ class ROIHeads_Score(StandardROIHeads):
             # Loss
             y_true = y_true.t().ravel()
             loss = self.criterion(pred_iou2d_logits, y_true)
-            
-            acc = (pred_iou2d_scores.round() == y_true).float().mean()
+            #print(torch.round(pred_iou2d_scores.squeeze())[:16])
+            #print(torch.round(pred_iou2d_scores.squeeze())[16:64])
+            acc = (torch.round(pred_iou2d_scores.squeeze()) == y_true).float().mean()
             return None, loss, acc
     
 
