@@ -383,7 +383,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         normal_vec = torch.from_numpy(normal_vec).to(images_raw.device)
 
-        number_of_proposals = 2000
+        number_of_proposals = 1000
         mask_per_image = mask_per_image[0] # this should be looped over
         mask_per_image_cpu = mask_per_image.cpu()
         gt_cube_meshes = []

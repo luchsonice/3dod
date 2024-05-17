@@ -128,6 +128,7 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
 
         xlim = [0.2,1]
         IoUat = [0.15, 0.25, 0.4]
+        n_proposals = outputs[0].shape[-1]
         
         fig, axes = plt.subplots(1, figsize=(7.5,5))
         fig2, axes2 = plt.subplots(1, len(IoUat), figsize=(20,5))
@@ -136,18 +137,18 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
         axes.grid(True)
         axes.set_xlabel('3D Intersection over Union')
         axes.set_xlim(xlim)
-        axes.set_title('Varying proposal method, 1000 proposals')
+        axes.set_title(f'Varying proposal method, {n_proposals} proposals')
         for Iou, ax in zip(IoUat, axes2):
             ax.set_ylabel('Detection rate')
             ax.set_ylim([0,1])
             ax.grid(True)
             ax.set_title(f'Variants, IoU3D = {Iou}')
-            ax.set_xlim([1,1000])
+            ax.set_xlim([1,n_proposals])
             ax.set_xlabel('Number of Proposals')
 
         for k, proposal_function in enumerate(proposal_functions):
             IoU3Ds = np.concatenate([x[:,k,:] for x in outputs])
-            maxIOU_per_instance = np.max(IoU3Ds,axis=1)
+            maxIOU_per_instance = np.max(IoU3Ds, axis=1)
             sorted_IoU3D = np.sort(IoU3Ds,axis=1)
             # detection rate vs. IoU3D
             thresholds = np.arange(xlim[0],xlim[1],0.025)
@@ -162,7 +163,7 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
 
             axes.plot(thresholds, detection_rate, label=f'{proposal_function}')
             for j, ax in enumerate(axes2):
-                ax.plot(list(range(1, 1001)), detection_rates[j], label=f'{proposal_function}')
+                ax.plot(list(range(1, n_proposals+1)), detection_rates[j], label=f'{proposal_function}')
     for ax in axes2:
         ax.legend()
     axes.legend()
