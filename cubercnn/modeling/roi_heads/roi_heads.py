@@ -276,7 +276,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         elif proposal_function == 'xy':
             pred_cubes, stats_instance, stats_ranges = proposals.propose_xy_patch(reference_box, depth_maps.tensor.squeeze(), None, im_shape, None, number_of_proposals=number_of_proposals)
         elif proposal_function == 'dim':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_random_dim(reference_box, depth_maps.tensor.squeeze(), None, None, K, number_of_proposals=number_of_proposals)
+            pred_cubes, stats_instance, stats_ranges = proposals.propose_random_dim(reference_box, depth_maps.tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals)
         elif proposal_function == 'rotation':
             pred_cubes, stats_instance, stats_ranges = proposals.propose_random_rotation(reference_box, depth_maps.tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals)
         elif proposal_function == 'aspect':
@@ -445,16 +445,20 @@ class ROIHeads_Boxer(StandardROIHeads):
                 pred_cubes_out.tensor[i] = pred_cube.tensor[0]
         else:
             assert len(gt_boxes3D) == len(gt_boxes), f"gt_boxes3D and gt_boxes should have the same length. but was {len(gt_boxes3D)} and {len(gt_boxes)} respectively."
-            gt_cubes = Cubes(torch.cat((gt_boxes3D[:,6:].unsqueeze(0),gt_boxes3D[:,3:6].unsqueeze(0), gt_poses.view(n_gt,9).unsqueeze(0)),dim=2).permute(1,0,2))
+            gt_cubes_o = Cubes(torch.cat((gt_boxes3D[:,6:].unsqueeze(0),gt_boxes3D[:,3:6].unsqueeze(0), gt_poses.view(n_gt,9).unsqueeze(0)),dim=2).permute(1,0,2))
+            gt_cubes_cpu = gt_cubes_o.to('cpu')
             
             # many proposal functions at once.
             if isinstance(proposal_function, list):
-                IoU3Ds = np.zeros((n_gt, number_of_proposals, len(proposal_function)))
-                for j, proposal_function_ in enumerate(proposal_function):
-                    for i in range(n_gt):
-                        pred_cubes, _, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function_, normal_vec, gt_cubes)
-                        IoU3D = iou_3d(gt_cubes[i], pred_cubes[i]).cpu().numpy()
-                        IoU3Ds[i, :, j] = IoU3D
+                IoU3Ds = torch.zeros((n_gt, len(proposal_function), number_of_proposals), device=images_raw.device)
+                for i, iter_proposal_function in enumerate(proposal_function):
+                    pred_cubes, _, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps, im_shape, Ks_scaled_per_box, number_of_proposals, iter_proposal_function, normal_vec, gt_cubes_o)
+                    if iter_proposal_function == 'dim': # the dim methods fails in the iou_3d function on CUDA for some inexplicable reason, so this is a dirty fix
+                        gt_cubes = gt_cubes_cpu; pred_cubes = pred_cubes.to('cpu')
+                    else: gt_cubes = gt_cubes_o
+                    for j in range(n_gt):
+                        IoU3D = iou_3d(gt_cubes[j], pred_cubes[j])
+                        IoU3Ds[j, i, :] = IoU3D
                 return IoU3Ds
             else:
                 pred_cubes, pred_boxes, stats_instance, stats_ranges = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec, gt_cubes)

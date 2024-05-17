@@ -1,5 +1,4 @@
 import torch
-from detectron2.structures import Boxes
 import numpy as np
 import matplotlib.pyplot as plt
 #import open3d as o3d
