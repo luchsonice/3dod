@@ -5,6 +5,9 @@ from ProposalNetwork.utils.conversions import pixel_to_normalised_space
 import torch
 import numpy as np
 
+# 0.1 meters is the minimum edge length
+MIN_PROP_S = 0.10
+
 def rescale_interval(x, min, max):
     '''operation  (min - max) * x + max'''
     return (min - max) * x + max
@@ -21,9 +24,9 @@ def propose_random(reference_box, depth_image, priors, im_shape, K, number_of_pr
     z = torch.rand(number_of_instances,number_of_proposals, device=reference_box.device) * 5
 
     # Dimensions
-    w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), 0.05, 2)
-    h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), 0.05, 2)
-    l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), 0.05, 2)
+    w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), MIN_PROP_S, 2)
+    h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), MIN_PROP_S, 2)
+    l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), MIN_PROP_S, 2)
 
     xyzwhl = torch.stack([x, y, z, w, h, l], 2)
     
@@ -52,9 +55,9 @@ def propose_z(reference_box, depth_image, priors, im_shape, K, number_of_proposa
         z[i] = depth_image[y_scaled[i], x_scaled[i]]
     
     # Dimensions
-    w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=x.device), 0.05, 2)
-    h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=x.device), 0.05, 2)
-    l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=x.device), 0.05, 2)
+    w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=x.device), MIN_PROP_S, 2)
+    h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=x.device), MIN_PROP_S, 2)
+    l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=x.device), MIN_PROP_S, 2)
 
     xyzwhl = torch.stack([xt, yt, z, w, h, l], 2)
     
@@ -97,10 +100,10 @@ def propose_xy_patch(reference_box, depth_image, priors, im_shape, K, number_of_
         z[i] = depth_image[y_scaled[i], x_scaled[i]]
 
     # Dimensions
-    # constrain to interval [0.05, 2] meters 
-    w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=h_x.device), 0.05, 2)
-    h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=h_x.device), 0.05, 2)
-    l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=h_x.device), 0.05, 2)
+    # constrain to interval [MIN_PROP_S, 2] meters 
+    w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=h_x.device), MIN_PROP_S, 2)
+    h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=h_x.device), MIN_PROP_S, 2)
+    l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=h_x.device), MIN_PROP_S, 2)
 
     xyzwhl = torch.stack([xt, yt, z, w, h, l], 2)
     
@@ -141,9 +144,9 @@ def propose_random_dim(reference_box, depth_image, priors, im_shape, K, number_o
     z_tmp = torch.sqrt(dx**2 - x**2)
 
     # Dimensions
-    w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), 0.05, 2)
-    h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), 0.05, 2)
-    l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), 0.05, 2)
+    w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), MIN_PROP_S, 2)
+    h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), MIN_PROP_S, 2)
+    l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), MIN_PROP_S, 2)
 
     # Finish center
 
@@ -201,9 +204,9 @@ def propose_aspect_ratio(reference_box, depth_image, priors, im_shape, K, number
     z_tmp = torch.sqrt(dx**2 - x**2)
 
     # Dimensions
-    w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), 0.05, 2)
+    w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), MIN_PROP_S, 2)
     #
-    ratios = [0.33, 0.5, 0.66, 1, 1.33, 1.5, 1.67, 2, 3]
+    ratios = [0.5, 0.66, 1, 1.33, 1.5, 1.67, 2, 3]
     h = torch.zeros_like(w)
     l = torch.zeros_like(w)
     for i in range(number_of_instances):
@@ -268,9 +271,9 @@ def propose_random_rotation(reference_box, depth_image, priors, im_shape, K, num
     w_prior = [priors[0][:,0], priors[1][:,0]]
     h_prior = [priors[0][:,1], priors[1][:,1]]
     l_prior = [priors[0][:,2], priors[1][:,2]]
-    w = sample_normal_in_range(w_prior[0], w_prior[1], number_of_proposals, 0.05, w_prior[0] + 2 * w_prior[1])
-    h = sample_normal_in_range(h_prior[0], h_prior[1]*1.1, number_of_proposals, 0.05, h_prior[0] + 2.2 * h_prior[1])
-    l = sample_normal_in_range(l_prior[0], l_prior[1], number_of_proposals, 0.05, l_prior[0] + 2 * l_prior[1])
+    w = sample_normal_in_range(w_prior[0], w_prior[1], number_of_proposals, MIN_PROP_S, w_prior[0] + 2 * w_prior[1])
+    h = sample_normal_in_range(h_prior[0], h_prior[1]*1.1, number_of_proposals, MIN_PROP_S, h_prior[0] + 2.2 * h_prior[1])
+    l = sample_normal_in_range(l_prior[0], l_prior[1], number_of_proposals, MIN_PROP_S, l_prior[0] + 2 * l_prior[1])
 
     # x
     x_coefficients = torch.tensor([1.15, 0], device=reference_box.device)
@@ -336,9 +339,9 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     w_prior = [priors[0][:,0], priors[1][:,0]]
     h_prior = [priors[0][:,1], priors[1][:,1]]
     l_prior = [priors[0][:,2], priors[1][:,2]]
-    w = sample_normal_in_range(w_prior[0], w_prior[1], number_of_proposals, 0.05, w_prior[0] + 2 * w_prior[1])
-    h = sample_normal_in_range(h_prior[0], h_prior[1]*1.1, number_of_proposals, 0.05, h_prior[0] + 2.2 * h_prior[1])
-    l = sample_normal_in_range(l_prior[0], l_prior[1], number_of_proposals, 0.05, l_prior[0] + 2 * l_prior[1])
+    w = sample_normal_in_range(w_prior[0], w_prior[1], number_of_proposals, MIN_PROP_S, w_prior[0] + 2 * w_prior[1])
+    h = sample_normal_in_range(h_prior[0], h_prior[1]*1.1, number_of_proposals, MIN_PROP_S, h_prior[0] + 2.2 * h_prior[1])
+    l = sample_normal_in_range(l_prior[0], l_prior[1], number_of_proposals, MIN_PROP_S, l_prior[0] + 2 * l_prior[1])
 
     # x
     x_coefficients = torch.tensor([1.15, 0], device=reference_box.device)
