@@ -64,19 +64,12 @@ def show_mask(mask, ax, random_color=False):
     ax.imshow(mask_image)
     
 
-def build_roi_heads(cfg, input_shape, priors=None):
+def build_roi_heads(cfg, input_shape=None, priors=None):
     """
     Build ROIHeads defined by `cfg.MODEL.ROI_HEADS.NAME`.
     """
     name = cfg.MODEL.ROI_HEADS.NAME
     return ROI_HEADS_REGISTRY.get(name)(cfg, input_shape, priors=priors)
-
-def build_roi_heads_score(cfg, input_shape):
-    """
-    Build ROIHeads defined by `cfg.MODEL.ROI_HEADS.NAME`.
-    """
-    name = cfg.MODEL.ROI_HEADS.NAME
-    return ROI_HEADS_REGISTRY.get(name)(cfg, input_shape)
 
 @ROI_HEADS_REGISTRY.register()
 class ROIHeads_Boxer(StandardROIHeads):
@@ -290,13 +283,14 @@ class ROIHeads_Boxer(StandardROIHeads):
     def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type, proposal_function):
 
         # send all objects to cpu
-        # images_raw = images_raw.to('cpu')
-        # mask_per_image = [mask.to('cpu') for mask in mask_per_image]
-        # depth_maps = depth_maps.to('cpu')
-        # if ground_maps is not None:
-        #     ground_maps = ground_maps.to('cpu')
-        # Ks = [K.to('cpu') for K in Ks]
-        # instances = [instance.to('cpu') for instance in instances]
+        images = images.to('cpu')
+        images_raw = images_raw.to('cpu')
+        mask_per_image = [mask.to('cpu') for mask in mask_per_image]
+        depth_maps = depth_maps.to('cpu')
+        if ground_maps is not None:
+            ground_maps = ground_maps.to('cpu')
+        Ks = [K.to('cpu') for K in Ks]
+        instances = [instance.to('cpu') for instance in instances]
 
 
         if experiment_type['use_pred_boxes']:
@@ -319,7 +313,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         if self.dims_priors_enabled:
             # gather prior dimensions
-            prior_dims = self.priors_dims_per_cat.detach()#.to('cpu')
+            prior_dims = self.priors_dims_per_cat.detach().to('cpu')
             prior_dims = prior_dims[:, gt_box_classes, :, :].squeeze(0)
             prior_dims_mean = prior_dims[:, 0, :]
             prior_dims_std = prior_dims[:, 1, :]
@@ -452,7 +446,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             if isinstance(proposal_function, list):
                 IoU3Ds = torch.zeros((n_gt, len(proposal_function), number_of_proposals), device=gt_cubes.device)
                 for i, iter_proposal_function in enumerate(proposal_function):
-                    pred_cubes, _, _, _ = self.predict_cubes(gt_boxes.clone(), (prior_dims_mean.clone(), prior_dims_std.clone()), depth_maps.tensor.clone(), im_shape, Ks_scaled_per_box.clone(), number_of_proposals, iter_proposal_function, normal_vec.clone(), gt_cubes.clone())
+                    pred_cubes, _, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps.tensor, im_shape, Ks_scaled_per_box, number_of_proposals, iter_proposal_function, normal_vec, gt_cubes)
                     # pred_cubes = pred_cubes.to('cpu')
                     for j in range(n_gt):
                         IoU3D = iou_3d(gt_cubes[j], pred_cubes[j])
@@ -534,27 +528,35 @@ class ROIHeads_Score(StandardROIHeads):
 
     @configurable
     def __init__(self, *, 
-                 cube_pooler:nn.Module, mlp:nn.Sequential, criterion,
+                 cube_pooler:nn.Module, mlp:nn.Sequential, priors=None,
                  **kwargs, ):
         super().__init__(**kwargs)
 
         self.cube_pooler = cube_pooler
         self.mlp = mlp
-        self.criterion = criterion
 
     @classmethod
-    def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec]):
+    def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec], priors=None):
         
-        ret = super().from_config(cfg, input_shape)
+        ret = {}
+
+        ret['positive_fraction'] = cfg.MODEL.ROI_HEADS.POSITIVE_FRACTION
+
+        ret['box_in_features'] = None
+        ret['box_pooler'] = None
+        ret['box_head'] = None
+        ret['box_predictor'] = None
+        ret['proposal_matcher'] = None
+        ret['num_classes'] = None
+        ret['batch_size_per_image'] = None
         
         # pass along priors
-        ret["box_predictor"] = FastRCNNOutputs(cfg, ret['box_head'].output_shape)
-        ret.update(cls._init_cube_head(cfg, input_shape))
+        ret.update(cls._init_cube_head(cfg))
 
         return ret
     
     @classmethod
-    def _init_cube_head(self, cfg, input_shape: Dict[str, ShapeSpec]):
+    def _init_cube_head(self, cfg,):
         pooler_scales = (1/32,) # Because stride according to input_shape in p5 is 32.
         pooler_resolution = cfg.MODEL.ROI_CUBE_HEAD.POOLER_RESOLUTION 
         pooler_sampling_ratio = cfg.MODEL.ROI_CUBE_HEAD.POOLER_SAMPLING_RATIO
@@ -571,8 +573,7 @@ class ROIHeads_Score(StandardROIHeads):
         mlp = MLP(res, 1)
     
         return {'cube_pooler': cube_pooler,
-                'mlp': mlp,
-                'criterion': nn.BCEWithLogitsLoss()}
+                'mlp': mlp}
 
     def forward(self, pred_cubes, instances, Ks, im_scales_ratio, combined_features):
         if self.training:
@@ -648,7 +649,7 @@ class ROIHeads_Score(StandardROIHeads):
             pred_iou2d_logits, pred_iou2d_scores = self.mlp(cube_features)
             # Loss
             y_true = y_true.t().ravel()
-            loss = self.criterion(pred_iou2d_logits, y_true)
+            loss = F.binary_cross_entropy_with_logits(pred_iou2d_logits, y_true)
             #print(torch.round(pred_iou2d_scores.squeeze())[:16])
             #print(torch.round(pred_iou2d_scores.squeeze())[16:64])
             acc = (torch.round(pred_iou2d_scores.squeeze()) == y_true).float().mean()

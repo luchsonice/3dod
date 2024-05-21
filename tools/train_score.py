@@ -27,7 +27,7 @@ from cubercnn.data.dataset_mapper import DatasetMapper3D
 logger = logging.getLogger("scoring")
 
 from cubercnn.config import get_cfg_defaults
-from cubercnn.modeling.meta_arch import build_model
+from cubercnn.modeling.meta_arch import build_model, build_model_scorenet
 from cubercnn import util, vis, data
 # even though this import is unused, it initializes the backbone registry
 from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
@@ -63,8 +63,10 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     max_iter = cfg.SOLVER.MAX_ITER
     do_eval = cfg.TEST.EVAL_PERIOD > 0
 
+    modelbase = model[0]
+    modelbase.eval()
+    model = model[1]
     model.train()
-
     optimizer = build_optimizer(cfg, model)
     scheduler = build_lr_scheduler(cfg, optimizer)
 
@@ -93,7 +95,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     logger.info("Starting training from iteration {}".format(start_iter))
 
     if not cfg.MODEL.USE_BN:
-        freeze_bn(model)
+        freeze_bn(modelbase)
 
     data_iter = iter(data_loader)
     pbar = tqdm(range(start_iter, max_iter), initial=start_iter, total=max_iter, desc="Training", smoothing=0.05)
@@ -105,12 +107,12 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             storage.iter = iteration
 
             # forward
-            instances3d, loss, acc = model(data)
+            combined_features = modelbase(data)
+            instances3d, loss, acc = model(data, combined_features)
             # send loss scalars to tensorboard.
             storage.put_scalars(total_loss=loss, accuracy=acc)
         
             # backward and step
-            # simulate a batch size
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
@@ -302,7 +304,8 @@ def main(args):
     MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id  = id_map
 
     # build the  model.
-    model = build_model(cfg)
+    modelbase = build_model_scorenet(cfg, 'ScoreNetBase')
+    model = build_model_scorenet(cfg, 'ScoreNet')
 
     filter_settings = data.get_filter_settings_from_cfg(cfg)
 
@@ -352,7 +355,7 @@ def main(args):
     
     # DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(cfg.MODEL.WEIGHTS, resume=False)
 
-    return do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=args.resume)
+    return do_train(cfg, (modelbase, model), dataset_id_to_unknown_cats, dataset_id_to_src, resume=args.resume)
 
 
 if __name__ == "__main__":

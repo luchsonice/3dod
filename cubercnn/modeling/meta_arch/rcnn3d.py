@@ -23,7 +23,7 @@ from cubercnn.modeling.roi_heads import build_roi_heads
 
 from detectron2.data import MetadataCatalog
 from pytorch3d.transforms import rotation_6d_to_matrix
-from cubercnn.modeling.roi_heads import build_roi_heads, build_roi_heads_score
+from cubercnn.modeling.roi_heads import build_roi_heads
 from cubercnn import util, vis
 import torch.nn.functional as F
 from detectron2.config import configurable
@@ -555,7 +555,7 @@ class BoxNet(nn.Module):
             break 
 
 @META_ARCH_REGISTRY.register()
-class ScoreNet(nn.Module):
+class ScoreNetBase(nn.Module):
 
     @configurable
     def __init__(
@@ -563,17 +563,16 @@ class ScoreNet(nn.Module):
         *,
         depth_model: nn.Module,
         backbone: Backbone,
-        proposal_generator: nn.Module,
-        roi_heads: nn.Module,
         pixel_mean: tuple[float],
         pixel_std: tuple[float],
         input_format: Optional[str] = None
     ):
         """
+        generate feature maps from the depth model and the backbone
+
         Args:
             backbone: a backbone module, must follow detectron2's backbone interface
             proposal_generator: a module that generates proposals using backbone features
-            roi_heads: a ROI head that performs per-region computation
             pixel_mean, pixel_std: list or tuple with #channels element, representing
                 the per-channel mean and std to be used to normalize the input image
             input_format: describe the meaning of channels of input. Needed by visualization
@@ -582,8 +581,6 @@ class ScoreNet(nn.Module):
         super().__init__()
         self.depth_model = depth_model
         self.backbone = backbone
-        self.proposal_generator = proposal_generator
-        self.roi_heads = roi_heads
 
         self.input_format = input_format
         
@@ -602,8 +599,6 @@ class ScoreNet(nn.Module):
         return {
             "backbone": backbone,
             "depth_model": d_model,
-            "proposal_generator": build_proposal_generator(cfg, backbone.output_shape()),
-            "roi_heads": build_roi_heads_score(cfg, backbone.output_shape()),
             "input_format": cfg.INPUT.FORMAT,
             "pixel_mean": cfg.MODEL.PIXEL_MEAN,
             "pixel_std": cfg.MODEL.PIXEL_STD,
@@ -640,13 +635,105 @@ class ScoreNet(nn.Module):
         return images
 
     def forward(self, batched_inputs: List[Dict[str, torch.Tensor]]):
+        images = self.preprocess_image(batched_inputs, img_type='image', convert=False)
+        images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
+        with torch.no_grad():
+            pred_o = self.depth_model(images_raw.tensor.float()/255.0)
+            # backbone and proposal generator only work on 2D images and annotations.
+            features = self.backbone(images.tensor)
+
+        d_features = pred_o['depth_features']
+        img_features = features['p5']
+        # we must scale the depth map to the same size as the conv feature, otherwise the scale will not correspond correctly in the roi pooling
+        d_features = F.interpolate(d_features, size=img_features.shape[-2:], mode='bilinear', align_corners=False)
+        
+        # Standardize features
+        img_features_mean = img_features.mean()
+        img_features_std = img_features.std()
+        d_features_mean = d_features.mean()
+        d_features_std = d_features.std()
+
+        img_features = (img_features - img_features_mean) / img_features_std
+        d_features = (d_features - d_features_mean) / d_features_std
+        
+        combined_features = torch.cat((img_features, d_features), dim=1)
+        return combined_features
+
+    
+@META_ARCH_REGISTRY.register()
+class ScoreNet(nn.Module):
+
+    @configurable
+    def __init__(
+        self,
+        *,
+        roi_heads: nn.Module,
+        pixel_mean: tuple[float],
+        pixel_std: tuple[float],
+    ):
+        """
+        Args:
+            backbone: a backbone module, must follow detectron2's backbone interface
+            proposal_generator: a module that generates proposals using backbone features
+            roi_heads: a ROI head that performs per-region computation
+            pixel_mean, pixel_std: list or tuple with #channels element, representing
+                the per-channel mean and std to be used to normalize the input image
+            input_format: describe the meaning of channels of input. Needed by visualization
+            vis_period: the period to run visualization. Set to 0 to disable.
+        """
+        super().__init__()
+        self.roi_heads = roi_heads
+
+        self.register_buffer("pixel_mean", torch.tensor(pixel_mean).view(-1, 1, 1), False)
+        self.register_buffer("pixel_std", torch.tensor(pixel_std).view(-1, 1, 1), False)
+        assert (
+            self.pixel_mean.shape == self.pixel_std.shape
+        ), f"{self.pixel_mean} and {self.pixel_std} have different shapes!"
+    
+    @classmethod
+    def from_config(cls, cfg, priors):
+        return {
+            "roi_heads": build_roi_heads(cfg),
+            "pixel_mean": cfg.MODEL.PIXEL_MEAN,
+            "pixel_std": cfg.MODEL.PIXEL_STD,
+        }
+            
+    @property
+    def device(self):
+        return self.pixel_mean.device
+
+    def _move_to_current_device(self, x):
+        return move_device_like(x, self.pixel_mean)
+
+    def preprocess_image(self, batched_inputs: List[Dict[str, torch.Tensor]], normalise=True, img_type="image", convert=False, NoOp=False, to_float=False):
+        """
+        Normalize, pad and batch the input images.
+        """
+        images = [self._move_to_current_device(x[img_type]) for x in batched_inputs]
+        if normalise:
+            images = [(x - self.pixel_mean) / self.pixel_std for x in images]
+        else:
+            if convert:
+                # convert from BGR to RGB
+                images = [x[[2,1,0],:,:] for x in images]
+            if to_float:
+                images = [x.float()/255.0 for x in images]
+            if NoOp:
+                images = ImageList.from_tensors(images,0,)
+                return images
+        images = ImageList.from_tensors(
+            images,
+            64, #TODO: this should not be hardcoded
+            padding_constraints={'square_size': 0},
+        )
+        return images
+
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], combined_features):
         if not self.training:
             return self.inference(batched_inputs, do_postprocess=True)
 
         if self.training:
             images = self.preprocess_image(batched_inputs, img_type='image', convert=False)
-            images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
-            
             # scaling factor for the sample relative to its original scale
             # e.g., how much has the image been upsampled by? or downsampled?
             im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
@@ -662,37 +749,6 @@ class ScoreNet(nn.Module):
                 cubes = [x["proposals"].to(self.device) for x in batched_inputs]
             else:
                 raise ValueError("Dataset does not contain proposals. Make sure to use ' mode='load_proposals ' in DatasetMapper3D.")
-            # the backbone is actually a FPN, where the DLA model is the bottom-up structure.
-            # FPN: https://arxiv.org/abs/1612.03144v2
-            with torch.no_grad():
-                pred_o = self.depth_model(images_raw.tensor.float()/255.0)
-                # backbone and proposal generator only work on 2D images and annotations.
-                features = self.backbone(images.tensor)
-
-            d_features = pred_o['depth_features']
-            img_features = features['p5']
-            # we must scale the depth map to the same size as the conv feature, otherwise the scale will not correspond correctly in the roi pooling
-            d_features = F.interpolate(d_features, size=img_features.shape[-2:], mode='bilinear', align_corners=False)
-            
-            # Standardize features
-            img_features_np = img_features.cpu().detach().numpy()
-            d_features_np = d_features.cpu().detach().numpy()
-            img_features_reshaped = img_features_np.reshape(-1, img_features_np.shape[-1])
-            d_features_reshaped = d_features_np.reshape(-1, d_features_np.shape[-1])
-            
-            img_scaler = StandardScaler()
-            d_scaler = StandardScaler()
-            img_scaler.fit(img_features_reshaped)
-            d_scaler.fit(d_features_reshaped)
-            
-            img_features_scaled = torch.tensor(img_scaler.transform(img_features_reshaped),device=img_features.device).reshape(img_features_np.shape)
-            d_features_scaled = torch.tensor(d_scaler.transform(d_features_reshaped),device=d_features.device).reshape(d_features_np.shape)
-
-            # Reshape the features back to their original sizes
-            img_features_scaled = img_features_scaled.reshape(img_features_np.shape)
-            d_features_scaled = d_features_scaled.reshape(d_features_np.shape)
-            
-            combined_features = torch.cat((img_features_scaled, d_features_scaled), dim=1)
 
             instances3d, results, acc = self.roi_heads(cubes, gt_instances, Ks, im_scales_ratio, combined_features)
             return instances3d, results, acc
@@ -701,34 +757,7 @@ class ScoreNet(nn.Module):
         batched_inputs: List[Dict[str, torch.Tensor]],
         detected_instances: Optional[List[Instances]] = None, do_postprocess: bool = True):
         assert not self.training
-
-        # must apply the same preprocessing to both the image, the depth map
-        images = self.preprocess_image(batched_inputs, img_type='image', convert=False)
-        images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
-       
-        # scaling factor for the sample relative to its original scale
-        # e.g., how much has the image been upsampled by? or downsampled?
-        im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
-        
-        # The unmodified intrinsics for the image
-        Ks = [torch.FloatTensor(info['K']) for info in batched_inputs]
-
-        # do_postprocess is the same as using predicted boxes
-        if do_postprocess:
-            # gt_instances should be None in inference mode
-            features = self.backbone(images.tensor)
-            # normal inference
-            proposals, _ = self.proposal_generator(images, features, None)
-        else:
-            if "instances" in batched_inputs[0]:
-                gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
-            else:
-                gt_instances = None
-            features, proposals = None, gt_instances
-
-        results = self.roi_heads(images, images_raw, proposals, Ks, im_scales_ratio, combined_features=None)
-        return results
-    
+        raise NotImplementedError("Inference not implemented for ScoreNet")
 
 def build_model(cfg, priors=None):
     """
@@ -737,6 +766,16 @@ def build_model(cfg, priors=None):
     """
     meta_arch = cfg.MODEL.META_ARCHITECTURE
     model = META_ARCH_REGISTRY.get(meta_arch)(cfg, priors=priors)
+    model.to(torch.device(cfg.MODEL.DEVICE))
+    _log_api_usage("modeling.meta_arch." + meta_arch)
+    return model
+
+def build_model_scorenet(cfg, meta_arch):
+    """
+    Build the whole model architecture, defined by ``cfg.MODEL.META_ARCHITECTURE``.
+    Note that it does not load any weights from ``cfg``.
+    """
+    model = META_ARCH_REGISTRY.get(meta_arch)(cfg, priors=None)
     model.to(torch.device(cfg.MODEL.DEVICE))
     _log_api_usage("modeling.meta_arch." + meta_arch)
     return model
