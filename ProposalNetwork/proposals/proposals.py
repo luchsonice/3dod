@@ -49,8 +49,8 @@ def propose_z(reference_box, depth_image, priors, im_shape, K, number_of_proposa
     yt = rescale_interval(y, -1, 1)
     img_h, img_w = depth_image.shape
     z = torch.zeros_like(x)
-    x_scaled = rescale_interval(x, 0, img_w).to(dtype=int)
-    y_scaled = rescale_interval(y, 0, img_h).to(dtype=int)
+    x_scaled = rescale_interval(x, 0, img_w-1).to(dtype=int)
+    y_scaled = rescale_interval(y, 0, img_h-1).to(dtype=int)
     for i in range(number_of_instances):
         z[i] = depth_image[y_scaled[i], x_scaled[i]]
     
@@ -94,8 +94,8 @@ def propose_xy_patch(reference_box, depth_image, priors, im_shape, K, number_of_
     yt = rescale_interval(y, (h_y).view(-1, 1), l_y.view(-1, 1))
     z = torch.zeros_like(x)
     # rescale the number so the fit the image size
-    x_scaled = rescale_interval(x, x_min.view(-1, 1), x_max.view(-1, 1)).to(dtype=int)
-    y_scaled = rescale_interval(y, y_min.view(-1, 1), y_max.view(-1, 1)).to(dtype=int)
+    x_scaled = rescale_interval(x, x_min.view(-1, 1), x_max.view(-1, 1)-1).to(dtype=int)
+    y_scaled = rescale_interval(y, y_min.view(-1, 1), y_max.view(-1, 1)-1).to(dtype=int)
     for i in range(number_of_instances):
         z[i] = depth_image[y_scaled[i], x_scaled[i]]
 
@@ -206,7 +206,7 @@ def propose_aspect_ratio(reference_box, depth_image, priors, im_shape, K, number
     # Dimensions
     w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), MIN_PROP_S, 2)
     #
-    ratios = [0.5, 0.66, 1, 1.33, 1.5, 1.67, 2, 3]
+    ratios = [0.33, 0.66, 1, 1.33, 1.67, 2, 3]
     h = torch.zeros_like(w)
     l = torch.zeros_like(w)
     for i in range(number_of_instances):
