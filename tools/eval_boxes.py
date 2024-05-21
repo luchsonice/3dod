@@ -124,7 +124,8 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
         for i, inputs in tqdm(enumerate(data_loader), desc=f"IoU3D plots, proposal method: {proposal_functions}", total=total):
             output = model(inputs, segmentor, experiment_type, proposal_functions)
             outputs.append(output.cpu().numpy())
-        np.savez_compressed('ProposalNetwork/output/outputs.npz', outputs=outputs)
+        with open('ProposalNetwork/output/outputs.pkl', 'wb') as f:
+            pickle.dump(outputs, f)
 
         xlim = [0.2,1]
         IoUat = [0.15, 0.25, 0.4]

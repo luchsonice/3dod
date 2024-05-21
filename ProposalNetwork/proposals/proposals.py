@@ -5,8 +5,8 @@ from ProposalNetwork.utils.conversions import pixel_to_normalised_space
 import torch
 import numpy as np
 
-# 0.1 meters is the minimum edge length
-MIN_PROP_S = 0.10
+# 0.0x meters is the minimum edge length
+MIN_PROP_S = 0.05
 
 def rescale_interval(x, min, max):
     '''operation  (min - max) * x + max'''

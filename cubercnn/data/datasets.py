@@ -88,9 +88,9 @@ def is_ignore(anno, filter_settings, image_height):
     if ignore:
         return ignore
 
-    ignore |= anno['dimensions'][0] <= 0.015
-    ignore |= anno['dimensions'][1] <= 0.015
-    ignore |= anno['dimensions'][2] <= 0.015
+    ignore |= anno['dimensions'][0] <= 0.01
+    ignore |= anno['dimensions'][1] <= 0.01
+    ignore |= anno['dimensions'][2] <= 0.01
     ignore |= anno['center_cam'][2] > filter_settings['max_depth']
     ignore |= (anno['lidar_pts'] == 0)
     ignore |= (anno['segmentation_pts'] == 0)
