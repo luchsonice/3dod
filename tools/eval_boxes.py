@@ -129,7 +129,7 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
             with open('ProposalNetwork/output/outputs.pkl', 'wb') as f:
                 pickle.dump(outputs, f)
         else:
-            with open('ProposalNetwork/output/outputs.pkl', 'rb') as f:
+            with open('ProposalNetwork/output/outputs_10k.pkl', 'rb') as f:
                 outputs = pickle.load(f)
         xlim = [0.2,1]
         IoUat = [0.25, 0.4, 0.6]
@@ -154,7 +154,7 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
         for k, proposal_function in enumerate(proposal_functions):
             IoU3Ds = np.concatenate([x[:,k,:] for x in outputs])
             maxIOU_per_instance = np.max(IoU3Ds, axis=1)
-            sorted_IoU3D = np.sort(IoU3Ds,axis=1)
+            np.random.shuffle(IoU3Ds.T) #transpose to shuffle along the proposal axis
             # detection rate vs. IoU3D
             thresholds = np.arange(xlim[0],xlim[1],0.025)
             detection_rate = np.zeros(len(thresholds))
