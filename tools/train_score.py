@@ -79,7 +79,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     
     data_mapper = DatasetMapper3D(cfg, is_train=False, mode='load_proposals')
     dataset_name = cfg.DATASETS.TRAIN[0]
-    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=8)
+    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=2)
 
     # give the mapper access to dataset_ids
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
@@ -111,7 +111,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             combined_features = modelbase(data)
             instances3d, loss, acc = model(data, combined_features)
             # send loss scalars to tensorboard.
-            storage.put_scalars(total_loss=loss.detach(), accuracy=acc)
+            storage.put_scalars(total_loss=loss, accuracy=acc)
 
             # backward and step
             loss.backward()
