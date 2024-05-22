@@ -167,7 +167,7 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
                 detection_rate_at_IoU = np.zeros_like(IoU3Ds)
 
                 for j in range(IoU3Ds.shape[0]):
-                    if any_above_threshold[i]:
+                    if any_above_threshold[j]:
                         detection_rate_at_IoU[j, :first_above_threshold[j]] = 0
                         detection_rate_at_IoU[j, first_above_threshold[j]:] = 1
                 
