@@ -51,6 +51,7 @@ from cubercnn import util, vis, data
 # even though this import is unused, it initializes the backbone registry
 from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
 
+color_palette = ['#008dff','#ff73bf','#c701ff','#4ecb8d','#ff9d3a','#f93858','#384860']
 
 def inference_on_dataset(model, data_loader, segmentor, experiment_type, proposal_function):
     """
@@ -162,9 +163,9 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
             for i, IoU in enumerate(IoUat):
                 detection_rates[i] = np.mean(sorted_IoU3D > IoU,axis=0)
 
-            axes.plot(thresholds, detection_rate, label=f'{proposal_function}')
+            axes.plot(thresholds, detection_rate, label=f'{proposal_function}', color=color_palette[k])
             for j, ax in enumerate(axes2):
-                ax.plot(list(range(1, n_proposals+1)), detection_rates[j], label=f'{proposal_function}')
+                ax.plot(list(range(1, n_proposals+1)), detection_rates[j], label=f'{proposal_function}', color=color_palette[k])
     for ax in axes2:
         ax.legend()
     axes.legend()
