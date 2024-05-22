@@ -125,7 +125,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             pbar.update(1)
             pbar.set_postfix({"L1loss": loss.item(), "bin.acc": acc.item()})
             if iteration - start_iter > 5 and ((iteration + 1) % 2 == 0 or iteration == max_iter - 1):
-                for writer in writers:
+                for writer in writers[1:]: # 3 writers; 1: prints, 2: json logs, 3: tensorboard
                     writer.write()
             
             iteration += 1
