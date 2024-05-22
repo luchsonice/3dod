@@ -658,7 +658,7 @@ class ROIHeads_Score(StandardROIHeads):
             # Loss
             y_true = y_true.t().ravel()
             chosen_cubes_scores = y_true_not_thresh.t().ravel()
-            loss = F.mse_loss(pred_iou2d_scores.ravel(), chosen_cubes_scores)
+            loss = F.l1_loss(pred_iou2d_scores.ravel(), chosen_cubes_scores)
             #print(torch.round(pred_iou2d_scores.squeeze())[:16])
             #print(torch.round(pred_iou2d_scores.squeeze())[16:64])
             acc = (torch.round(pred_iou2d_scores.squeeze()) == y_true).float().mean()

@@ -127,7 +127,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
 
             # logging stuff 
             pbar.update(1)
-            pbar.set_postfix({"loss": loss.item(), "acc": acc.item()})
+            pbar.set_postfix({"L1loss": loss.item(), "bin.acc": acc.item()})
             #if iteration - start_iter > 5 and ((iteration + 1) % 2 == 0 or iteration == max_iter - 1):
             #    for writer in writers:
             #        writer.write()
