@@ -164,16 +164,12 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
                 mask_positive_values = IoU3Ds > IoU
                 first_above_threshold = np.argmax(mask_positive_values, axis=1)
                 any_above_threshold = mask_positive_values.any(axis=1)
-                result = np.zeros_like(IoU3Ds)
+                detection_rates = np.zeros_like(IoU3Ds)
 
                 for i in range(IoU3Ds.shape[0]):
                     if any_above_threshold[i]:
-                        result[i, :first_above_threshold[i]] = 0
-                        result[i, first_above_threshold[i]:] = 1
-                
-                return result
-
-
+                        detection_rates[i, :first_above_threshold[i]] = 0
+                        detection_rates[i, first_above_threshold[i]:] = 1
 
             axes.plot(thresholds, detection_rate, label=f'{proposal_function}', color=color_palette[k])
             for j, ax in enumerate(axes2):
