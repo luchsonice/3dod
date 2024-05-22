@@ -45,7 +45,8 @@ def load_gt(dataset='SUNRGBD', mode='test', single_im=True, filter=False):
     imgs = dataset.loadImgs(imgIds)
     if single_im:
         # img = random.choice(imgs)
-        img = imgs[730]
+        # 730 and 150 are used in the report
+        img = imgs[150]
         annIds = dataset.getAnnIds(imgIds=img['id'])
     else:
         # get all annotations
@@ -98,11 +99,13 @@ def plot_scene(image_path, output_dir, center_cams, dimensions_all, Rs, K, cats,
     
     image_name = util.file_parts(image_path)[1]
     print('File: {} with {} dets'.format(image_name, len(meshes)))
+    np.random.seed(0)
+    colors = [np.concatenate([np.random.random(3), np.array([0.6])], axis=0) for _ in range(len(meshes))]
 
     # Plot
     image = util.imread('datasets/'+image_path)
     if len(meshes) > 0:
-        im_drawn_rgb, im_topdown, _ = vis.draw_scene_view(image, np.array(K), meshes, text=meshes_text, scale=image.shape[0], blend_weight=0.5, blend_weight_overlay=0.85)
+        im_drawn_rgb, im_topdown, _ = vis.draw_scene_view(image, np.array(K), meshes, colors=colors, text=meshes_text, scale=image.shape[0], blend_weight=0.5, blend_weight_overlay=0.85)
 
         if False:
             im_concat = np.concatenate((im_drawn_rgb, im_topdown), axis=1)
@@ -111,7 +114,7 @@ def plot_scene(image_path, output_dir, center_cams, dimensions_all, Rs, K, cats,
         util.imwrite(im_drawn_rgb, os.path.join(output_dir, image_name+'_boxes.jpg'))
         util.imwrite(im_topdown, os.path.join(output_dir, image_name+'_novel.jpg'))
         v_pred = Visualizer(image, None)
-        v_pred = v_pred.overlay_instances(boxes=np.array(bboxes),)
+        v_pred = v_pred.overlay_instances(boxes=np.array(bboxes), assigned_colors=colors)
         util.imwrite(v_pred.get_image(), os.path.join(output_dir, image_name+'_pred_boxes.jpg'))
     else:
         print('No meshes')
@@ -533,8 +536,8 @@ def gt_stats(dataset):
 
     return True
 if __name__ == '__main__':
-    # show_data('SUNRGBD', filter_invalid=False, output_dir='output/playground/no_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
-    # show_data('SUNRGBD', filter_invalid=True, output_dir='output/playground/with_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
+    show_data('SUNRGBD', filter_invalid=False, output_dir='output/playground/no_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
+    show_data('SUNRGBD', filter_invalid=True, output_dir='output/playground/with_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
     # _ = category_distribution('SUNRGBD')
     # AP_vs_no_of_classes('SUNRGBD')
     #spatial_statistics('SUNRGBD')
