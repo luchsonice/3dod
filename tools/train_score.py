@@ -51,11 +51,7 @@ from cubercnn.data import (
     get_omni3d_categories,
     simple_register
 )
-from cubercnn.evaluation import (
-    Omni3DEvaluator, Omni3Deval,
-    Omni3DEvaluationHelper,
-    inference_on_dataset
-)
+
 from tqdm import tqdm
 
 
@@ -128,9 +124,9 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             # logging stuff 
             pbar.update(1)
             pbar.set_postfix({"loss": loss.item(), "acc": acc.item()})
-            #if iteration - start_iter > 5 and ((iteration + 1) % 2 == 0 or iteration == max_iter - 1):
-            #    for writer in writers:
-            #        writer.write()
+            if iteration - start_iter > 5 and ((iteration + 1) % 2 == 0 or iteration == max_iter - 1):
+                for writer in writers:
+                    writer.write()
             
             iteration += 1
             if iteration >= max_iter:
@@ -291,7 +287,7 @@ def main(args):
     
     name = f'learned score {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
     
-    #wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='online')
+    wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='online')
 
     category_path = 'output/Baseline_sgd/category_meta.json'
     
