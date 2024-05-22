@@ -18,6 +18,8 @@ from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.structures.boxes import BoxMode
 from detectron2.utils.logger import setup_logger
 
+color = '#384860'
+second_color = '#97a6c4'
 
 def load_gt(dataset='SUNRGBD', mode='test', single_im=True, filter=False):
 
@@ -264,7 +266,7 @@ def AP_vs_no_of_classes(dataset, file='output/Baseline_sgd/log.txt'):
     line_fit = np.polyfit(merged_df['cats'].values, merged_df['AP3D'].values, 1)
 
     # plot the line of best fit
-    ax.plot(merged_df['cats'].values, np.poly1d(line_fit)(merged_df['cats'].values), linestyle='--', color='black',alpha=0.5, label=f'Linear fit (R={correlation_coef:.2f})')
+    ax.plot(merged_df['cats'].values, np.poly1d(line_fit)(merged_df['cats'].values), linestyle='--', color=color,alpha=0.5, label=f'Linear fit (R={correlation_coef:.2f})')
 
     # Set labels and title
     ax.set_xlabel('No. of annotations')
@@ -307,7 +309,7 @@ def AP3D_vs_AP2D(dataset, file='output/Baseline_sgd/log.txt'):
     for i, txt in enumerate(merged_df['category']):
         ax.text(merged_df['AP2D'].values[i], merged_df['AP3D'].values[i], txt)
     # plot average line
-    ax.plot((0, 70), (0, 70), linestyle='--', color='black', alpha=0.3, label=f'AP2D=AP3D')
+    ax.plot((0, 70), (0, 70), linestyle='--', color=color, alpha=0.3, label=f'AP2D=AP3D')
 
     # Set labels and title
     ax.set_xlabel('AP2D')
@@ -472,7 +474,7 @@ def vol_over_cat(dataset):
     plt.figure(figsize=(14,5))
     for i, (mean, (lower_bound, upper_bound)) in enumerate(zip(means, bounds)):
         plt.vlines(x=i, ymin=lower_bound, ymax=upper_bound, color='gray', linewidth=2)
-        plt.plot([i], [mean], marker='o', color='black')
+        plt.plot([i], [mean], marker='o', color=color)
 
     plt.xticks(np.arange(len(keys)), keys, rotation=60, size=9)
     plt.xlabel('Category')
@@ -481,13 +483,62 @@ def vol_over_cat(dataset):
     plt.savefig(os.path.join(output_dir, 'volume_distribution.png'), dpi=300, bbox_inches='tight')
     plt.close()
 
+def gt_stats(dataset):
+    '''
+    Errorbarplot of volume of object category
+    '''
+    # Load Image and Ground Truths
+    image, Rs, center_cams, dimensions_all, cats, bboxes = load_gt(dataset, mode='train', single_im=False)
+    image_t, Rs_t, center_cams_t, dimensions_all_t, cats_t, bboxes = load_gt(dataset, mode='test', single_im=False)
+
+    output_dir = 'output/figures/' + dataset
+    util.mkdir_if_missing(output_dir)
+
+    # histogram of centers
+    center_all = center_cams + center_cams_t
+    center_all = np.transpose(np.array(center_all))
+
+    # Filter -1 annotations
+    valid_columns = center_all[0] != -1
+    center_all = center_all[:,valid_columns]
+    
+    x_label = ['x', 'y', 'z']
+    fig, axes = plt.subplots(1, len(center_all), figsize=(18, 5))
+    for i in range(len(center_all)):
+        axes[i].hist(center_all[i], color=color, bins=20)
+        axes[i].set_xlabel(x_label[i])
+        axes[i].set_ylabel('Count')
+    fig.suptitle('Center Distribution in Meters')
+    plt.savefig(os.path.join(output_dir, 'center.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+    # histogram of dimensions
+    dimensions_all = dimensions_all + dimensions_all_t
+    dimensions_all = np.transpose(np.array(dimensions_all))
+
+    # Filter -1 annotations
+    valid_columns = dimensions_all[0] != -1
+    dimensions_all = dimensions_all[:,valid_columns]
+    
+    x_label = ['w', 'h', 'l']
+    fig, axes = plt.subplots(1, len(dimensions_all), figsize=(18, 5))
+    for i in range(len(dimensions_all)):
+        axes[i].hist(dimensions_all[i], color=color, bins=20)
+        axes[i].set_xlabel(x_label[i])
+        axes[i].set_ylabel('Count')
+    fig.suptitle('Dimensions Distribution in Meters')
+    plt.savefig(os.path.join(output_dir, 'dimensions.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+
     return True
 if __name__ == '__main__':
     # show_data('SUNRGBD', filter_invalid=False, output_dir='output/playground/no_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
     # show_data('SUNRGBD', filter_invalid=True, output_dir='output/playground/with_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
     # _ = category_distribution('SUNRGBD')
     # AP_vs_no_of_classes('SUNRGBD')
-    spatial_statistics('SUNRGBD')
+    #spatial_statistics('SUNRGBD')
     # AP3D_vs_AP2D('SUNRGBD')
     # init_dataloader()
     # vol_over_cat('SUNRGBD')
+    gt_stats('SUNRGBD')
