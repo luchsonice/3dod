@@ -74,9 +74,10 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     writers = default_writers(cfg.OUTPUT_DIR, max_iter)
 
     # create the dataloader
+    
     data_mapper = DatasetMapper3D(cfg, is_train=False, mode='load_proposals')
     dataset_name = cfg.DATASETS.TRAIN[0]
-    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=4)
+    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=8)
 
     # give the mapper access to dataset_ids
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
@@ -99,7 +100,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     pbar = tqdm(range(start_iter, max_iter), initial=start_iter, total=max_iter, desc="Training", smoothing=0.05)
 
     with EventStorage(start_iter) as storage:
-        
+
         while True:
             data = next(data_iter)
             storage.iter = iteration
@@ -107,11 +108,14 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             # forward
             instances3d, loss, acc = model(data)
             # send loss scalars to tensorboard.
-            storage.put_scalars(total_loss=loss, accuracy=acc)
-        
+            storage.put_scalars(total_loss=loss.detach(), accuracy=acc)
+
             # backward and step
             # simulate a batch size
             loss.backward()
+            #for name, param in model.named_parameters():
+            #    if param.grad is not None:
+            #        print(name, param.grad)
             optimizer.step()
             optimizer.zero_grad()
             scheduler.step()

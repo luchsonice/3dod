@@ -516,8 +516,15 @@ class MLP(nn.Module):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(in_features, 256),
+            nn.BatchNorm1d(256),
             nn.ReLU(),
-            nn.Linear(256, out_features),
+            nn.Linear(256, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Linear(128, 64),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Linear(64, out_features),
         )
         self.sigmoid = nn.Sigmoid()
     def forward(self, x):
@@ -583,11 +590,10 @@ class ROIHeads_Score(StandardROIHeads):
     def _forward_cube(self, pred_cubes, instances, Ks, im_scales_ratio, combined_features):
         Ks_scaled = torch.cat([(K/scale).unsqueeze(0) for K, scale in zip(Ks, im_scales_ratio)]).to(combined_features.device)
         Ks_scaled[:, -1, -1] = 1
-        
         if self.training:
             boxes = []
             total_num_of_boxes_per_image = 64
-            balance = 4   # 1/this number as ratio of positives
+            balance = 2   # 1/this number as ratio of positives
             total_num_of_positive_boxes_per_image = int(total_num_of_boxes_per_image / balance)
             total_num_of_negative_boxes_per_image = int(((balance-1) * total_num_of_boxes_per_image)/balance)
             y_true = torch.zeros(total_num_of_boxes_per_image, len(im_scales_ratio), device=combined_features.device)
@@ -647,8 +653,7 @@ class ROIHeads_Score(StandardROIHeads):
             # Loss
             y_true = y_true.t().ravel()
             loss = self.criterion(pred_iou2d_logits, y_true)
-            #print(torch.round(pred_iou2d_scores.squeeze())[:16])
-            #print(torch.round(pred_iou2d_scores.squeeze())[16:64])
+
             acc = (torch.round(pred_iou2d_scores.squeeze()) == y_true).float().mean()
             return None, loss, acc
     
