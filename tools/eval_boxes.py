@@ -120,16 +120,19 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
             stack.enter_context(inference_context(model))
         stack.enter_context(torch.no_grad())
 
-        torch.set_float32_matmul_precision('high')
-        outputs = []
-        for i, inputs in tqdm(enumerate(data_loader), desc=f"IoU3D plots, proposal method: {proposal_functions}", total=total):
-            output = model(inputs, segmentor, experiment_type, proposal_functions)
-            outputs.append(output.cpu().numpy())
-        with open('ProposalNetwork/output/outputs.pkl', 'wb') as f:
-            pickle.dump(outputs, f)
-
+        if not os.path.exists('ProposalNetwork/output/outputs.pkl'):
+            torch.set_float32_matmul_precision('high')
+            outputs = []
+            for i, inputs in tqdm(enumerate(data_loader), desc=f"IoU3D plots, proposal method: {proposal_functions}", total=total):
+                output = model(inputs, segmentor, experiment_type, proposal_functions)
+                outputs.append(output.cpu().numpy())
+            with open('ProposalNetwork/output/outputs.pkl', 'wb') as f:
+                pickle.dump(outputs, f)
+        else:
+            with open('ProposalNetwork/output/outputs_10k.pkl', 'rb') as f:
+                outputs = pickle.load(f)
         xlim = [0.2,1]
-        IoUat = [0.15, 0.25, 0.4]
+        IoUat = [0.25, 0.4, 0.6]
         n_proposals = outputs[0].shape[-1]
         
         fig, axes = plt.subplots(1, figsize=(7.5,5))
@@ -151,7 +154,7 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
         for k, proposal_function in enumerate(proposal_functions):
             IoU3Ds = np.concatenate([x[:,k,:] for x in outputs])
             maxIOU_per_instance = np.max(IoU3Ds, axis=1)
-            sorted_IoU3D = np.sort(IoU3Ds,axis=1)
+            np.random.shuffle(IoU3Ds.T) #transpose to shuffle along the proposal axis
             # detection rate vs. IoU3D
             thresholds = np.arange(xlim[0],xlim[1],0.025)
             detection_rate = np.zeros(len(thresholds))
@@ -175,12 +178,12 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
 
             axes.plot(thresholds, detection_rate, label=f'{proposal_function}', color=color_palette[k])
             for j, ax in enumerate(axes2):
-                ax.plot(list(range(1, n_proposals+1)), detection_rates[j], label=f'{proposal_function}', color=color_palette[k])
+                ax.semilogx(list(range(1, n_proposals+1)), detection_rates[j], label=f'{proposal_function}', color=color_palette[k])
     for ax in axes2:
         ax.legend()
     axes.legend()
-    fig.savefig('ProposalNetwork/output/detection_rate.png', dpi=300, bbox_inches='tight')
-    fig2.savefig('ProposalNetwork/output/IoU_varying.png', dpi=300, bbox_inches='tight')
+    fig.savefig(f'ProposalNetwork/output/detection_rate_{n_proposals}.png', dpi=300, bbox_inches='tight')
+    fig2.savefig(f'ProposalNetwork/output/IoU_varying_{n_proposals}.png', dpi=300, bbox_inches='tight')
 
 
     return
