@@ -462,7 +462,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
                 # With gt
                 #IoU3D[-1] = 1
-                #pred_cubes[i].tensor[-1] = gt_cubes[i].tensor
+                #pred_cubes[i].tensor[0,-1] = gt_cubes[i].tensor
 
                 # scoring
                 bube_corners = pred_cubes[i].get_bube_corners(Ks_scaled_per_box)
