@@ -612,6 +612,7 @@ class ROIHeads_Score(StandardROIHeads):
             total_num_of_positive_boxes_per_image = int(total_num_of_boxes_per_image / balance)
             total_num_of_negative_boxes_per_image = int(((balance-1) * total_num_of_boxes_per_image)/balance)
             y_true = torch.zeros(total_num_of_boxes_per_image, len(im_scales_ratio), device=combined_features.device)
+            y_true_not_thresh = torch.zeros(total_num_of_boxes_per_image, len(im_scales_ratio), device=combined_features.device)
             for i, pred_cube in enumerate(pred_cubes):
                 # Choose boxes
                 all_scores = pred_cube.scores
@@ -662,12 +663,16 @@ class ROIHeads_Score(StandardROIHeads):
                 chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes, chosen_cubes_scores.unsqueeze(1)), Ks_scaled[i]))
                 boxes.append(chosen_boxes)
                 y_true[:, i] = binary_chosen_cubes_scores
+                y_true_not_thresh[:, i] = chosen_cubes_scores
             # Cube Pooler
             cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
             pred_iou2d_logits, pred_iou2d_scores = self.mlp(cube_features)
             # Loss
             y_true = y_true.t().ravel()
-            loss = F.binary_cross_entropy_with_logits(pred_iou2d_logits, y_true)
+            chosen_cubes_scores = y_true_not_thresh.t().ravel()
+            loss = F.l1_loss(pred_iou2d_scores.ravel(), chosen_cubes_scores)
+            #print(torch.round(pred_iou2d_scores.squeeze())[:16])
+            #print(torch.round(pred_iou2d_scores.squeeze())[16:64])
             acc = (torch.round(pred_iou2d_scores.squeeze()) == y_true).float().mean()
             return None, loss, acc
     

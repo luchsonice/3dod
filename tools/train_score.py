@@ -75,7 +75,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     
     data_mapper = DatasetMapper3D(cfg, is_train=False, mode='load_proposals')
     dataset_name = cfg.DATASETS.TRAIN[0]
-    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=8)
+    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=2)
 
     # give the mapper access to dataset_ids
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
@@ -107,7 +107,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             combined_features = modelbase(data)
             instances3d, loss, acc = model(data, combined_features)
             # send loss scalars to tensorboard.
-            storage.put_scalars(total_loss=loss.detach(), accuracy=acc)
+            storage.put_scalars(total_loss=loss, accuracy=acc)
 
             # backward and step
             loss.backward()
@@ -123,9 +123,9 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
 
             # logging stuff 
             pbar.update(1)
-            pbar.set_postfix({"loss": loss.item(), "acc": acc.item()})
+            pbar.set_postfix({"L1loss": loss.item(), "bin.acc": acc.item()})
             if iteration - start_iter > 5 and ((iteration + 1) % 2 == 0 or iteration == max_iter - 1):
-                for writer in writers:
+                for writer in writers[1:]: # 3 writers; 1: prints, 2: json logs, 3: tensorboard
                     writer.write()
             
             iteration += 1
