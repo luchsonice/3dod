@@ -48,18 +48,12 @@ def score_iou(gt_box, proposal_box):
     IoU = iou_2d(gt_box,proposal_box)
     return IoU
 
-def chamfer_distance(set1, set2):
-    # Convert the point sets to numpy arrays if they aren't already
-    set1 = np.array(set1)
-    set2 = np.array(set2)
-    
-    # Use scipy's cKDTree to create a k-D tree for fast nearest-neighbor lookup
+def modified_chamfer_distance(set1, set2):
     tree2 = cKDTree(set2)
-    
-    # For each point in set2, find the distance to the nearest point in set1
+    # For each point in set1 (seg point), find the distance to the nearest point in set2 (bube corner)
     distances2, _ = tree2.query(set1)
     
-    return np.sum(distances2)
+    return np.mean(distances2)
 
 def score_corners(segmentation_mask, bube_corners):
     mask_np = segmentation_mask.cpu().numpy().astype(np.uint8)
@@ -72,14 +66,12 @@ def score_corners(segmentation_mask, bube_corners):
         largest_contour = max(contours, key=cv2.contourArea)
         rect = cv2.minAreaRect(largest_contour)
         box = cv2.boxPoints(rect)
-        box = np.int0(box)  # Convert to integer coordinates
 
-    bube_corners = bube_corners.to(device=segmentation_mask.device)
     bube_corners = bube_corners.squeeze(0) # remove instance dim
     scores = torch.zeros(len(bube_corners), device=segmentation_mask.device)
     for i in range(len(bube_corners)):
         # Chamfer distance bube corners and box
-        scores[i] = chamfer_distance(box, bube_corners[i])
+        scores[i] = modified_chamfer_distance(box, bube_corners[i].cpu().numpy())
     
     max_score = torch.max(scores)
     
@@ -122,7 +114,7 @@ def score_segmentation_v2(segmentation_mask, pred_cubes, K):
         scores.append(mask_iou(segmentation_mask, bube_mask))
     return scores
 
-def score_dimensions(category, dimensions):
+def score_dimensions(category, dimensions, gt_boxes, pred_boxes):
     '''
     category   : List
     dimensions : List of Lists
@@ -132,7 +124,15 @@ def score_dimensions(category, dimensions):
     [prior_mean, prior_std] = category
     dimensions_scores = torch.exp(-1/2 * ((dimensions - prior_mean)/prior_std)**2)
     scores = dimensions_scores.mean(1)
-    return scores
+
+    gt_ratio = (gt_boxes.tensor[0,2]-gt_boxes.tensor[0,0])/(gt_boxes.tensor[0,3]-gt_boxes.tensor[0,1])
+    pred_ratios = (pred_boxes.tensor[:,2]-pred_boxes.tensor[:,0])/(pred_boxes.tensor[:,3]-pred_boxes.tensor[:,1])
+    differences = torch.abs(gt_ratio-pred_ratios)
+    max_difference = torch.max(differences)
+    
+    return (1 - differences / max_difference) * scores
+
+
 
 def score_ratios(gt_box,pred_boxes):
     gt_points = gt_box.tensor[0]
