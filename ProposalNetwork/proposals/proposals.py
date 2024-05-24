@@ -355,7 +355,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     z = z_tmp+l/2
     z_coefficients = torch.tensor([0.85, 0.35], device=reference_box.device)
     z = sample_normal_in_range(lin_fun(torch.median(z,dim=1).values,z_coefficients), torch.std(z,dim=1) * 1.2, number_of_proposals)
-
+    #z = gt_cube.tensor[:,0,2].view(-1,1).repeat(1,number_of_proposals)
     xyzwhl = torch.stack([x, y, z, w, h, l], 2)
     
     # Pose
@@ -370,6 +370,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     # Check whether it is possible to find gt
     # if not (gt_cube == None) and not is_gt_included(gt_cube,x_range, y_range, z_range, w_prior, h_prior, l_prior):
     #    pass
+
     cubes = Cubes(torch.cat((xyzwhl, rotation_matrices.flatten(start_dim=2)), dim=2))
 
     # Statistics
