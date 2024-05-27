@@ -312,3 +312,7 @@ class Cubes:
         Yield a cube as a Tensor of shape (15,) at a time.
         """
         yield from self.tensor
+
+    def split(self, split_size: int) -> tuple["Cubes"]:
+        """same behaviour as torch.split, return a tuple of chunksize Cubes"""
+        return tuple(Cubes(x) for x in self.tensor.split(split_size, dim=1))

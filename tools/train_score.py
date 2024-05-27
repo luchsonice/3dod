@@ -1,4 +1,5 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates
+import sys
 import warnings
 
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_512 in registry")
@@ -106,8 +107,8 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             combined_features = modelbase(data)
             loss_score, loss_regression, acc = model(data, combined_features)
             # scale the dimension L1-loss by a factor of 1000 to have both the scoring and regression losses in a similar range
-            loss_regression = loss_regression/100_000
-            total_loss = loss_score + loss_regression
+            loss_regression = loss_regression/1_000
+            total_loss = loss_score + 0.5 * loss_regression
             # send loss scalars to tensorboard.
             storage.put_scalars(total_loss=total_loss, score_loss=loss_score, regression_loss=loss_regression, accuracy=acc)
 
@@ -289,7 +290,9 @@ def main(args):
     
     name = f'learned score {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
     
-    wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='online')
+    if sys.platform == 'linux':
+        # only log to wandb on hpc/linux
+        wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='online')
 
     category_path = 'output/Baseline_sgd/category_meta.json'
     

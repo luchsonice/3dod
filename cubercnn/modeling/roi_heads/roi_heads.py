@@ -645,7 +645,7 @@ class ROIHeads_Score(StandardROIHeads):
     
     def _forward_cube(self, pred_cubes, instances, Ks, im_scales_ratio, combined_features, image_sizes):
         Ks_scaled = torch.cat([(K/scale).unsqueeze(0) for K, scale in zip(Ks, im_scales_ratio)]).to(combined_features.device)
-        image_sizes = image_sizes[0][::-1]
+        image_sizes = [image_size[::-1] for image_size in image_sizes]
         Ks_scaled[:, -1, -1] = 1
         boxes = []
         total_num_of_boxes_per_image = 64
@@ -699,26 +699,26 @@ class ROIHeads_Score(StandardROIHeads):
                 positive_scores = all_scores[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
                 chosen_cubes_scores = torch.cat([positive_scores, negative_scores], dim=0)
             
-
             binary_chosen_cubes_scores = (chosen_cubes_scores > 0.5).float()
-            chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes, chosen_cubes_scores.unsqueeze(1)), Ks_scaled[i], image_sizes))
+            chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes, chosen_cubes_scores.unsqueeze(1)), Ks_scaled[i], image_sizes[i]))
             boxes.append(chosen_boxes)
             y_true[:, i] = binary_chosen_cubes_scores
             y_true_not_thresh[:, i] = chosen_cubes_scores
-            # Cube Pooler
-            cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
-            pred_iou2d_scores, mlp_cubes = self.mlp(cube_features)
-            # Loss
-            y_true = y_true.t().ravel()
-            chosen_cubes_scores = y_true_not_thresh.t().ravel()
-            loss_score = F.l1_loss(pred_iou2d_scores.ravel(), chosen_cubes_scores)
-            proj_cubes = cubes_to_box(mlp_cubes, Ks_scaled, image_sizes)
-            loss_dims = 0
-            for box, proj_cube in zip(boxes, proj_cubes):
-                # TODO: should the mean be along dim 0 or 1
-                loss_dims =+ F.l1_loss(box.tensor, proj_cube.tensor, reduction='none').mean(1).sum()
-            acc = (torch.round(pred_iou2d_scores.squeeze()) == y_true).float().mean()
-            return loss_score, loss_dims, acc
+        # Cube Pooler
+        cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
+        pred_iou2d_scores, mlp_cubes = self.mlp(cube_features)
+        # Loss
+        y_true = y_true.t().ravel()
+        chosen_cubes_scores = y_true_not_thresh.t().ravel()
+        loss_score = F.l1_loss(pred_iou2d_scores.ravel(), chosen_cubes_scores)
+        loss_dims = 0
+        for mlp_cube, box, K, image_size in zip(mlp_cubes.split(total_num_of_boxes_per_image), boxes, Ks_scaled, image_sizes):
+            # because the cubes_to_box function assumes that the K is the same for all cubes in structure, we must loop over it
+            proj_cubes = cubes_to_box(mlp_cube, K, image_size)[0]
+            # TODO: should the mean be along dim 0 (per x1, y1, x2, y2) or dim 1 (per box) ??
+            loss_dims =+ F.l1_loss(box.tensor, proj_cubes.tensor, reduction='none').mean(0).sum()
+        acc = (torch.round(pred_iou2d_scores.squeeze()) == y_true).float().mean()
+        return loss_score, loss_dims, acc
         
     def inference(self, combined_features, boxes):
         cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
