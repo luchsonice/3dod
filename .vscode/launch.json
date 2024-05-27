@@ -65,7 +65,7 @@
             "program": "tools/eval_boxes.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--eval-only", "--config-file" ,"configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "MABO", "PLOT.MODE2D", "GT"]
+            "args": ["--eval-only", "--config-file" ,"configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "MABO", "PLOT.MODE2D", "GT", "PLOT.PROPOSAL_FUNC", "full", "PLOT.SCORING_FUNC", "False", "OUTPUT_DIR","output/ScoreNet"]
         },
         {
             "name": "BoxNet MABO PRED",
@@ -75,6 +75,15 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "MABO", "PLOT.MODE2D", "PRED"]
+        },
+        {
+            "name": "BoxNet IoU3D GT",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/eval_boxes.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--eval-only", "--config-file" ,"configs/BoxNet.yaml", "PLOT.EVAL", "IoU3D", "PLOT.MODE2D", "GT", "PLOT.PROPOSAL_FUNC", "['random', 'z', 'xy', 'dim', 'rotation', 'aspect' ,'full']", "PLOT.SCORING_FUNC", "False"]
         },
         {
             "name": "BoxNet AP PRED",
@@ -95,6 +104,15 @@
             "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "AP", "PLOT.MODE2D", "GT"]
         },
         {
+            "name": "BoxNet MABO GT Proposal aspect",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/eval_boxes.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "MABO", "PLOT.MODE2D", "GT", "PLOT.PROPOSAL_FUNC", "aspect", "OUTPUT_DIR", "output/aspect"]
+        },
+        {
             "name": "BoxNet generate pseudo GT",
             "type": "python",
             "request": "launch",
@@ -110,7 +128,9 @@
             "program": "tools/train_score.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--config-file", "configs/ScoreNet.yaml"]//, "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth"]
+            "args": ["--config-file", "configs/ScoreNet.yaml", "OUTPUT_DIR", "output/ScoreNet"]
+            //, "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth"]
         },
+        
     ]
 }
