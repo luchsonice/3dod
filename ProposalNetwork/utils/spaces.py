@@ -223,11 +223,15 @@ class Cubes:
         Returns:
             num_instances x N x 8 x 2'''
         cube_corners = self.get_all_corners() # num_instances x N x 8 x 3
-        # output of
-        K_repeated = K.repeat(self.num_instances,1,1)
-        cube_corners = torch.matmul(K_repeated, cube_corners.permute(1,0,3,2)).permute(1,0,3,2)
-        cube_corners = cube_corners[:, :, :, :2]/cube_corners[:, :, :, 2].unsqueeze(-1)
-        return cube_corners # num_instances x N x 8 x 2
+        num_prop = cube_corners.shape[1]
+        cube_corners = cube_corners.reshape(self.num_instances * num_prop, 8, 3)
+        K_repeated = K.repeat(self.num_instances * num_prop,1,1)
+        cube_corners = torch.matmul(K_repeated, cube_corners.transpose(2,1))
+        cube_corners = cube_corners[:, :2, :]/cube_corners[:, 2, :].unsqueeze(-2)
+        cube_corners = cube_corners.transpose(2,1)
+        cube_corners = cube_corners.reshape(self.num_instances,num_prop, 8, 2)
+
+        return cube_corners # num_instances x num_proposals x 8 x 2
     
     def get_volumes(self) -> float:
         return self.get_dimensions().prod(1).item()
