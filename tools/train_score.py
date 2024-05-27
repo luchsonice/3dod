@@ -105,7 +105,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
 
             # forward
             combined_features = modelbase(data)
-            instances3d, loss, acc = model(data, combined_features)
+            loss, acc = model(data, combined_features)
             # send loss scalars to tensorboard.
             storage.put_scalars(total_loss=loss, accuracy=acc)
 

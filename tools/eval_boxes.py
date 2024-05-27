@@ -233,7 +233,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         score_combined    = np.concatenate([np.array(sublist) for sublist in (x[4] for x in outputs)])
         score_random      = np.concatenate([np.array(sublist) for sublist in (x[5] for x in outputs)])
         score_point_cloud = np.concatenate([np.array(sublist) for sublist in (x[6] for x in outputs)])
-        stat_empty_boxes  = np.array([x[7] for x in outputs])
+        score_deep        = np.concatenate([np.array(sublist) for sublist in (x[7] for x in outputs)])
+        stat_empty_boxes  = np.array([x[8] for x in outputs])
         #logger.info('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
         print('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
 
@@ -243,6 +244,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         score_combined = score_combined.mean(axis=0)
         score_random = score_random.mean(axis=0)
         score_point_cloud = score_point_cloud.mean(axis=0)
+        score_deep = score_deep.mean(axis=0)
         total_num_instances = np.sum([x[0].gt_boxes3D.shape[0] for x in outputs])
                 
         plt.figure(figsize=(8,5))
@@ -252,6 +254,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.plot(Iou2D, linestyle='-',c='orange',label='2d IoU') 
         plt.plot(score_random, linestyle='-',c='grey',label='random') 
         plt.plot(score_point_cloud, linestyle='-',c='green',label='point cloud')
+        plt.plot(score_deep, linestyle='-',c='blue',label='learned')
         plt.grid(True)
         plt.xscale('log')
         plt.xlim(left=1)
@@ -266,7 +269,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         print('saved to ', f_name)
 
         # Statistics
-        stats = torch.cat([x[8] for x in outputs],dim=0)
+        stats = torch.cat([x[9] for x in outputs],dim=0)
         num_bins = 40
         titles = ['x','y','z','w','h','l','rx','ry','rz']
         plt.figure(figsize=(15, 15))
@@ -283,7 +286,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         #logger.info('saved to ', f_name
         print('saved to ', f_name)
 
-        stats_off = np.concatenate([np.array(sublist) for sublist in (x[9] for x in outputs)])
+        stats_off = np.concatenate([np.array(sublist) for sublist in (x[10] for x in outputs)])
         plt.figure(figsize=(15, 15))
         for i,title in enumerate(titles):
             plt.subplot(3, 3, 1+i)
@@ -321,10 +324,10 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             input = next(d_iter)[0]
             images_raw = input['image']
             
-            prop_img = convert_image_to_rgb(images_raw.permute(1,2,0).cpu().numpy(), 'BGR').copy()
-            v_pred = Visualizer(prop_img, None)
+            org_img = convert_image_to_rgb(images_raw.permute(1,2,0).cpu().numpy(), 'BGR').copy()
+            v_pred = Visualizer(org_img, None)
             v_pred = v_pred.overlay_instances(
-                boxes=p_info.gt_boxes[0:box_size].tensor.cpu().numpy()
+                boxes=p_info.pred_boxes[0:box_size].tensor.cpu().numpy()
                 , assigned_colors=colors
             )
             prop_img = v_pred.get_image()
@@ -338,6 +341,9 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             img_novel = np.concatenate((img_novel, np.ones_like(img_novel[:,:,0:1])*255), axis=-1)/255
             ax.imshow(np.concatenate((vis_img_3d, img_novel), axis=1))
             box_size = len(p_info.gt_cube_meshes)
+            v_pred = Visualizer(org_img, None)
+            v_pred = v_pred.overlay_instances(boxes=p_info.gt_boxes[0:box_size].tensor.cpu().numpy(), assigned_colors=colors)
+            prop_img = v_pred.get_image()
             gt_box_classes_names = [util.MetadataCatalog.get('omni3d_model').thing_classes[i] for i in p_info.gt_box_classes]
             img_3DPR, img_novel, _ = vis.draw_scene_view(prop_img, p_info.K, p_info.gt_cube_meshes,text=gt_box_classes_names, blend_weight=0.5, blend_weight_overlay=0.85,scale = prop_img.shape[0],colors=colors)
             vis_img_3d = img_3DPR.astype(np.uint8)
@@ -604,7 +610,7 @@ def main(args):
 
     if args.eval_only:
         assert cfg.PLOT.MODE2D in ['GT', 'PRED'], 'MODE2D must be either GT or PRED'
-        assert cfg.PLOT.EVAL in ['AP', 'MABO', 'IoU3D'], 'EVAL must be either AP or MABO'
+        assert cfg.PLOT.EVAL in ['AP', 'MABO', 'IoU3D'], 'EVAL must be either AP, MABO or IoU3D'
         if cfg.PLOT.EVAL == 'MABO':
             assert cfg.PLOT.MODE2D == 'GT', 'MABO only works with GT boxes'
     

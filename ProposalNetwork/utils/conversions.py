@@ -22,18 +22,19 @@ def cube_to_box(cube,K):
     
     return Boxes(torch.tensor([[min_x, min_y, max_x, max_y]], device=cube.tensor.device))
 
-def cubes_to_box(cubes,K):
+def cubes_to_box(cubes, K, im_shape):
     '''
     Converts a Cubes to a Boxes.
 
     Args:
         cubes: A Cubes.
         K: The 3D camera matrix of the box.
+        im_shape: The shape of the image (width, height).
 
     Returns:
         A Box.
     '''
-    bube_corners = cubes.get_bube_corners(K)
+    bube_corners = cubes.get_bube_corners(K, im_shape)
     min_x, _ = torch.min(bube_corners[:, :, :, 0], 2)
     max_x, _ = torch.max(bube_corners[:, :, :, 0], 2)
     min_y, _ = torch.min(bube_corners[:, :, :, 1], 2)

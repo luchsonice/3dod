@@ -272,6 +272,7 @@ class BoxNet(nn.Module):
         pixel_std: tuple[float],
         input_format: Optional[str] = None,
         vis_period: int = 0,
+        scorenet_base: nn.Module,
     ):
         """
         Args:
@@ -287,7 +288,8 @@ class BoxNet(nn.Module):
         self.backbone = backbone
         self.proposal_generator = proposal_generator
         self.roi_heads = roi_heads
-
+        self.scorenet_base = scorenet_base
+        
         self.input_format = input_format
         self.vis_period = vis_period
         if vis_period > 0:
@@ -302,9 +304,9 @@ class BoxNet(nn.Module):
     @classmethod
     def from_config(cls, cfg, priors=None):
         backbone = build_backbone(cfg, priors=priors)
-        # depth_model = 'zoedepth'
-        # pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
-        # d_model = setup_depth_model(depth_model, pretrained_resource) #NOTE maybe make the depth model be learnable as well
+        depth_model = 'zoedepth'
+        pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
+        d_model = setup_depth_model(depth_model, pretrained_resource) #NOTE maybe make the depth model be learnable as well
         return {
             "backbone": backbone,
             "proposal_generator": build_proposal_generator(cfg, backbone.output_shape()),
@@ -313,6 +315,7 @@ class BoxNet(nn.Module):
             "vis_period": cfg.VIS_PERIOD,
             "pixel_mean": cfg.MODEL.PIXEL_MEAN,
             "pixel_std": cfg.MODEL.PIXEL_STD,
+            "scorenet_base": ScoreNetBase(depth_model=d_model, backbone=backbone, pixel_mean=cfg.MODEL.PIXEL_MEAN, pixel_std=cfg.MODEL.PIXEL_STD, input_format=cfg.INPUT.FORMAT),
         }
             
     @property
@@ -414,11 +417,13 @@ class BoxNet(nn.Module):
                 gt_instances = None
             features, proposals = None, gt_instances
 
+        combined_features = self.scorenet_base.forward_features(images, images_raw)
+
         # is it necessary to resize images back???
 
         # use the mask and the 2D box to predict the 3D box
         # proposals are ground truth for MABO plots and predictions for AP plots
-        results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function)
+        results = self.roi_heads(images, images_raw, combined_features, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function)
         return results
     
     def visualize_training(self, batched_inputs, proposals, instances):
@@ -563,8 +568,8 @@ class ScoreNetBase(nn.Module):
         *,
         depth_model: nn.Module,
         backbone: Backbone,
-        pixel_mean: tuple[float],
-        pixel_std: tuple[float],
+        pixel_mean: tuple[float] = None,
+        pixel_std: tuple[float] = None,
         input_format: Optional[str] = None
     ):
         """
@@ -603,6 +608,7 @@ class ScoreNetBase(nn.Module):
             "pixel_mean": cfg.MODEL.PIXEL_MEAN,
             "pixel_std": cfg.MODEL.PIXEL_STD,
         }
+
             
     @property
     def device(self):
@@ -637,9 +643,12 @@ class ScoreNetBase(nn.Module):
     def forward(self, batched_inputs: List[Dict[str, torch.Tensor]]):
         images = self.preprocess_image(batched_inputs, img_type='image', convert=False)
         images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
+
+        return self.forward_features(images, images_raw)
+
+    def forward_features(self, images, images_raw):
         with torch.no_grad():
             pred_o = self.depth_model(images_raw.tensor.float()/255.0)
-            # backbone and proposal generator only work on 2D images and annotations.
             features = self.backbone(images.tensor)
 
         d_features = pred_o['depth_features']
@@ -750,8 +759,8 @@ class ScoreNet(nn.Module):
             else:
                 raise ValueError("Dataset does not contain proposals. Make sure to use ' mode='load_proposals ' in DatasetMapper3D.")
 
-            instances3d, results, acc = self.roi_heads(cubes, gt_instances, Ks, im_scales_ratio, combined_features)
-            return instances3d, results, acc
+            results, acc = self.roi_heads(cubes, gt_instances, Ks, im_scales_ratio, combined_features)
+            return results, acc
 
     def inference(self,
         batched_inputs: List[Dict[str, torch.Tensor]],
