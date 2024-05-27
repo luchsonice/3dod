@@ -469,10 +469,10 @@ class ROIHeads_Boxer(StandardROIHeads):
                 IoU2D_scores = score_iou(cubes_to_box(gt_cubes[i], Ks_scaled_per_box)[0], pred_boxes[i])
                 point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground).to(pred_cubes.device), pred_cubes[i])
                 segment_scores = score_segmentation(mask_per_image_cpu[i][0], bube_corners)
-                dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0])
+                dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0], gt_boxes[i], pred_boxes[i])
                 ratio_scores = score_ratios(cubes_to_box(gt_cubes[i], Ks_scaled_per_box)[0], pred_boxes[i])
                 corners_scores = score_corners(mask_per_image_cpu[i][0], bube_corners)
-                combined_score = np.array(IoU2D_scores.cpu())*np.array(ratio_scores.cpu())*np.array(segment_scores)#*np.array(corners_scores)#*np.array(dim_scores.cpu())
+                combined_score = np.array(IoU2D_scores)*np.array(segment_scores)*np.array(dim_scores.cpu())#np.array(corners_scores.cpu())
                 random_score = np.random.rand(number_of_proposals)
                 
                 score_IoU2D[i,:] = self.accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)

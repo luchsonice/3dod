@@ -65,7 +65,7 @@
             "program": "tools/eval_boxes.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--eval-only", "--config-file" ,"configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "MABO", "PLOT.MODE2D", "GT"]
+            "args": ["--eval-only", "--config-file" ,"configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "MABO", "PLOT.MODE2D", "GT", "PLOT.PROPOSAL_FUNC", "propose"]
         },
         {
             "name": "BoxNet MABO PRED",
