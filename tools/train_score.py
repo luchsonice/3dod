@@ -76,7 +76,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     
     data_mapper = DatasetMapper3D(cfg, is_train=False, mode='load_proposals')
     dataset_name = cfg.DATASETS.TRAIN[0]
-    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=2)
+    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=4)
 
     # give the mapper access to dataset_ids
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
@@ -107,8 +107,8 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             combined_features = modelbase(data)
             loss_score, loss_regression, acc = model(data, combined_features)
             # scale the dimension L1-loss by a factor of 1000 to have both the scoring and regression losses in a similar range
-            loss_regression = loss_regression/1_000
-            total_loss = loss_score + 0.5 * loss_regression
+            loss_regression = 0.5 * loss_regression/1_000
+            total_loss = loss_score + loss_regression
             # send loss scalars to tensorboard.
             storage.put_scalars(total_loss=total_loss, score_loss=loss_score, regression_loss=loss_regression, accuracy=acc)
 
