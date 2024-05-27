@@ -474,24 +474,6 @@ class ROIHeads_Boxer(StandardROIHeads):
                 return IoU3Ds
             else: 
                 pred_cubes, pred_boxes, stats_instance, stats_ranges = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps.tensor, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec, gt_cubes)
-                # debugging
-
-                # box2d, a1, b1 = convert_3d_box_to_2d(Ks_scaled_per_box.to('cpu'), pred_cubes.tensor[0,int(pred_boxes[0].tensor.argmax(0)[0]),:6].to('cpu'), pred_cubes.rotations[0,int(pred_boxes[0].tensor.argmax(0)[0])].to('cpu'), XYWH=False)
-
-
-                # import matplotlib.pyplot as plt
-                # from cubercnn import vis
-                # from detectron2.utils.visualizer import Visualizer
-                # v_pred = Visualizer(images_raw.tensor[0].permute(1,2,0).cpu().numpy().copy(), None)
-                # v_pred = v_pred.overlay_instances(
-                #     boxes=gt_boxes.tensor.cpu().numpy())
-                # img = v_pred.get_image()
-                # mesh = pred_cubes[0,int(pred_boxes[0].tensor.argmax(0)[0])].get_cubes().__getitem__(0).detach()
-                # mesh2 = gt_cubes[0,0].get_cubes().__getitem__(0).detach()
-                # a,b,c = vis.draw_scene_view(img, Ks_scaled_per_box.cpu().numpy(),[mesh,mesh2])
-                # fig, ax = plt.subplots(1,2)
-                # ax[0].imshow(a)
-                # ax[1].imshow(b)
 
             for i in range(n_gt):
                 # iou
@@ -551,7 +533,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             # such that the loop can be over the images.
             pred_instances = [Instances(size) for size in images_raw.image_sizes] # each instance object contains all boxes in one image, the list is for each image
             for instances_i in pred_instances:
-                instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes_out, Ks_scaled_per_box.to('cpu')))
+                instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes_out, Ks_scaled_per_box.to('cpu'), im_shape))
                 instances_i.scores = pred_cubes_out.scores
                 instances_i.pred_classes = pred_cubes_out.labels
                 instances_i.pred_bbox3D = pred_cubes_out.get_all_corners().squeeze(1)
