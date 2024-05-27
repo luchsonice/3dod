@@ -19,4 +19,5 @@ MODEL:
     NUM_CLASSES: 50
   ROI_CUBE_HEAD:
     NAME: 'CubeHead_vanilla' # name of the 3d head
+    POOLER_RESOLUTION: 1 # pooler resolution should match what it has been trained on in scorenet.yaml
   META_ARCHITECTURE: 'BoxNet' # name of the overall arch that calls the ROI_HEADS.NAME and ROI_CUBE_HEAD.NAME
