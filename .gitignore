@@ -1,5 +1,6 @@
 # folders or files
 detectron2/
+pytorch3d/
 datasets/*
 testing/image_2
 training/image_2
