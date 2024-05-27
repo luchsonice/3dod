@@ -289,7 +289,7 @@ def main(args):
     
     name = f'learned score {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
     
-    # wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='online')
+    wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='online')
 
     category_path = 'output/Baseline_sgd/category_meta.json'
     
