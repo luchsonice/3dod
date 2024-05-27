@@ -28,7 +28,7 @@ from detectron2.modeling.roi_heads import (
 )
 from detectron2.modeling.poolers import ROIPooler
 import ProposalNetwork.proposals.proposals as proposals
-from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation
+from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation, score_ratios, score_corners
 from ProposalNetwork.utils.conversions import cube_to_box, cubes_to_box
 from ProposalNetwork.utils.spaces import Cubes
 from ProposalNetwork.utils.utils import iou_3d
@@ -405,6 +405,8 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_combined = np.zeros((n_gt, number_of_proposals))
         score_random   = np.zeros((n_gt, number_of_proposals))
         score_point_c  = np.zeros((n_gt, number_of_proposals))
+        score_ratio    = np.zeros((n_gt, number_of_proposals))
+        score_corner   = np.zeros((n_gt, number_of_proposals))
         score_deep     = np.zeros((n_gt, number_of_proposals))
         stats_image    = torch.zeros(n_gt, 9)
         stats_off      = np.zeros((n_gt, 10))
@@ -494,19 +496,31 @@ class ROIHeads_Boxer(StandardROIHeads):
             for i in range(n_gt):
                 # iou
                 IoU3D = iou_3d(gt_cubes[i], pred_cubes[i]).cpu().numpy()
+
+                # With gt
+                #IoU3D[-1] = 1
+                #pred_cubes[i].tensor[0,-1] = gt_cubes[i].tensor
+
                 # scoring
+                bube_corners = pred_cubes[i].get_bube_corners(Ks_scaled_per_box, im_shape)
                 IoU2D_scores = score_iou(cubes_to_box(gt_cubes[i], Ks_scaled_per_box, im_shape)[0], pred_boxes[i])
-                point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground).to(pred_cubes.device), pred_cubes[i], K=Ks_scaled_per_box)
-                segment_scores = score_segmentation(mask_per_image_cpu[i][0], pred_cubes[i].get_bube_corners(Ks_scaled_per_box, im_shape))
-                dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0])
+                point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground).to(pred_cubes.device), pred_cubes[i])
+                segment_scores = score_segmentation(mask_per_image_cpu[i][0], bube_corners)
+                dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0], gt_boxes[i], pred_boxes[i])
+                ratio_scores = score_ratios(cubes_to_box(gt_cubes[i], Ks_scaled_per_box,im_shape)[0], pred_boxes[i])
+                corners_scores = score_corners(mask_per_image_cpu[i][0], bube_corners)
                 deep_scores = self.scorenet.inference(combined_features, [pred_boxes[i]])
                 combined_score = np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu())*np.array(segment_scores)
+
+                combined_score = np.array(IoU2D_scores.cpu())*np.array(segment_scores)*np.array(dim_scores.cpu())#np.array(corners_scores.cpu())
                 random_score = np.random.rand(number_of_proposals)
                 
                 score_IoU2D[i,:] = self.accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)
                 score_point_c[i,:] = self.accumulate_scores(point_cloud_scores.cpu().numpy(), IoU3D)
                 score_seg[i,:] = self.accumulate_scores(segment_scores.numpy(), IoU3D)
                 score_dim[i,:] = self.accumulate_scores(dim_scores.cpu().numpy(), IoU3D)
+                score_ratio[i,:] = self.accumulate_scores(ratio_scores.cpu().numpy(), IoU3D)
+                score_corner[i,:] = self.accumulate_scores(corners_scores.cpu().numpy(), IoU3D)
                 score_combined[i,:] = self.accumulate_scores(combined_score, IoU3D)
                 score_random[i,:] = self.accumulate_scores(random_score, IoU3D)
                 score_deep[i,:] = self.accumulate_scores(deep_scores.cpu().numpy().ravel(), IoU3D)
@@ -531,7 +545,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             p_info = Plotinfo(pred_cubes_out, gt_cube_meshes, gt_boxes3D, gt_boxes, pred_boxes_out, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
 
         if experiment_type['output_recall_scores']: # MABO
-            return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, score_deep, stat_empty_boxes, stats_image, stats_off
+            return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, score_deep, stat_empty_boxes, stats_image, stats_off, score_ratio, score_corner
         
         elif not experiment_type['output_recall_scores']: # AP
             # list of Instances with the fields: pred_boxes, scores, pred_classes, pred_bbox3D, pred_center_cam, pred_center_2D, pred_dimensions, pred_pose

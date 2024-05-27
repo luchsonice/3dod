@@ -51,7 +51,7 @@ from cubercnn import util, vis, data
 # even though this import is unused, it initializes the backbone registry
 from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
 
-color_palette = ['#008dff','#ff73bf','#c701ff','#4ecb8d','#ff9d3a','#f93858','#384860']
+color_palette = ['#008dff','#ff73bf','#c701ff','#4ecb8d','#ff9d3a','#f0c571','#384860','#d83034']
 
 def inference_on_dataset(model, data_loader, segmentor, experiment_type, proposal_function):
     """
@@ -234,6 +234,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         score_random      = np.concatenate([np.array(sublist) for sublist in (x[5] for x in outputs)])
         score_point_cloud = np.concatenate([np.array(sublist) for sublist in (x[6] for x in outputs)])
         score_deep        = np.concatenate([np.array(sublist) for sublist in (x[7] for x in outputs)])
+        score_ratios      = np.concatenate([np.array(sublist) for sublist in (x[10] for x in outputs)])
+        score_corners     = np.concatenate([np.array(sublist) for sublist in (x[11] for x in outputs)])
         stat_empty_boxes  = np.array([x[8] for x in outputs])
         #logger.info('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
         print('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
@@ -245,18 +247,23 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         score_random = score_random.mean(axis=0)
         score_point_cloud = score_point_cloud.mean(axis=0)
         score_deep = score_deep.mean(axis=0)
+        score_ratios = score_ratios.mean(axis=0)
+        score_corners = score_corners.mean(axis=0)
         total_num_instances = np.sum([x[0].gt_boxes3D.shape[0] for x in outputs])
                 
         plt.figure(figsize=(8,5))
-        plt.plot(score_combined, linestyle='-',c='black', label='combined') 
-        plt.plot(score_dim, linestyle='-',c='teal',label='dim') 
-        plt.plot(score_seg, linestyle='-',c='purple',label='segment')
-        plt.plot(Iou2D, linestyle='-',c='orange',label='2d IoU') 
+        plt.plot(score_combined, linestyle='-',c=color_palette[6], label='combined') 
+        plt.plot(score_dim, linestyle='-',c=color_palette[2],label='dim') 
+        plt.plot(score_seg, linestyle='-',c=color_palette[5],label='segment')
+        plt.plot(Iou2D, linestyle='-',c=color_palette[4],label='2D IoU') 
         plt.plot(score_random, linestyle='-',c='grey',label='random') 
-        plt.plot(score_point_cloud, linestyle='-',c='green',label='point cloud')
+        plt.plot(score_point_cloud, linestyle='-',c=color_palette[3],label='point cloud')
         plt.plot(score_deep, linestyle='-',c='blue',label='learned')
+        plt.plot(score_ratios, linestyle='-',c=color_palette[0],label='L1 corner distance')
+        plt.plot(score_corners, linestyle='-',c=color_palette[7],label='Chamfer distance')
         plt.grid(True)
         plt.xscale('log')
+        plt.xticks([1, 10, 100, 1000], ['1', '10', '100', '1000'])
         plt.xlim(left=1)
         plt.xlabel('Number of Proposals')
         plt.ylabel('3D IoU')

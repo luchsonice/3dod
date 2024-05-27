@@ -1,11 +1,10 @@
 import torch
 import numpy as np
 import cv2
-from scipy.stats import pearsonr 
 from ProposalNetwork.scoring.convex_outline import tracing_outline_robust
 import ProposalNetwork.utils.spaces as spaces
-
-from ProposalNetwork.utils.utils import iou_2d, mask_iou, euler_to_unit_vector
+from scipy.spatial import cKDTree
+from ProposalNetwork.utils.utils import iou_2d, mask_iou
 
 def score_point_cloud(point_cloud:torch.Tensor, cubes:list[spaces.Cubes], K:torch.Tensor=None, segmentation_mask:torch.Tensor=None):
     '''
@@ -49,6 +48,36 @@ def score_iou(gt_box, proposal_box):
     IoU = iou_2d(gt_box,proposal_box)
     return IoU
 
+def modified_chamfer_distance(set1, set2):
+    tree2 = cKDTree(set2)
+    # For each point in set1 (seg point), find the distance to the nearest point in set2 (bube corner)
+    distances2, _ = tree2.query(set1)
+    
+    return np.mean(distances2)
+
+def score_corners(segmentation_mask, bube_corners):
+    mask_np = segmentation_mask.cpu().numpy().astype(np.uint8)
+
+    # Find contours
+    contours, _ = cv2.findContours(mask_np, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Find the minimum area rectangle around the largest contour
+    if contours:
+        largest_contour = max(contours, key=cv2.contourArea)
+        rect = cv2.minAreaRect(largest_contour)
+        box = cv2.boxPoints(rect)
+
+    bube_corners = bube_corners.squeeze(0) # remove instance dim
+    scores = torch.zeros(len(bube_corners), device=segmentation_mask.device)
+    for i in range(len(bube_corners)):
+        # Chamfer distance bube corners and box
+        scores[i] = modified_chamfer_distance(box, bube_corners[i].cpu().numpy())
+    
+    max_score = torch.max(scores)
+    
+    return 1 - scores / max_score
+
+
 def score_segmentation(segmentation_mask, bube_corners):
     '''
     segmentation_mask   : Mask
@@ -85,7 +114,7 @@ def score_segmentation_v2(segmentation_mask, pred_cubes, K):
         scores.append(mask_iou(segmentation_mask, bube_mask))
     return scores
 
-def score_dimensions(category, dimensions):
+def score_dimensions(category, dimensions, gt_boxes, pred_boxes):
     '''
     category   : List
     dimensions : List of Lists
@@ -95,16 +124,39 @@ def score_dimensions(category, dimensions):
     [prior_mean, prior_std] = category
     dimensions_scores = torch.exp(-1/2 * ((dimensions - prior_mean)/prior_std)**2)
     scores = dimensions_scores.mean(1)
-    return scores
 
-def score_angles(gt_angles, pred_angles):
-    gt_nv = euler_to_unit_vector(gt_angles)
-    correlation = []
-    for i in range(len(pred_angles)):
-        pred_nv = euler_to_unit_vector(pred_angles[i])
-        correlation.append(abs(pearsonr(gt_nv,pred_nv)[0]))
+    gt_ratio = (gt_boxes.tensor[0,2]-gt_boxes.tensor[0,0])/(gt_boxes.tensor[0,3]-gt_boxes.tensor[0,1])
+    pred_ratios = (pred_boxes.tensor[:,2]-pred_boxes.tensor[:,0])/(pred_boxes.tensor[:,3]-pred_boxes.tensor[:,1])
+    differences = torch.abs(gt_ratio-pred_ratios)
+    max_difference = torch.max(differences)
+    
+    return (1 - differences / max_difference) * scores
 
-    return correlation
+
+
+def score_ratios(gt_box,pred_boxes):
+    gt_points = gt_box.tensor[0]
+    differences = torch.abs(pred_boxes.tensor - gt_points).sum(axis=1)
+    max_difference = torch.max(differences)
+    
+    return 1 - differences / max_difference
+
+    # 3D Dim Ratio
+    gt_ratio = gt_dim[0]/gt_dim[1]
+    pred_ratios = pred_dims[:,0]/pred_dims[:,1]
+    differences = torch.abs(pred_ratios-gt_ratio)
+    max_difference = torch.max(differences)
+    
+    return 1 - differences / max_difference
+
+    # 2D Dim Ratio
+    gt_ratio = (gt_dim.tensor[0,2]-gt_dim.tensor[0,0])/(gt_dim.tensor[0,3]-gt_dim.tensor[0,1])
+    pred_ratios = (pred_dims.tensor[:,2]-pred_dims.tensor[:,0])/(pred_dims.tensor[:,3]-pred_dims.tensor[:,1])
+
+    differences = torch.abs(pred_ratios-gt_ratio)
+    max_difference = torch.max(differences)
+    
+    return 1 - differences / max_difference
 
 def score_function(gt_box, proposal_box, bube_corners, segmentation_mask, category, dimensions):
     score = 1.0
