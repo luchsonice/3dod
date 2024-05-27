@@ -553,7 +553,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             # such that the loop can be over the images.
             pred_instances = [Instances(size) for size in images_raw.image_sizes] # each instance object contains all boxes in one image, the list is for each image
             for instances_i in pred_instances:
-                instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes_out, Ks_scaled_per_box.to('cpu')))
+                instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes_out, Ks_scaled_per_box.to('cpu'), im_shape))
                 instances_i.scores = pred_cubes_out.scores
                 instances_i.pred_classes = pred_cubes_out.labels
                 instances_i.pred_bbox3D = pred_cubes_out.get_all_corners().squeeze(1)
