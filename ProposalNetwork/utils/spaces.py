@@ -218,8 +218,10 @@ class Cubes:
 
         return verts, faces
     
-    def get_bube_corners(self,K) -> torch.Tensor:
+    def get_bube_corners(self, K, clamp:tuple) -> torch.Tensor:
         '''This assumes that all the cubes have the same camera intrinsic matrix K
+
+        clamp is a typically the image shape (width, height) to truncate the boxes to image frame, this avoids huge projected boxes
         Returns:
             num_instances x N x 8 x 2'''
         cube_corners = self.get_all_corners() # num_instances x N x 8 x 3
@@ -230,6 +232,10 @@ class Cubes:
         cube_corners = cube_corners[:, :2, :]/cube_corners[:, 2, :].unsqueeze(-2)
         cube_corners = cube_corners.transpose(2,1)
         cube_corners = cube_corners.reshape(self.num_instances,num_prop, 8, 2)
+
+        if clamp is not None:
+            cube_corners[..., 0] = cube_corners[..., 0].clamp(0, clamp[0]-1)
+            cube_corners[..., 1] = cube_corners[..., 1].clamp(0, clamp[1]-1)
 
         return cube_corners # num_instances x num_proposals x 8 x 2
     

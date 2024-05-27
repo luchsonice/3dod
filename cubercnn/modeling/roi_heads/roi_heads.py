@@ -1,7 +1,8 @@
+from collections import OrderedDict
+import os
 from detectron2.layers.nms import batched_nms
 import pyransac3d as pyrsc
 #import open3d as o3d
-import copy
 from segment_anything.utils.transforms import ResizeLongestSide
 
 
@@ -26,7 +27,6 @@ from detectron2.modeling.roi_heads import (
     StandardROIHeads, ROI_HEADS_REGISTRY, select_foreground_proposals,
 )
 from detectron2.modeling.poolers import ROIPooler
-from detectron2.layers import ROIAlign
 import ProposalNetwork.proposals.proposals as proposals
 from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation, score_ratios, score_corners
 from ProposalNetwork.utils.conversions import cube_to_box, cubes_to_box
@@ -36,6 +36,7 @@ from cubercnn.modeling.roi_heads.cube_head import build_cube_head
 from cubercnn.modeling.proposal_generator.rpn import subsample_labels
 from cubercnn.modeling.roi_heads.fast_rcnn import FastRCNNOutputs
 from cubercnn import util
+from cubercnn.util.math_util import convert_3d_box_to_2d
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ class Plotinfo:
     gt_cube_meshes: List
     gt_boxes3D: List
     gt_boxes: List
+    pred_boxes: Boxes
     gt_box_classes: List
     mask_per_image: List
     K: np.array
@@ -77,8 +79,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
     @configurable
     def __init__(self, *, 
-                 dims_priors_enabled = None, priors=None, 
-                 **kwargs, ):
+                 dims_priors_enabled = None, priors=None, scorenet=None, **kwargs, ): 
         super().__init__(**kwargs)
 
         # misc
@@ -89,6 +90,8 @@ class ROIHeads_Boxer(StandardROIHeads):
         else:
             self.priors_dims_per_cat = nn.Parameter(torch.ones(1, self.num_classes, 2, 3))
 
+        self.scorenet = scorenet
+
     @classmethod
     def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec], priors=None):
         
@@ -98,22 +101,35 @@ class ROIHeads_Boxer(StandardROIHeads):
         ret["box_predictor"] = FastRCNNOutputs(cfg, ret['box_head'].output_shape)
         ret.update(cls._init_cube_head(cfg, input_shape))
         ret["priors"] = priors
-
+        ret['scorenet'] = ROI_HEADS_REGISTRY.get('ROIHeads_Score')(cfg, None, priors=None)
+        save_dir = cfg.OUTPUT_DIR
+        save_path = save_dir+'/model_recent.pth'
+        if os.path.exists(save_dir):
+            model_weights = torch.load(save_path, map_location=cfg.MODEL.DEVICE)['model']
+            # must strip out the "roi_heads." from the keys to load the weights correctly
+            new_weights = OrderedDict()
+            for key,val in model_weights.items():
+                new_weights[key[10:]] = val
+            ret['scorenet'].load_state_dict(new_weights)
+            ret['scorenet'].eval()
+        else:
+            logger.info('No model found for scoring network, use OUTPUT_DIR output/ScoreNet (code looks for model_recent.pth)')
         return ret
     
     @classmethod
     def _init_cube_head(self, cfg, input_shape: Dict[str, ShapeSpec]):
     
-        return {'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED,}
+        return {'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED,
+                }
 
-    def forward(self, images, images_raw, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, targets=None):
+    def forward(self, images, images_raw, combined_features, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, targets=None):
         # proposals are GT here
         im_dims = [image.shape[1:] for image in images]
 
         if self.training:
             masks = self.object_masks(images_raw.tensor, proposals, segmentor, {'use_pred_boxes': False})
             experiment_type['use_pred_boxes'] = False
-            results = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, proposals, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function)
+            results = self._forward_cube(images, images_raw, combined_features, masks, depth_maps, ground_maps, features, proposals, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function)
             return results
         
         else:
@@ -181,7 +197,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 if len(target_instances[0].pred_boxes) == 0:
                     return target_instances
             masks = self.object_masks(images_raw.tensor, target_instances, segmentor, experiment_type) # over all images in batch
-            pred_instances = self._forward_cube(images, images_raw, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function)
+            pred_instances = self._forward_cube(images, images_raw, combined_features, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function)
             return pred_instances
         
     def object_masks(self, images, instances, segmentor, ex):
@@ -277,20 +293,20 @@ class ROIHeads_Boxer(StandardROIHeads):
         else:
             pred_cubes, stats_instance, stats_ranges = proposals.propose(reference_box, depth_maps_tensor.squeeze(), priors, im_shape, K, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
         
-        pred_boxes = cubes_to_box(pred_cubes, K)
+        pred_boxes = cubes_to_box(pred_cubes, K, im_shape)
         return pred_cubes, pred_boxes, stats_instance, stats_ranges
     
-    def _forward_cube(self, images, images_raw, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type, proposal_function):
+    def _forward_cube(self, images, images_raw, combined_features, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type, proposal_function):
 
         # send all objects to cpu
-        images = images.to('cpu')
-        images_raw = images_raw.to('cpu')
-        mask_per_image = [mask.to('cpu') for mask in mask_per_image]
-        depth_maps = depth_maps.to('cpu')
-        if ground_maps is not None:
-            ground_maps = ground_maps.to('cpu')
-        Ks = [K.to('cpu') for K in Ks]
-        instances = [instance.to('cpu') for instance in instances]
+        # images = images.to('cpu')
+        # images_raw = images_raw.to('cpu')
+        # mask_per_image = [mask.to('cpu') for mask in mask_per_image]
+        # depth_maps = depth_maps.to('cpu')
+        # if ground_maps is not None:
+        #     ground_maps = ground_maps.to('cpu')
+        # Ks = [K.to('cpu') for K in Ks]
+        # instances = [instance.to('cpu') for instance in instances]
 
 
         if experiment_type['use_pred_boxes']:
@@ -313,7 +329,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
         if self.dims_priors_enabled:
             # gather prior dimensions
-            prior_dims = self.priors_dims_per_cat.detach().to('cpu')
+            prior_dims = self.priors_dims_per_cat.detach()#.to('cpu')
             prior_dims = prior_dims[:, gt_box_classes, :, :].squeeze(0)
             prior_dims_mean = prior_dims[:, 0, :]
             prior_dims_std = prior_dims[:, 1, :]
@@ -391,11 +407,13 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_point_c  = np.zeros((n_gt, number_of_proposals))
         score_ratio    = np.zeros((n_gt, number_of_proposals))
         score_corner   = np.zeros((n_gt, number_of_proposals))
+        score_deep     = np.zeros((n_gt, number_of_proposals))
         stats_image    = torch.zeros(n_gt, 9)
         stats_off      = np.zeros((n_gt, 10))
                 
         pred_cubes_out = Cubes(torch.zeros(len(gt_boxes), 1, 15, device=images_raw.device), scores=torch.zeros(len(gt_boxes), 1, device=images_raw.device),labels=gt_box_classes)
-        
+        pred_boxes_out = []
+
         if self.training: # generate and save all proposals
             assert not experiment_type['use_pred_boxes'], 'must use GT boxes for training'
 
@@ -456,6 +474,25 @@ class ROIHeads_Boxer(StandardROIHeads):
                 return IoU3Ds
             else: 
                 pred_cubes, pred_boxes, stats_instance, stats_ranges = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps.tensor, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec, gt_cubes)
+                # debugging
+
+                # box2d, a1, b1 = convert_3d_box_to_2d(Ks_scaled_per_box.to('cpu'), pred_cubes.tensor[0,int(pred_boxes[0].tensor.argmax(0)[0]),:6].to('cpu'), pred_cubes.rotations[0,int(pred_boxes[0].tensor.argmax(0)[0])].to('cpu'), XYWH=False)
+
+
+                # import matplotlib.pyplot as plt
+                # from cubercnn import vis
+                # from detectron2.utils.visualizer import Visualizer
+                # v_pred = Visualizer(images_raw.tensor[0].permute(1,2,0).cpu().numpy().copy(), None)
+                # v_pred = v_pred.overlay_instances(
+                #     boxes=gt_boxes.tensor.cpu().numpy())
+                # img = v_pred.get_image()
+                # mesh = pred_cubes[0,int(pred_boxes[0].tensor.argmax(0)[0])].get_cubes().__getitem__(0).detach()
+                # mesh2 = gt_cubes[0,0].get_cubes().__getitem__(0).detach()
+                # a,b,c = vis.draw_scene_view(img, Ks_scaled_per_box.cpu().numpy(),[mesh,mesh2])
+                # fig, ax = plt.subplots(1,2)
+                # ax[0].imshow(a)
+                # ax[1].imshow(b)
+
             for i in range(n_gt):
                 # iou
                 IoU3D = iou_3d(gt_cubes[i], pred_cubes[i]).cpu().numpy()
@@ -465,14 +502,17 @@ class ROIHeads_Boxer(StandardROIHeads):
                 #pred_cubes[i].tensor[0,-1] = gt_cubes[i].tensor
 
                 # scoring
-                bube_corners = pred_cubes[i].get_bube_corners(Ks_scaled_per_box)
-                IoU2D_scores = score_iou(cubes_to_box(gt_cubes[i], Ks_scaled_per_box)[0], pred_boxes[i])
+                bube_corners = pred_cubes[i].get_bube_corners(Ks_scaled_per_box, im_shape)
+                IoU2D_scores = score_iou(cubes_to_box(gt_cubes[i], Ks_scaled_per_box, im_shape)[0], pred_boxes[i])
                 point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground).to(pred_cubes.device), pred_cubes[i])
                 segment_scores = score_segmentation(mask_per_image_cpu[i][0], bube_corners)
                 dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0], gt_boxes[i], pred_boxes[i])
-                ratio_scores = score_ratios(cubes_to_box(gt_cubes[i], Ks_scaled_per_box)[0], pred_boxes[i])
+                ratio_scores = score_ratios(cubes_to_box(gt_cubes[i], Ks_scaled_per_box,im_shape)[0], pred_boxes[i])
                 corners_scores = score_corners(mask_per_image_cpu[i][0], bube_corners)
-                combined_score = np.array(IoU2D_scores)*np.array(segment_scores)*np.array(dim_scores.cpu())#np.array(corners_scores.cpu())
+                deep_scores = self.scorenet.inference(combined_features, [pred_boxes[i]])
+                combined_score = np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu())*np.array(segment_scores)
+
+                combined_score = np.array(IoU2D_scores.cpu())*np.array(segment_scores)*np.array(dim_scores.cpu())#np.array(corners_scores.cpu())
                 random_score = np.random.rand(number_of_proposals)
                 
                 score_IoU2D[i,:] = self.accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)
@@ -483,6 +523,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 score_corner[i,:] = self.accumulate_scores(corners_scores.cpu().numpy(), IoU3D)
                 score_combined[i,:] = self.accumulate_scores(combined_score, IoU3D)
                 score_random[i,:] = self.accumulate_scores(random_score, IoU3D)
+                score_deep[i,:] = self.accumulate_scores(deep_scores.cpu().numpy().ravel(), IoU3D)
                 
                 score_to_use = combined_score
                 highest_score = np.argmax(score_to_use)
@@ -490,6 +531,9 @@ class ROIHeads_Boxer(StandardROIHeads):
                 gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
                 pred_cubes_out.scores[i] = torch.as_tensor(score_to_use[highest_score])
                 pred_cubes_out.tensor[i] = pred_cube.tensor[0]
+                pred_boxes_out.append(pred_boxes[i][int(highest_score)])
+
+
 
                 # stats
                 sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
@@ -497,10 +541,11 @@ class ROIHeads_Boxer(StandardROIHeads):
                 nested_list = [[IoU3D.max()],abs(gt_cubes[i].centers.cpu().numpy()-pred_cube.centers.cpu().numpy())[0][0]/stats_ranges[:3],abs(gt_cubes[i].dimensions.cpu().numpy()-pred_cube.dimensions.cpu().numpy())[0][0]/stats_ranges[3:6],abs(util.mat2euler(gt_cubes[i].rotations[0][0])-util.mat2euler(pred_cube.rotations[0][0]))/stats_ranges[6:]]
                 stats_off[i] = [item for sublist in nested_list for item in sublist]
             stat_empty_boxes = sum_percentage_empty_boxes/n_gt
-            p_info = Plotinfo(pred_cubes_out, gt_cube_meshes, gt_boxes3D, gt_boxes, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
+            pred_boxes_out = Boxes.cat(pred_boxes_out)
+            p_info = Plotinfo(pred_cubes_out, gt_cube_meshes, gt_boxes3D, gt_boxes, pred_boxes_out, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
 
         if experiment_type['output_recall_scores']: # MABO
-            return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off, score_ratio, score_corner
+            return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, score_deep, stat_empty_boxes, stats_image, stats_off, score_ratio, score_corner
         
         elif not experiment_type['output_recall_scores']: # AP
             # list of Instances with the fields: pred_boxes, scores, pred_classes, pred_bbox3D, pred_center_cam, pred_center_2D, pred_dimensions, pred_pose
@@ -596,8 +641,8 @@ class ROIHeads_Score(StandardROIHeads):
 
     def forward(self, pred_cubes, instances, Ks, im_scales_ratio, combined_features):
         if self.training:
-            instances_3d, losses, acc = self._forward_cube(pred_cubes, instances, Ks, im_scales_ratio, combined_features)
-            return instances_3d, losses, acc
+            losses, acc = self._forward_cube(pred_cubes, instances, Ks, im_scales_ratio, combined_features)
+            return losses, acc
         else:
             pred_instances, _, _ = self._forward_cube(pred_cubes, instances, Ks, im_scales_ratio, combined_features)
             return pred_instances
@@ -674,7 +719,12 @@ class ROIHeads_Score(StandardROIHeads):
             #print(torch.round(pred_iou2d_scores.squeeze())[:16])
             #print(torch.round(pred_iou2d_scores.squeeze())[16:64])
             acc = (torch.round(pred_iou2d_scores.squeeze()) == y_true).float().mean()
-            return None, loss, acc
+            return loss, acc
+        
+    def inference(self, combined_features, boxes):
+        cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
+        pred_iou2d_logits, pred_iou2d_scores = self.mlp(cube_features)
+        return pred_iou2d_scores
     
 
 @ROI_HEADS_REGISTRY.register()
