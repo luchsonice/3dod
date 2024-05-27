@@ -496,7 +496,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             for i in range(n_gt):
                 # iou
                 IoU3D = iou_3d(gt_cubes[i], pred_cubes[i]).cpu().numpy()
-
+                
                 # With gt
                 #IoU3D[-1] = 1
                 #pred_cubes[i].tensor[0,-1] = gt_cubes[i].tensor
@@ -510,8 +510,6 @@ class ROIHeads_Boxer(StandardROIHeads):
                 ratio_scores = score_ratios(cubes_to_box(gt_cubes[i], Ks_scaled_per_box,im_shape)[0], pred_boxes[i])
                 corners_scores = score_corners(mask_per_image_cpu[i][0], bube_corners)
                 deep_scores = self.scorenet.inference(combined_features, [pred_boxes[i]])
-                combined_score = np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu())*np.array(segment_scores)
-
                 combined_score = np.array(IoU2D_scores.cpu())*np.array(segment_scores)*np.array(dim_scores.cpu())#np.array(corners_scores.cpu())
                 random_score = np.random.rand(number_of_proposals)
                 

@@ -231,7 +231,7 @@ class Cubes:
         cube_corners = torch.matmul(K_repeated, cube_corners.transpose(2,1))
         cube_corners = cube_corners[:, :2, :]/cube_corners[:, 2, :].unsqueeze(-2)
         cube_corners = cube_corners.transpose(2,1)
-        cube_corners = cube_corners.reshape(self.num_instances,num_prop, 8, 2)
+        cube_corners = cube_corners.reshape(self.num_instances, num_prop, 8, 2)
 
         if clamp is not None:
             cube_corners[..., 0] = cube_corners[..., 0].clamp(0, clamp[0]-1)

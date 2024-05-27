@@ -231,7 +231,7 @@ def mask_iou(segmentation_mask, bube_mask):
     if intersection == 0:
         return torch.tensor(0.0)
     union = torch.logical_or(segmentation_mask, bube_mask).to(torch.int).sum()
-    return intersection / union
+    return intersection**5 / union
 
 def is_gt_included(gt_cube,x_range,y_range,z_range, w_prior, h_prior, l_prior):
     # Define how far away dimensions need to be to be counted as unachievable
