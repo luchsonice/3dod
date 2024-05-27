@@ -233,9 +233,11 @@ class Cubes:
         cube_corners = cube_corners.transpose(2,1)
         cube_corners = cube_corners.reshape(self.num_instances,num_prop, 8, 2)
 
+        # we must clamp and then stack, otherwise the gradient is fucked
         if clamp is not None:
-            cube_corners[..., 0] = cube_corners[..., 0].clamp(0, clamp[0]-1)
-            cube_corners[..., 1] = cube_corners[..., 1].clamp(0, clamp[1]-1)
+            x = torch.clamp(cube_corners[..., 0], 0, clamp[0]-1)
+            y = torch.clamp(cube_corners[..., 1], 0, clamp[1]-1)
+        cube_corners = torch.stack((x, y), dim=-1)
 
         return cube_corners # num_instances x num_proposals x 8 x 2
     

@@ -759,8 +759,8 @@ class ScoreNet(nn.Module):
             else:
                 raise ValueError("Dataset does not contain proposals. Make sure to use ' mode='load_proposals ' in DatasetMapper3D.")
 
-            results, acc = self.roi_heads(cubes, gt_instances, Ks, im_scales_ratio, combined_features)
-            return results, acc
+            loss_score, loss_regression, acc = self.roi_heads(cubes, gt_instances, Ks, im_scales_ratio, combined_features, images.image_sizes)
+            return loss_score, loss_regression, acc
 
     def inference(self,
         batched_inputs: List[Dict[str, torch.Tensor]],
