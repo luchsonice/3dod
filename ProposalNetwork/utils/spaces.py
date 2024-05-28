@@ -94,7 +94,7 @@ class Cube:
 
 class Cubes:
     '''
-    3D boxes in the format [[c1, c2, c3, w, h, l, R]]
+    3D boxes in the format [[c1, c2, c3, w, h, l, R1...R9]]
 
     inspired by `detectron2.structures.Boxes`
 
@@ -110,7 +110,6 @@ class Cubes:
             )
             of shape (N, 15).
     ```
-
                       _____________________ 
                     /|                    /|
                    / |                   / |
@@ -170,6 +169,10 @@ class Cubes:
     @property
     def num_instances(self):
         return self.tensor.shape[0]
+    
+    @property
+    def shape(self):
+        return self.tensor.shape
 
     def clone(self) -> "Cubes":
         """

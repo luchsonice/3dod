@@ -104,7 +104,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         ret["priors"] = priors
         ret['scorenet'] = ROI_HEADS_REGISTRY.get('ROIHeads_Score')(cfg, None, priors=None)
         save_dir = cfg.OUTPUT_DIR
-        save_path = save_dir+'/model_recent.pth'
+        save_path = save_dir+'/model_recent.pth' #TODO: expose as config
         if os.path.exists(save_dir):
             model_weights = torch.load(save_path, map_location=cfg.MODEL.DEVICE)['model']
             # must strip out the "roi_heads." from the keys to load the weights correctly
@@ -492,7 +492,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0], gt_boxes[i], pred_boxes[i])
                 ratio_scores = score_ratios(cubes_to_box(gt_cubes[i], Ks_scaled_per_box,im_shape)[0], pred_boxes[i])
                 corners_scores = score_corners(mask_per_image_cpu[i][0], bube_corners)
-                deep_scores = self.scorenet.inference(combined_features, [pred_boxes[i]])
+                deep_scores, regressed_cubes = self.scorenet(combined_features, [pred_boxes[i]])
                 combined_score = np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu())*np.array(segment_scores)
 
                 combined_score = np.array(IoU2D_scores.cpu())*np.array(segment_scores)*np.array(dim_scores.cpu())#np.array(corners_scores.cpu())
@@ -508,14 +508,22 @@ class ROIHeads_Boxer(StandardROIHeads):
                 score_random[i,:] = self.accumulate_scores(random_score, IoU3D)
                 score_deep[i,:] = self.accumulate_scores(deep_scores.cpu().numpy().ravel(), IoU3D)
                 
-                score_to_use = combined_score
-                highest_score = np.argmax(score_to_use)
-                pred_cube = pred_cubes[i,highest_score]
-                gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
-                pred_cubes_out.scores[i] = torch.as_tensor(score_to_use[highest_score])
-                pred_cubes_out.tensor[i] = pred_cube.tensor[0]
-                pred_boxes_out.append(pred_boxes[i][int(highest_score)])
+                # score_to_use = combined_score
+                # highest_score = np.argmax(score_to_use)
+                # pred_cube = pred_cubes[i,highest_score]
+                # gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
+                # pred_cubes_out.scores[i] = torch.as_tensor(score_to_use[highest_score])
+                # pred_cubes_out.tensor[i] = pred_cube.tensor[0]
+                # pred_boxes_out.append(pred_boxes[i][int(highest_score)])
 
+                score_to_use = deep_scores.ravel()
+                highest_score = torch.argmax(score_to_use)
+                pred_cube = regressed_cubes[0,highest_score]
+                pred_b = cubes_to_box(pred_cube, Ks_scaled_per_box, im_shape)[0]
+                gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
+                pred_cubes_out.scores[i] = score_to_use[highest_score]
+                pred_cubes_out.tensor[i] = pred_cube.tensor[0]
+                pred_boxes_out.append(pred_b)
 
 
                 # stats
@@ -563,7 +571,7 @@ class MLP(nn.Module):
             nn.BatchNorm1d(256),
             nn.ReLU(),
             nn.Linear(256, 128),
-            nn.BatchNorm1d(128),
+            nn.BatchNorm1d(128), # I think the model could perhaps be better if this was a Dropout layer
             nn.ReLU(),
             nn.Linear(128, 64),
             nn.BatchNorm1d(base_out),
@@ -580,7 +588,7 @@ class MLP(nn.Module):
         x_scores = self.sigmoid(scores)
         centers, dims = self.fc_cube_centers(x), self.fc_dims(x)
         x_cubes = Cubes(torch.cat((centers, dims, rotation_6d_to_matrix(self.rotation_6d(x)).view(-1,9)), 1))
-        # x_cubes.scores = x_scores
+        x_cubes.scores = x_scores
         return x_scores, x_cubes
 
 @ROI_HEADS_REGISTRY.register()
@@ -636,20 +644,23 @@ class ROIHeads_Score(StandardROIHeads):
         return {'cube_pooler': cube_pooler,
                 'mlp': mlp}
 
-    def forward(self, pred_cubes, instances, Ks, im_scales_ratio, combined_features, image_sizes):
-        '''call self._forward_cube or self.inference depending on the training state define by model.train() or model.eval()'''
+    def forward(self, combined_features, instances, pred_cubes=None, Ks=None, im_scales_ratio=None, image_sizes=None):
+        '''call self._forward_cube or self.inference depending on the training state define by model.train() or model.eval()
+        
+        instances is a list[boxes] structure in the case of inference and a list of instances in the case of training.
+        '''
         if self.training:
-            return self._forward_cube(pred_cubes, instances, Ks, im_scales_ratio, combined_features, image_sizes)
+            return self._forward_cube(combined_features, instances, pred_cubes, Ks, im_scales_ratio, combined_features, image_sizes)
         else:
-            return self.inference(pred_cubes, instances, Ks, im_scales_ratio, combined_features, image_sizes)
+            return self.inference(combined_features, instances)
     
-    def _forward_cube(self, pred_cubes, instances, Ks, im_scales_ratio, combined_features, image_sizes):
+    def _forward_cube(self, combined_features, instances, pred_cubes, Ks, im_scales_ratio, image_sizes):
         Ks_scaled = torch.cat([(K/scale).unsqueeze(0) for K, scale in zip(Ks, im_scales_ratio)]).to(combined_features.device)
         image_sizes = [image_size[::-1] for image_size in image_sizes]
         Ks_scaled[:, -1, -1] = 1
         boxes = []
         total_num_of_boxes_per_image = 64
-        balance = 2   # 1/this number as ratio of positives
+        balance = 1/self.positive_fraction   # 1/this number as ratio of positives
         total_num_of_positive_boxes_per_image = int(total_num_of_boxes_per_image / balance)
         total_num_of_negative_boxes_per_image = int(((balance-1) * total_num_of_boxes_per_image)/balance)
         y_true = torch.zeros(total_num_of_boxes_per_image, len(im_scales_ratio), device=combined_features.device)
