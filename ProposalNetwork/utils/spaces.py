@@ -234,8 +234,8 @@ class Cubes:
         cube_corners = cube_corners.reshape(self.num_instances, num_prop, 8, 2)
 
         if clamp is not None:
-            cube_corners[..., 0] = cube_corners[..., 0].clamp(0, clamp[0]-1)
-            cube_corners[..., 1] = cube_corners[..., 1].clamp(0, clamp[1]-1)
+            cube_corners[..., 0] = cube_corners[..., 0].clamp(int(-clamp[0]/2+1), int(clamp[0]-1+clamp[0]))
+            cube_corners[..., 1] = cube_corners[..., 1].clamp(int(-clamp[1]/2+1), int(clamp[1]-1+clamp[1]))
 
         return cube_corners # num_instances x num_proposals x 8 x 2
     
