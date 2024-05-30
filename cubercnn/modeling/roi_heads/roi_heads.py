@@ -6,7 +6,7 @@ import pyransac3d as pyrsc
 from pytorch3d.transforms.rotation_conversions import rotation_6d_to_matrix
 from segment_anything.utils.transforms import ResizeLongestSide
 
-
+import open3d as o3d
 from dataclasses import dataclass
 import logging
 
@@ -30,6 +30,7 @@ from detectron2.modeling.roi_heads import (
 from detectron2.modeling.poolers import ROIPooler
 import ProposalNetwork.proposals.proposals as proposals
 from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation, score_ratios, score_corners
+from ProposalNetwork.utils import utils
 from ProposalNetwork.utils.conversions import cube_to_box, cubes_to_box
 from ProposalNetwork.utils.spaces import Cubes
 from ProposalNetwork.utils.utils import iou_3d
@@ -338,13 +339,12 @@ class ROIHeads_Boxer(StandardROIHeads):
         # ### point cloud
         use_nth = 5
         dp_map = depth_maps.tensor.cpu().squeeze()[::use_nth,::use_nth]
-        focal_length_x, focal_length_y = dp_map.shape[1] / 2, dp_map.shape[0] / 2
+        focal_length_x, focal_length_y = dp_map.shape[1], dp_map.shape[0]
         FINAL_WIDTH, FINAL_HEIGHT = dp_map.shape[1], dp_map.shape[0]
         x, y = np.meshgrid(np.arange(FINAL_WIDTH), np.arange(FINAL_HEIGHT))
         x = (x - FINAL_WIDTH / 2) / focal_length_x
         y = (y - FINAL_HEIGHT / 2) / focal_length_y
         z = np.array(dp_map)
-
         if ground_maps is not None:
         # select only the points in x,y,z that are part of the ground map
             ground = ground_maps.tensor.squeeze().cpu()[::use_nth,::use_nth]
@@ -359,9 +359,9 @@ class ROIHeads_Boxer(StandardROIHeads):
             zg = z; xg = x; yg = y
 
         # normalise the points
-        points = np.stack((np.multiply(xg, zg/2), np.multiply(yg, zg/2), zg), axis=-1).reshape(-1, 3)
+        points = np.stack((np.multiply(xg, zg), np.multiply(yg, zg), zg), axis=-1).reshape(-1, 3)
         # colors = im.reshape(-1, 3) / 255.0
-        #colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth]).reshape(-1, 3) / 255.0
+        colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth])[ground].reshape(-1, 3) / 255.0
         plane = pyrsc.Plane()
         # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
         best_eq, best_inliers = plane.fit(points, thresh=0.05, maxIteration=1000)
@@ -508,23 +508,51 @@ class ROIHeads_Boxer(StandardROIHeads):
                 score_random[i,:] = self.accumulate_scores(random_score, IoU3D)
                 score_deep[i,:] = self.accumulate_scores(deep_scores.cpu().numpy().ravel(), IoU3D)
                 
-                # score_to_use = combined_score
-                # highest_score = np.argmax(score_to_use)
-                # pred_cube = pred_cubes[i,highest_score]
-                # gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
-                # pred_cubes_out.scores[i] = torch.as_tensor(score_to_use[highest_score])
-                # pred_cubes_out.tensor[i] = pred_cube.tensor[0]
-                # pred_boxes_out.append(pred_boxes[i][int(highest_score)])
-
-                score_to_use = deep_scores.ravel()
-                highest_score = torch.argmax(score_to_use)
-                pred_cube = regressed_cubes[0,highest_score]
-                pred_b = cubes_to_box(pred_cube, Ks_scaled_per_box, im_shape)[0]
+                score_to_use = combined_score
+                highest_score = np.argmax(score_to_use)
+                pred_cube = pred_cubes[i,highest_score]
                 gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
-                pred_cubes_out.scores[i] = score_to_use[highest_score]
+                pred_cubes_out.scores[i] = torch.as_tensor(score_to_use[highest_score])
                 pred_cubes_out.tensor[i] = pred_cube.tensor[0]
-                pred_boxes_out.append(pred_b)
+                pred_boxes_out.append(pred_boxes[i][int(highest_score)])
+                def draw_vector(vector, color=(0, 0, 1)):
+                    # Create a LineSet object
+                    line_set = o3d.geometry.LineSet()
 
+                    # Set the points of the LineSet to be the origin and the vector
+                    line_set.points = o3d.utility.Vector3dVector([np.zeros(3), vector])
+                    line_set.colors = o3d.utility.Vector3dVector([color, color])
+
+                    # Set the lines of the LineSet to be a line from the first point to the second point
+                    line_set.lines = o3d.utility.Vector2iVector([[0, 1]])
+
+                    # Draw the LineSet
+                    return line_set
+                R = pred_cube.rotations[0,0].numpy()
+                vec1, vec2, vec3, vec4 = draw_vector(R[:,0]), draw_vector(R[:,1]), draw_vector(R[:,2]), draw_vector(normal_vec, color=[0,1,0])
+                pcd = o3d.geometry.PointCloud()
+                # transform R such that y up is aligned with normal vector
+
+                pcd.points = o3d.utility.Vector3dVector(points)
+                pcd.colors = o3d.utility.Vector3dVector(colors)
+                # display normal vector in point cloud 
+                            
+                plane = pcd.select_by_index(best_inliers).paint_uniform_color([1, 0, 0])
+                not_plane = pcd.select_by_index(best_inliers, invert=True)
+                mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(origin=[0, 0, 0])
+                # rotate mesh by R
+                # mesh = mesh.rotate(gt_pose.numpy())
+                # X-axis : Red arrow
+                # Y-axis : Green arrow
+                # Z-axis : Blue arrow
+                # draw 3d box
+                cub = o3d.geometry.TriangleMesh.create_box(pred_cube.dimensions[0,0,0], pred_cube.dimensions[0,0,1], pred_cube.dimensions[0,0,2]).paint_uniform_color([1, 0.706, 0]).compute_vertex_normals()
+                # Translate the mesh to the origin
+                cub.rotate(R, center=(0,0,0))
+                obb = plane.get_oriented_bounding_box()
+                obb.color = [0, 0, 1]
+                objs = [plane, not_plane, mesh, obb, vec1, vec2, vec3, vec4, cub]
+                o3d.visualization.draw_geometries(objs)
 
                 # stats
                 sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)

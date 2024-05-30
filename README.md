@@ -1,3 +1,11 @@
+# Point cloud branch
+
+The purpose of this branch is to be able to visualise the depth maps as point clouds just run
+```bash
+python tools/eval_boxes.py --eval-only --config-file configs/BoxNet.yaml MODEL.WEIGHTS output/Baseline_sgd/model_final.pth PLOT.EVAL MABO PLOT.MODE2D GT PLOT.PROPOSAL_FUNC full PLOT.SCORING_FUNC False OUTPUT_DIR output/ScoreNet
+```
+
+
 # Weak supervised 3D Object Detection
 based on the Omni3D dataset & Cube R-CNN model 
 [[`Project Page`](https://garrickbrazil.com/omni3d)] [[`arXiv`](https://arxiv.org/abs/2207.10660)] [[`BibTeX`](#citing)]
@@ -44,6 +52,7 @@ cd ..
 -->
 
 ## Table of Contents:
+- [Point cloud branch](#point-cloud-branch)
 - [Weak supervised 3D Object Detection](#weak-supervised-3d-object-detection)
 - [Setup](#setup)
   - [Original readme](#original-readme)
