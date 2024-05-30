@@ -204,27 +204,6 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off, stats_off_impro
             if output is not None:
                 outputs.append(output)
-            """      
-            Iou2D = np.concatenate([np.array(sublist) for sublist in (x[1] for x in outputs)])
-            Iou2D = Iou2D.mean(axis=0)
-            score_random = np.concatenate([np.array(sublist) for sublist in (x[5] for x in outputs)])
-            score_random = score_random.mean(axis=0)
-            total_num_instances = np.sum([x[0].gt_boxes3D.shape[0] for x in outputs])
-            plt.figure(figsize=(8,5))
-            plt.plot(Iou2D, linestyle='-',c='orange',label='2d IoU') 
-            plt.plot(score_random, linestyle='-',c='grey',label='random') 
-            plt.grid(True)
-            plt.xscale('log')
-            plt.xlim(left=1)
-            plt.xlabel('Number of Proposals')
-            plt.ylabel('3D IoU')
-            plt.legend()
-            plt.title('Mean Average Best Overlap vs Number of Proposals ({} images, {} instances)'.format(1+i,total_num_instances))
-            f_name = os.path.join('ProposalNetwork/output/MABO', 'MABO.png')
-            plt.savefig(f_name, dpi=300, bbox_inches='tight')
-            plt.close()
-            """
-            
 
         # mean over all the outputs
         Iou2D             = np.concatenate([np.array(sublist) for sublist in (x[1] for x in outputs)])
@@ -233,12 +212,13 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         score_combined    = np.concatenate([np.array(sublist) for sublist in (x[4] for x in outputs)])
         score_random      = np.concatenate([np.array(sublist) for sublist in (x[5] for x in outputs)])
         score_point_cloud = np.concatenate([np.array(sublist) for sublist in (x[6] for x in outputs)])
-        score_deep        = np.concatenate([np.array(sublist) for sublist in (x[7] for x in outputs)])
-        score_ratios      = np.concatenate([np.array(sublist) for sublist in (x[11] for x in outputs)])
-        score_corners     = np.concatenate([np.array(sublist) for sublist in (x[12] for x in outputs)])
-        stat_empty_boxes  = np.array([x[8] for x in outputs])
+        score_seg_mod      = np.concatenate([np.array(sublist) for sublist in (x[10] for x in outputs)])
+        score_corners     = np.concatenate([np.array(sublist) for sublist in (x[11] for x in outputs)])
+        stat_empty_boxes  = np.array([x[7] for x in outputs])
         #logger.info('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
         print('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
+
+        
 
         Iou2D = Iou2D.mean(axis=0)
         score_seg = score_seg.mean(axis=0)
@@ -246,21 +226,23 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         score_combined = score_combined.mean(axis=0)
         score_random = score_random.mean(axis=0)
         score_point_cloud = score_point_cloud.mean(axis=0)
-        score_deep = score_deep.mean(axis=0)
-        score_ratios = score_ratios.mean(axis=0)
+        score_seg_mod = score_seg_mod.mean(axis=0)
         score_corners = score_corners.mean(axis=0)
         total_num_instances = np.sum([x[0].gt_boxes3D.shape[0] for x in outputs])
-                
+        
+        print('Avg IoU of chosen cube:', score_combined[0])
+        print('Best possible IoU:', score_combined[-1])
+
+        x_range = np.arange(1,1001)
         plt.figure(figsize=(8,5))
-        plt.plot(score_combined, linestyle='-',c=color_palette[6], label='combined') 
-        plt.plot(score_dim, linestyle='-',c=color_palette[5],label='dim') 
-        plt.plot(score_seg, linestyle='-',c=color_palette[2],label='segment')
-        plt.plot(Iou2D, linestyle='-',c=color_palette[4],label='2D IoU') 
-        plt.plot(score_corners, linestyle='-',c=color_palette[7],label='Corner dist')
-        plt.plot(score_random, linestyle='-',c='grey',label='random') 
-        plt.plot(score_point_cloud, linestyle='-',c=color_palette[3],label='point cloud')
-        plt.plot(score_deep, linestyle='-',c='blue',label='learned')
-        plt.plot(score_ratios, linestyle='-',c=color_palette[0],label='test score')
+        plt.plot(x_range,score_combined, linestyle='-',c=color_palette[6], label='combined') 
+        plt.plot(x_range,score_dim, linestyle='-',c=color_palette[5],label='dim') 
+        plt.plot(x_range,score_seg, linestyle='-',c=color_palette[2],label='segment')
+        plt.plot(x_range,Iou2D, linestyle='-',c=color_palette[4],label='2D IoU') 
+        plt.plot(x_range,score_corners, linestyle='-',c=color_palette[7],label='Corner dist')
+        plt.plot(x_range,score_random, linestyle='-',c='grey',label='random') 
+        plt.plot(x_range,score_point_cloud, linestyle='-',c=color_palette[3],label='point cloud')
+        plt.plot(x_range,score_seg_mod, linestyle='-',c=color_palette[0],label='segment mod')
         plt.grid(True)
         plt.xscale('log')
         plt.xticks([1, 10, 100, 1000], ['1', '10', '100', '1000'])
@@ -276,14 +258,14 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         print('saved to ', f_name)
 
         # Statistics
-        stats = torch.cat([x[9] for x in outputs],dim=0)
+        stats = torch.cat([x[8] for x in outputs],dim=0)
         num_bins = 40
         titles = ['x','y','z','w','h','l','rx','ry','rz']
         plt.figure(figsize=(15, 15))
         plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
         for i,title in enumerate(titles):
             plt.subplot(3, 3, 1+i)
-            plt.hist(stats[:,i].numpy(), bins=num_bins, color='darkslategrey',density=True)
+            plt.hist(stats[:,i].numpy(), bins=num_bins, color=color_palette[-1],density=True)
             plt.axvline(x=0, color='red')
             plt.axvline(x=1, color='red')
             plt.title(title)
@@ -293,7 +275,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         #logger.info('saved to ', f_name
         print('saved to ', f_name)
 
-        stats_off = np.concatenate([np.array(sublist) for sublist in (x[10] for x in outputs)])
+        stats_off = np.concatenate([np.array(sublist) for sublist in (x[9] for x in outputs)])
         plt.figure(figsize=(15, 15))
         for i,title in enumerate(titles):
             plt.subplot(3, 3, 1+i)

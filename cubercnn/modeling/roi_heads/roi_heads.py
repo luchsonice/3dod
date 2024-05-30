@@ -28,7 +28,7 @@ from detectron2.modeling.roi_heads import (
 )
 from detectron2.modeling.poolers import ROIPooler
 import ProposalNetwork.proposals.proposals as proposals
-from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation, score_ratios, score_corners
+from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation, score_ratios, score_corners, score_mod_segmentation
 from ProposalNetwork.utils.conversions import cube_to_box, cubes_to_box
 from ProposalNetwork.utils.spaces import Cubes
 from ProposalNetwork.utils.utils import iou_3d
@@ -405,9 +405,8 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_combined = np.zeros((n_gt, number_of_proposals))
         score_random   = np.zeros((n_gt, number_of_proposals))
         score_point_c  = np.zeros((n_gt, number_of_proposals))
-        score_ratio    = np.zeros((n_gt, number_of_proposals))
+        score_seg_mod  = np.zeros((n_gt, number_of_proposals))
         score_corner   = np.zeros((n_gt, number_of_proposals))
-        score_deep     = np.zeros((n_gt, number_of_proposals))
         stats_image    = torch.zeros(n_gt, 9)
         stats_off      = np.zeros((n_gt, 10))
                 
@@ -477,43 +476,82 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             for i in range(n_gt):
                 # iou
-                IoU3D = iou_3d(gt_cubes[i], pred_cubes[i]).cpu().numpy()
+                IoU3D = iou_3d(gt_cubes[i].to('cpu'), pred_cubes[i].to('cpu')).cpu().numpy()
                 
-                # With gt
+                # With gt included
                 #IoU3D[-1] = 1
-                #pred_cubes[i].tensor[0,-1] = gt_cubes[i].tensor
+                #pred_cubes[i].tensor[0,-1] = gt_cubes[i].tensor[0,0,:]
 
                 # scoring
                 bube_corners = pred_cubes[i].get_bube_corners(Ks_scaled_per_box, im_shape)
                 IoU2D_scores = score_iou(cubes_to_box(gt_cubes[i], Ks_scaled_per_box, im_shape)[0], pred_boxes[i])
-                point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground).to(pred_cubes.device), pred_cubes[i])
-                segment_scores = score_segmentation(mask_per_image_cpu[i][0], bube_corners)
+                #point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground).to(pred_cubes.device), pred_cubes[i])
+                #segment_scores = score_segmentation(mask_per_image_cpu[i][0], bube_corners)
                 dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0], gt_boxes[i], pred_boxes[i])
-                ratio_scores = score_ratios(cubes_to_box(gt_cubes[i], Ks_scaled_per_box,im_shape)[0], pred_boxes[i])
+                seg_mod_scores = score_mod_segmentation(mask_per_image_cpu[i][0], bube_corners)
+                #corners_scores = score_corners(mask_per_image_cpu[i][0], bube_corners)
+                combined_score = np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu())#np.array(corners_scores.cpu())
+                #random_score = np.random.rand(number_of_proposals)
+                
+                #score_IoU2D[i,:] = self.accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)
+                #score_point_c[i,:] = self.accumulate_scores(point_cloud_scores.cpu().numpy(), IoU3D)
+                #score_seg[i,:] = self.accumulate_scores(segment_scores.numpy(), IoU3D)
+                #score_dim[i,:] = self.accumulate_scores(dim_scores.cpu().numpy(), IoU3D)
+                #score_seg_mod[i,:] = self.accumulate_scores(seg_mod_scores.cpu().numpy(), IoU3D)
+                #score_corner[i,:] = self.accumulate_scores(corners_scores.cpu().numpy(), IoU3D)
+                score_combined[i,:] = self.accumulate_scores(combined_score, IoU3D)
+                #score_random[i,:] = self.accumulate_scores(random_score, IoU3D)
+                
+                score_to_use = combined_score
+                highest_score = np.argmax(score_to_use)
+                pred_cube = pred_cubes[i,highest_score]
+                
+
+
+                ### %%% Part TWO
+                highest_scores = np.argsort(score_to_use)[-10:][::-1]
+                cubes_tensor = pred_cubes[i].tensor[:,highest_scores.tolist()]
+
+                variational_cubes = cubes_tensor.repeat(int(number_of_proposals/10),1,1).view(1,number_of_proposals, 15)
+                variational_cubes[:,:,:1] += (torch.randn(number_of_proposals, 1, device=pred_cubes.device) * 0.1)
+                variational_cubes[:,:,1:2] += (torch.randn(number_of_proposals, 1, device=pred_cubes.device) * 0.05)
+                variational_cubes[:,:,2:3] += (torch.randn(number_of_proposals, 1, device=pred_cubes.device) * 0.2)
+                variational_cubes[:,:,3:6] += (torch.randn(number_of_proposals, 3, device=pred_cubes.device) * 0.1)
+                variational_cubes[:,:,3:6] = torch.clamp(variational_cubes[:, :, 3:6], min=0.03)
+                #variational_cubes[:,:,6:] += (torch.randn(number_of_proposals, 9, device=pred_cubes.device) * 0.01)
+                var_cubes = Cubes(variational_cubes)
+                var_boxes = cubes_to_box(var_cubes, Ks_scaled_per_box, im_shape)[0]
+                IoU3D = iou_3d(gt_cubes[i], var_cubes).cpu().numpy()
+
+                # scoring
+                bube_corners = var_cubes.get_bube_corners(Ks_scaled_per_box, im_shape)
+                IoU2D_scores = score_iou(cubes_to_box(gt_cubes[i], Ks_scaled_per_box, im_shape)[0], var_boxes)
+                point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground).to(var_cubes.device), var_cubes)
+                segment_scores = score_segmentation(mask_per_image_cpu[i][0], bube_corners)
+                dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), var_cubes.dimensions[0], gt_boxes[i], var_boxes)
+                seg_mod_scores = score_mod_segmentation(mask_per_image_cpu[i][0], bube_corners)
                 corners_scores = score_corners(mask_per_image_cpu[i][0], bube_corners)
-                deep_scores = self.scorenet.inference(combined_features, [pred_boxes[i]])
-                combined_score = np.array(IoU2D_scores.cpu())*np.array(segment_scores)*np.array(dim_scores.cpu())#np.array(corners_scores.cpu())
+                combined_score = np.array(IoU2D_scores.cpu())*np.array(corners_scores.cpu())*np.array(dim_scores.cpu())
                 random_score = np.random.rand(number_of_proposals)
                 
                 score_IoU2D[i,:] = self.accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)
                 score_point_c[i,:] = self.accumulate_scores(point_cloud_scores.cpu().numpy(), IoU3D)
                 score_seg[i,:] = self.accumulate_scores(segment_scores.numpy(), IoU3D)
                 score_dim[i,:] = self.accumulate_scores(dim_scores.cpu().numpy(), IoU3D)
-                score_ratio[i,:] = self.accumulate_scores(ratio_scores.cpu().numpy(), IoU3D)
+                score_seg_mod[i,:] = self.accumulate_scores(seg_mod_scores.cpu().numpy(), IoU3D)
                 score_corner[i,:] = self.accumulate_scores(corners_scores.cpu().numpy(), IoU3D)
                 score_combined[i,:] = self.accumulate_scores(combined_score, IoU3D)
                 score_random[i,:] = self.accumulate_scores(random_score, IoU3D)
-                score_deep[i,:] = self.accumulate_scores(deep_scores.cpu().numpy().ravel(), IoU3D)
                 
                 score_to_use = combined_score
                 highest_score = np.argmax(score_to_use)
-                pred_cube = pred_cubes[i,highest_score]
+                pred_cube = var_cubes[0,highest_score]
+                
                 gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
                 pred_cubes_out.scores[i] = torch.as_tensor(score_to_use[highest_score])
                 pred_cubes_out.tensor[i] = pred_cube.tensor[0]
-                pred_boxes_out.append(pred_boxes[i][int(highest_score)])
-
-
+                #pred_boxes_out.append(pred_boxes[0][int(highest_score)])
+                pred_boxes_out.append(var_boxes[int(highest_score)])
 
                 # stats
                 sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
@@ -525,7 +563,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             p_info = Plotinfo(pred_cubes_out, gt_cube_meshes, gt_boxes3D, gt_boxes, pred_boxes_out, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
 
         if experiment_type['output_recall_scores']: # MABO
-            return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, score_deep, stat_empty_boxes, stats_image, stats_off, score_ratio, score_corner
+            return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off, score_seg_mod, score_corner
         
         elif not experiment_type['output_recall_scores']: # AP
             # list of Instances with the fields: pred_boxes, scores, pred_classes, pred_bbox3D, pred_center_cam, pred_center_2D, pred_dimensions, pred_pose
@@ -533,7 +571,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             # such that the loop can be over the images.
             pred_instances = [Instances(size) for size in images_raw.image_sizes] # each instance object contains all boxes in one image, the list is for each image
             for instances_i in pred_instances:
-                instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes_out, Ks_scaled_per_box.to('cpu'), im_shape))
+                instances_i.pred_boxes = pred_boxes_out #Boxes.cat(cubes_to_box(pred_cubes_out, Ks_scaled_per_box.to('cpu'), im_shape))
                 instances_i.scores = pred_cubes_out.scores
                 instances_i.pred_classes = pred_cubes_out.labels
                 instances_i.pred_bbox3D = pred_cubes_out.get_all_corners().squeeze(1)
