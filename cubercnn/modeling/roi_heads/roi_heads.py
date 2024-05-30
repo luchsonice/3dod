@@ -508,23 +508,13 @@ class ROIHeads_Boxer(StandardROIHeads):
                 score_random[i,:] = self.accumulate_scores(random_score, IoU3D)
                 score_deep[i,:] = self.accumulate_scores(deep_scores.cpu().numpy().ravel(), IoU3D)
                 
-                # score_to_use = combined_score
-                # highest_score = np.argmax(score_to_use)
-                # pred_cube = pred_cubes[i,highest_score]
-                # gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
-                # pred_cubes_out.scores[i] = torch.as_tensor(score_to_use[highest_score])
-                # pred_cubes_out.tensor[i] = pred_cube.tensor[0]
-                # pred_boxes_out.append(pred_boxes[i][int(highest_score)])
-
-                score_to_use = deep_scores.ravel()
-                highest_score = torch.argmax(score_to_use)
-                pred_cube = regressed_cubes[0,highest_score]
-                pred_b = cubes_to_box(pred_cube, Ks_scaled_per_box, im_shape)[0]
+                score_to_use = combined_score
+                highest_score = np.argmax(score_to_use)
+                pred_cube = pred_cubes[i,highest_score]
                 gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
-                pred_cubes_out.scores[i] = score_to_use[highest_score]
+                pred_cubes_out.scores[i] = torch.as_tensor(score_to_use[highest_score])
                 pred_cubes_out.tensor[i] = pred_cube.tensor[0]
-                pred_boxes_out.append(pred_b)
-
+                pred_boxes_out.append(pred_boxes[i][int(highest_score)])
 
                 # stats
                 sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
