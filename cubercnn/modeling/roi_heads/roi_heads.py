@@ -583,41 +583,6 @@ class ROIHeads_Boxer(StandardROIHeads):
 
             return pred_instances
         
-class MLP(nn.Module):
-    '''This is called a multi-task learning problem as it involves performing two tasks — 
-    
-        1) regression to find the score for a cube, 
-        2) regression to find the Cube coordinates
-        
-        
-        The cube head in the cube-rcnn model has 2 fc layers and then 1 extra layer for each type of output (z, rotation etc.). Therefore, we have chose to do the same'''
-    def __init__(self, in_features, out_features):
-        super().__init__()
-        base_out = 64
-        self.mlp = nn.Sequential(
-            nn.Linear(in_features, 256),
-            nn.BatchNorm1d(256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.BatchNorm1d(128), # I think the model could perhaps be better if this was a Dropout layer
-            nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.BatchNorm1d(base_out),
-            nn.ReLU(),
-        )
-        self.fc_score = nn.Linear(base_out, out_features)
-        self.fc_cube_centers, self.fc_dims = nn.Linear(base_out, 3), nn.Linear(base_out, 3) # center
-        # following the Cube-RCNN method we also predict 6d rotation. 
-        self.rotation_6d = nn.Linear(base_out, 6)
-        self.sigmoid = nn.Sigmoid()
-    def forward(self, x):
-        x = self.mlp(x)
-        scores = self.fc_score(x)
-        x_scores = self.sigmoid(scores)
-        centers, dims = self.fc_cube_centers(x), self.fc_dims(x)
-        x_cubes = Cubes(torch.cat((centers, dims, rotation_6d_to_matrix(self.rotation_6d(x)).view(-1,9)), 1))
-        x_cubes.scores = x_scores
-        return x_scores, x_cubes
 
 @ROI_HEADS_REGISTRY.register()
 class ROIHeads_Score(StandardROIHeads):
@@ -625,12 +590,12 @@ class ROIHeads_Score(StandardROIHeads):
 
     @configurable
     def __init__(self, *, 
-                 cube_pooler:nn.Module, mlp:nn.Sequential, priors=None,
+                 cube_pooler:nn.Module, cube_head:nn.Module, priors=None,
                  **kwargs, ):
         super().__init__(**kwargs)
 
         self.cube_pooler = cube_pooler
-        self.mlp = mlp
+        self.cube_head = cube_head
 
     @classmethod
     def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec], priors=None):
@@ -666,11 +631,11 @@ class ROIHeads_Score(StandardROIHeads):
             pooler_type=pooler_type,
         )
 
-        res = pooler_resolution*pooler_resolution*512
-        mlp = MLP(res, 1)
+        shape = ShapeSpec(channels=512, height=pooler_resolution, width=pooler_resolution)
+        cube_head = build_cube_head(cfg, shape)
     
         return {'cube_pooler': cube_pooler,
-                'mlp': mlp}
+                'cube_head': cube_head}
 
     def forward(self, combined_features, instances, pred_cubes=None, Ks=None, im_scales_ratio=None, image_sizes=None):
         '''call self._forward_cube or self.inference depending on the training state define by model.train() or model.eval()
@@ -678,7 +643,7 @@ class ROIHeads_Score(StandardROIHeads):
         instances is a list[boxes] structure in the case of inference and a list of instances in the case of training.
         '''
         if self.training:
-            return self._forward_cube(combined_features, instances, pred_cubes, Ks, im_scales_ratio, combined_features, image_sizes)
+            return self._forward_cube(combined_features, instances, pred_cubes, Ks, im_scales_ratio, image_sizes)
         else:
             return self.inference(combined_features, instances)
     
@@ -745,7 +710,7 @@ class ROIHeads_Score(StandardROIHeads):
             y_true_not_thresh[:, i] = chosen_cubes_scores
         # Cube Pooler
         cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
-        pred_iou2d_scores, mlp_cubes = self.mlp(cube_features)
+        pred_iou2d_scores, mlp_cubes = self.cube_head(cube_features)
         # Loss
         y_true = y_true.t().ravel()
         chosen_cubes_scores = y_true_not_thresh.t().ravel()
@@ -761,7 +726,7 @@ class ROIHeads_Score(StandardROIHeads):
         
     def inference(self, combined_features, boxes):
         cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
-        scores, cube_regression = self.mlp(cube_features)
+        scores, cube_regression = self.cube_head(cube_features)
         return scores, cube_regression
     
 
