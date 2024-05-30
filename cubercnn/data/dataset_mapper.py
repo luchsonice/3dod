@@ -43,7 +43,7 @@ class DatasetMapper3D(DatasetMapper):
 
         Args:
             is_train: whether it's used in training or inference
-            mode: 'get_depth_maps' (default), 'load_proposals', 'cube_rcnn'
+            mode: 'get_depth_maps' (default), 'cube_rcnn'
             augmentations: a list of augmentations or deterministic transforms to apply
             image_format: an image format supported by :func:`detection_utils.read_image`.
             use_instance_mask: whether to process instance segmentation annotations, if available
@@ -118,23 +118,17 @@ class DatasetMapper3D(DatasetMapper):
         image_shape = image.shape[:2]  # h, w
 
         # dont load ground map and depth map when 
-        if self.mode == 'get_depth_maps':
-            dp_img = Image.fromarray(np.load(dataset_dict["depth_image_path"])['depth'])
-            dp_img = np.array(dp_img.resize(image.shape[:2][::-1], Image.NEAREST))
-            dataset_dict["depth_map"] = torch.as_tensor(np.ascontiguousarray(dp_img))
-            #  ground image
-            if 'ground_image_path' in dataset_dict:
-                ground_img = Image.fromarray(np.load(dataset_dict["ground_image_path"])['mask'])
-                ground_img = np.array(ground_img.resize(image.shape[:2][::-1], Image.NEAREST))
-                dataset_dict["ground_map"] = torch.as_tensor(np.ascontiguousarray(ground_img))
-            else:
-                dataset_dict["ground_map"] = None
-        elif self.mode == 'load_proposals':
-            f = f"datasets/proposals/proposals_learn/{dataset_dict['image_id']}.pt"
-            proposals = torch.load(f, map_location=torch.device('cpu'))
-            dataset_dict["proposals"] = proposals
+        dp_img = Image.fromarray(np.load(dataset_dict["depth_image_path"])['depth'])
+        dp_img = np.array(dp_img.resize(image.shape[:2][::-1], Image.NEAREST))
+        dataset_dict["depth_map"] = torch.as_tensor(np.ascontiguousarray(dp_img))
+        #  ground image
+        if 'ground_image_path' in dataset_dict:
+            ground_img = Image.fromarray(np.load(dataset_dict["ground_image_path"])['mask'])
+            ground_img = np.array(ground_img.resize(image.shape[:2][::-1], Image.NEAREST))
+            dataset_dict["ground_map"] = torch.as_tensor(np.ascontiguousarray(ground_img))
+        else:
+            dataset_dict["ground_map"] = None
                                             
-
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
         # Therefore it's important to use torch.Tensor.
