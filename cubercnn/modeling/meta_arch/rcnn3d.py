@@ -754,12 +754,7 @@ class ScoreNet(nn.Module):
             else:
                 gt_instances = None
 
-            if "proposals" in batched_inputs[0]:
-                cubes = [x["proposals"].to(self.device) for x in batched_inputs]
-            else:
-                raise ValueError("Dataset does not contain proposals. Make sure to use ' mode='load_proposals ' in DatasetMapper3D.")
-
-            return self.roi_heads(combined_features, gt_instances, cubes, Ks, im_scales_ratio, images.image_sizes)
+            return self.roi_heads(combined_features, gt_instances, Ks, im_scales_ratio, images.image_sizes)
 
     def inference(self,
         batched_inputs: List[Dict[str, torch.Tensor]],

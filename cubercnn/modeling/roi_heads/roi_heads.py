@@ -32,7 +32,7 @@ import ProposalNetwork.proposals.proposals as proposals
 from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation, score_ratios, score_corners, score_mod_segmentation
 from ProposalNetwork.utils.conversions import cubes_to_box
 from ProposalNetwork.utils.spaces import Cubes
-from ProposalNetwork.utils.utils import iou_3d
+from ProposalNetwork.utils.utils import iou_3d, iou_2d, mask_iou, mod_mask_iou
 from cubercnn.modeling.roi_heads.cube_head import build_cube_head
 from cubercnn.modeling.proposal_generator.rpn import subsample_labels
 from cubercnn.modeling.roi_heads.fast_rcnn import FastRCNNOutputs
@@ -637,92 +637,40 @@ class ROIHeads_Score(StandardROIHeads):
         return {'cube_pooler': cube_pooler,
                 'cube_head': cube_head}
 
-    def forward(self, combined_features, instances, pred_cubes=None, Ks=None, im_scales_ratio=None, image_sizes=None):
+    def forward(self, combined_features, instances, Ks=None, im_scales_ratio=None, image_sizes=None):
         '''call self._forward_cube or self.inference depending on the training state define by model.train() or model.eval()
         
         instances is a list[boxes] structure in the case of inference and a list of instances in the case of training.
         '''
         if self.training:
-            return self._forward_cube(combined_features, instances, pred_cubes, Ks, im_scales_ratio, image_sizes)
+            return self._forward_cube(combined_features, instances, Ks, im_scales_ratio, image_sizes)
         else:
             return self.inference(combined_features, instances)
     
-    def _forward_cube(self, combined_features, instances, pred_cubes, Ks, im_scales_ratio, image_sizes):
+    def _forward_cube(self, combined_features, instances, Ks, im_scales_ratio, image_sizes):
         Ks_scaled = torch.cat([(K/scale).unsqueeze(0) for K, scale in zip(Ks, im_scales_ratio)]).to(combined_features.device)
         image_sizes = [image_size[::-1] for image_size in image_sizes]
         Ks_scaled[:, -1, -1] = 1
-        boxes = []
-        total_num_of_boxes_per_image = 64
-        balance = 1/self.positive_fraction   # 1/this number as ratio of positives
-        total_num_of_positive_boxes_per_image = int(total_num_of_boxes_per_image / balance)
-        total_num_of_negative_boxes_per_image = int(((balance-1) * total_num_of_boxes_per_image)/balance)
-        y_true = torch.zeros(total_num_of_boxes_per_image, len(im_scales_ratio), device=combined_features.device)
-        y_true_not_thresh = torch.zeros(total_num_of_boxes_per_image, len(im_scales_ratio), device=combined_features.device)
-        for i, pred_cube in enumerate(pred_cubes):
-            # Choose boxes
-            all_scores = pred_cube.scores
+       
+        boxes = [instances[i].gt_boxes for i in range(len(instances))]
 
-            threshold = 0.5
-            positive_mask = all_scores > threshold
-            negative_mask = all_scores <= threshold
-
-            # Get indices of positive and negative cubes
-            positive_indices = torch.nonzero(positive_mask, as_tuple=False)
-            negative_indices = torch.nonzero(negative_mask, as_tuple=False)
-
-            # Randomly shuffle the indices
-            positive_indices_shuffled = positive_indices[torch.randperm(positive_indices.size(0))]
-            negative_indices_shuffled = negative_indices[torch.randperm(negative_indices.size(0))] # TODO check that these are valid permutations (because of 2d)
-
-            # Sample negative indices
-            negative_cubes_indices = negative_indices_shuffled[:total_num_of_negative_boxes_per_image]
-            negative_cubes = pred_cube.tensor[negative_cubes_indices[:, 0], negative_cubes_indices[:, 1]]
-            negative_scores = all_scores[negative_cubes_indices[:, 0], negative_cubes_indices[:, 1]]
-            
-            # Repeat positive indices if needed to meet the required number
-            num_positive_samples = min(total_num_of_positive_boxes_per_image, positive_indices_shuffled.size(0))
-            # Not a single positive prediction
-            if num_positive_samples == 0: 
-                print("Image without single positive prediction")
-                add_negative_cubes_indices = negative_indices_shuffled[total_num_of_negative_boxes_per_image:total_num_of_negative_boxes_per_image+total_num_of_positive_boxes_per_image]
-                add_negative_cubes = pred_cube.tensor[add_negative_cubes_indices[:, 0], add_negative_cubes_indices[:, 1]]
-                chosen_cubes = torch.cat([add_negative_cubes, negative_cubes], dim=0).unsqueeze(1)
-                add_negative_scores = all_scores[add_negative_cubes_indices[:, 0], add_negative_cubes_indices[:, 1]]
-                chosen_cubes_scores = torch.cat([add_negative_scores, negative_scores], dim=0)
-            else:
-                # In case that less than total_num_of_positive_boxes_per_image exist, repeat the ones that do
-                num_repeats = total_num_of_positive_boxes_per_image // num_positive_samples
-                remaining_repeats = total_num_of_positive_boxes_per_image % num_positive_samples
-                positive_cubes_indices = positive_indices_shuffled[:num_positive_samples].repeat(num_repeats,1)
-                if remaining_repeats > 0:
-                    positive_cubes_indices = torch.cat([positive_cubes_indices, positive_indices_shuffled[:remaining_repeats]], dim=0)
-                
-                # Sample positive cubes
-                positive_cubes = pred_cube.tensor[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
-                chosen_cubes = torch.cat([positive_cubes, negative_cubes], dim=0).unsqueeze(1)
-                positive_scores = all_scores[positive_cubes_indices[:, 0], positive_cubes_indices[:, 1]]
-                chosen_cubes_scores = torch.cat([positive_scores, negative_scores], dim=0)
-            
-            binary_chosen_cubes_scores = (chosen_cubes_scores > 0.5).float()
-            chosen_boxes = Boxes.cat(cubes_to_box(Cubes(chosen_cubes, chosen_cubes_scores.unsqueeze(1)), Ks_scaled[i], image_sizes[i]))
-            boxes.append(chosen_boxes)
-            y_true[:, i] = binary_chosen_cubes_scores
-            y_true_not_thresh[:, i] = chosen_cubes_scores
         # Cube Pooler
         cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
-        pred_iou2d_scores, mlp_cubes = self.cube_head(cube_features)
+        cubes_tensor = self.cube_head(cube_features)
+
+        cubes = Cubes(cubes_tensor)
+        total_num_of_boxes_per_image = cubes.num_instances
+        
         # Loss
-        y_true = y_true.t().ravel()
-        chosen_cubes_scores = y_true_not_thresh.t().ravel()
-        loss_score = F.l1_loss(pred_iou2d_scores.ravel(), chosen_cubes_scores)
-        loss_dims = 0
-        for mlp_cube, box, K, image_size in zip(mlp_cubes.split(total_num_of_boxes_per_image), boxes, Ks_scaled, image_sizes):
+        loss_IoU = 0
+        loss_segment = 0
+        for gt_cube, gt_box, K, image_size in zip(cubes.split(total_num_of_boxes_per_image), boxes, Ks_scaled, image_sizes):
             # because the cubes_to_box function assumes that the K is the same for all cubes in structure, we must loop over it
-            proj_cubes = cubes_to_box(mlp_cube, K, image_size)[0]
-            # TODO: should the mean be along dim 0 (per x1, y1, x2, y2) or dim 1 (per box) ??
-            loss_dims =+ F.l1_loss(box.tensor, proj_cubes.tensor, reduction='none').mean(0).sum()
-        acc = (torch.round(pred_iou2d_scores.squeeze()) == y_true).float().mean()
-        return loss_score, loss_dims, acc
+            pred_boxes = cubes_to_box(gt_cube, K, image_size)[0]
+            score_IoU += sum(1-iou_2d(gt_box,pred_boxes))
+
+        return loss_IoU, loss_segment
+        
         
     def inference(self, combined_features, boxes):
         cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
