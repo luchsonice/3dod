@@ -341,10 +341,12 @@ class ROIHeads_Boxer(StandardROIHeads):
         dp_map = depth_maps.tensor.cpu().squeeze()[::use_nth,::use_nth]
         focal_length_x, focal_length_y = dp_map.shape[1], dp_map.shape[0]
         FINAL_WIDTH, FINAL_HEIGHT = dp_map.shape[1], dp_map.shape[0]
-        x, y = np.meshgrid(np.arange(FINAL_WIDTH), np.arange(FINAL_HEIGHT))
-        x = (x - FINAL_WIDTH / 2) / focal_length_x
-        y = (y - FINAL_HEIGHT / 2) / focal_length_y
+        u, v = np.meshgrid(np.arange(FINAL_WIDTH), np.arange(FINAL_HEIGHT))
+        cx, cy = FINAL_WIDTH / 2, FINAL_HEIGHT / 2 # principal point of camera
+        # https://www.open3d.org/docs/0.7.0/python_api/open3d.geometry.create_point_cloud_from_depth_image.html
         z = np.array(dp_map)
+        x = (u - cx) * z / focal_length_x
+        y = (v - cy) * z / focal_length_y
         if ground_maps is not None:
         # select only the points in x,y,z that are part of the ground map
             ground = ground_maps.tensor.squeeze().cpu()[::use_nth,::use_nth]
@@ -359,18 +361,18 @@ class ROIHeads_Boxer(StandardROIHeads):
             zg = z; xg = x; yg = y
 
         # normalise the points
-        points = np.stack((np.multiply(xg, zg), np.multiply(yg, zg), zg), axis=-1).reshape(-1, 3)
+        points = np.stack((xg, yg, zg), axis=-1).reshape(-1, 3)
         # colors = im.reshape(-1, 3) / 255.0
-        colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth])[ground].reshape(-1, 3) / 255.0
+        colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu())[ground].reshape(-1, 3) / 255.0
         plane = pyrsc.Plane()
         # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
         best_eq, best_inliers = plane.fit(points, thresh=0.05, maxIteration=1000)
         normal_vec = np.array(best_eq[:-1])
 
         # remove ground plane from the points that are fed to the scoring function
-        points_all = np.stack((np.multiply(x, z), np.multiply(y, z), z), axis=-1).reshape(-1, 3)
+        points_all = np.stack((x, y, z), axis=-1).reshape(-1, 3)
         if ground_maps is not None:
-            points_no_ground = np.stack((np.multiply(x_no_g, z_no_g), np.multiply(y_no_g, z_no_g), z_no_g), axis=-1).reshape(-1, 3)
+            points_no_ground = np.stack((x_no_g, y_no_g, z_no_g), axis=-1).reshape(-1, 3)
         else:
             points_no_ground = points_all
 
@@ -528,8 +530,8 @@ class ROIHeads_Boxer(StandardROIHeads):
 
                     # Draw the LineSet
                     return line_set
-                R = pred_cube.rotations[0,0].numpy()
-                vec1, vec2, vec3, vec4 = draw_vector(R[:,0]), draw_vector(R[:,1]), draw_vector(R[:,2]), draw_vector(normal_vec, color=[0,1,0])
+                R = pred_cube.rotations[0,0].cpu().numpy()
+                vec1, vec2, vec3, vec4 = draw_vector(R[:,0]), draw_vector(R[:,1]), draw_vector(R[:,2]), draw_vector(normal_vec.cpu().numpy(), color=[0,1,0])
                 pcd = o3d.geometry.PointCloud()
                 # transform R such that y up is aligned with normal vector
 
