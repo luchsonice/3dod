@@ -4,7 +4,7 @@ import cv2
 from ProposalNetwork.scoring.convex_outline import tracing_outline_robust
 import ProposalNetwork.utils.spaces as spaces
 from scipy.spatial import cKDTree
-from ProposalNetwork.utils.utils import iou_2d, mask_iou
+from ProposalNetwork.utils.utils import iou_2d, mask_iou, mod_mask_iou
 
 def score_point_cloud(point_cloud:torch.Tensor, cubes:list[spaces.Cubes], K:torch.Tensor=None, segmentation_mask:torch.Tensor=None):
     '''
@@ -94,7 +94,27 @@ def score_segmentation(segmentation_mask, bube_corners):
         polygon_points = cv2.convexHull(np.array(bube_corners[i]))
         polygon_points = np.array([polygon_points],dtype=np.int32)
         cv2.fillPoly(bube_mask, polygon_points, 1)
-        scores[i] = mask_iou(segmentation_mask[::4,::4], bube_mask[::4,::4]) # TODO I think we should try diving by gt as its unfair in combined
+        scores[i] = mask_iou(segmentation_mask[::4,::4], bube_mask[::4,::4])
+
+    return scores
+
+def score_mod_segmentation(segmentation_mask, bube_corners):
+    '''
+    segmentation_mask   : Mask
+    bube_corners        : List of Lists
+    '''
+    bube_corners = bube_corners.to(device=segmentation_mask.device)
+    bube_corners = bube_corners.squeeze(0) # remove instance dim
+    scores = torch.zeros(len(bube_corners), device=segmentation_mask.device)
+    for i in range(len(bube_corners)):
+        bube_mask = np.zeros(segmentation_mask.shape, dtype='uint8')
+
+        # Remove "inner" points (2) and put others in correct order 
+        # Calculate the convex hull of the points which also orders points correctly
+        polygon_points = cv2.convexHull(np.array(bube_corners[i]))
+        polygon_points = np.array([polygon_points],dtype=np.int32)
+        cv2.fillPoly(bube_mask, polygon_points, 1)
+        scores[i] = mod_mask_iou(segmentation_mask[::4,::4], bube_mask[::4,::4])
 
     return scores
 

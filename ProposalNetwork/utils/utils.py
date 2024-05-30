@@ -231,6 +231,17 @@ def mask_iou(segmentation_mask, bube_mask):
     if intersection == 0:
         return torch.tensor(0.0)
     union = torch.logical_or(segmentation_mask, bube_mask).to(torch.int).sum()
+    return intersection / union
+
+def mod_mask_iou(segmentation_mask, bube_mask):
+    '''
+    Area is of segmentation_mask
+    '''
+    bube_mask = torch.tensor(bube_mask, device=segmentation_mask.device)
+    intersection = (segmentation_mask * bube_mask).sum()
+    if intersection == 0:
+        return torch.tensor(0.0)
+    union = torch.logical_or(segmentation_mask, bube_mask).to(torch.int).sum()
     return intersection**5 / union # NOTE not standard IoU
 
 def is_gt_included(gt_cube,x_range,y_range,z_range, w_prior, h_prior, l_prior):
