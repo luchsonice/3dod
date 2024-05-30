@@ -94,7 +94,7 @@ class Cube:
 
 class Cubes:
     '''
-    3D boxes in the format [[c1, c2, c3, w, h, l, R]]
+    3D boxes in the format [[c1, c2, c3, w, h, l, R1...R9]]
 
     inspired by `detectron2.structures.Boxes`
 
@@ -110,7 +110,6 @@ class Cubes:
             )
             of shape (N, 15).
     ```
-
                       _____________________ 
                     /|                    /|
                    / |                   / |
@@ -170,6 +169,10 @@ class Cubes:
     @property
     def num_instances(self):
         return self.tensor.shape[0]
+    
+    @property
+    def shape(self):
+        return self.tensor.shape
 
     def clone(self) -> "Cubes":
         """
@@ -233,10 +236,12 @@ class Cubes:
         cube_corners = cube_corners.transpose(2,1)
         cube_corners = cube_corners.reshape(self.num_instances, num_prop, 8, 2)
 
+        # we must clamp and then stack, otherwise the gradient is fucked
         if clamp is not None:
-            cube_corners[..., 0] = cube_corners[..., 0].clamp(int(-clamp[0]/2+1), int(clamp[0]-1+clamp[0]))
-            cube_corners[..., 1] = cube_corners[..., 1].clamp(int(-clamp[1]/2+1), int(clamp[1]-1+clamp[1]))
-
+            x = torch.clamp(cube_corners[..., 0], int(-clamp[0]/2+1), int(clamp[0]-1+clamp[0]))
+            y = torch.clamp(cube_corners[..., 1], int(-clamp[1]/2+1), int(clamp[1]-1+clamp[1]))
+        cube_corners = torch.stack((x, y), dim=-1)
+        
         return cube_corners # num_instances x num_proposals x 8 x 2
     
     def get_volumes(self) -> float:
@@ -310,3 +315,7 @@ class Cubes:
         Yield a cube as a Tensor of shape (15,) at a time.
         """
         yield from self.tensor
+
+    def split(self, split_size: int) -> tuple["Cubes"]:
+        """same behaviour as torch.split, return a tuple of chunksize Cubes"""
+        return tuple(Cubes(x) for x in self.tensor.split(split_size, dim=1))

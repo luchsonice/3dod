@@ -1,4 +1,5 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates
+import sys
 import warnings
 
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_512 in registry")
@@ -75,7 +76,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     
     data_mapper = DatasetMapper3D(cfg, is_train=False, mode='load_proposals')
     dataset_name = cfg.DATASETS.TRAIN[0]
-    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=2)
+    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=4)
 
     # give the mapper access to dataset_ids
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
@@ -102,15 +103,17 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
         while True:
             data = next(data_iter)
             storage.iter = iteration
-
             # forward
             combined_features = modelbase(data)
-            loss, acc = model(data, combined_features)
+            loss_score, loss_regression, acc = model(data, combined_features)
+            # scale the dimension L1-loss by a factor of 1000 to have both the scoring and regression losses in a similar range
+            loss_regression = 0.5 * loss_regression/1_000
+            total_loss = loss_score + loss_regression
             # send loss scalars to tensorboard.
-            storage.put_scalars(total_loss=loss, accuracy=acc)
+            storage.put_scalars(total_loss=total_loss, score_loss=loss_score, regression_loss=loss_regression, accuracy=acc)
 
             # backward and step
-            loss.backward()
+            total_loss.backward()
             #for name, param in model.named_parameters():
             #    if param.grad is not None:
             #        print(name, param.grad)
@@ -123,7 +126,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
 
             # logging stuff 
             pbar.update(1)
-            pbar.set_postfix({"L1loss": loss.item(), "bin.acc": acc.item()})
+            pbar.set_postfix({"tot.loss": total_loss.item(), "S.loss": loss_score.item(), "R.loss": loss_regression.item(), "bin.acc": acc.item()})
             if iteration - start_iter > 5 and ((iteration + 1) % 2 == 0 or iteration == max_iter - 1):
                 for writer in writers[1:]: # 3 writers; 1: prints, 2: json logs, 3: tensorboard
                     writer.write()
@@ -287,7 +290,9 @@ def main(args):
     
     name = f'learned score {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
     
-    wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='online')
+    if sys.platform == 'linux':
+        # only log to wandb on hpc/linux
+        wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg, mode='online')
 
     category_path = 'output/Baseline_sgd/category_meta.json'
     
