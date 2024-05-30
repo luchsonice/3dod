@@ -30,14 +30,13 @@ from detectron2.modeling.roi_heads import (
 from detectron2.modeling.poolers import ROIPooler
 import ProposalNetwork.proposals.proposals as proposals
 from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation, score_ratios, score_corners, score_mod_segmentation
-from ProposalNetwork.utils.conversions import cube_to_box, cubes_to_box
+from ProposalNetwork.utils.conversions import cubes_to_box
 from ProposalNetwork.utils.spaces import Cubes
 from ProposalNetwork.utils.utils import iou_3d
 from cubercnn.modeling.roi_heads.cube_head import build_cube_head
 from cubercnn.modeling.proposal_generator.rpn import subsample_labels
 from cubercnn.modeling.roi_heads.fast_rcnn import FastRCNNOutputs
 from cubercnn import util
-from cubercnn.util.math_util import convert_3d_box_to_2d
 
 logger = logging.getLogger(__name__)
 
@@ -338,13 +337,14 @@ class ROIHeads_Boxer(StandardROIHeads):
         # ### point cloud
         use_nth = 5
         dp_map = depth_maps.tensor.cpu().squeeze()[::use_nth,::use_nth]
-        focal_length_x, focal_length_y = dp_map.shape[1] / 2, dp_map.shape[0] / 2
+        focal_length_x, focal_length_y = dp_map.shape[1], dp_map.shape[0]
         FINAL_WIDTH, FINAL_HEIGHT = dp_map.shape[1], dp_map.shape[0]
-        x, y = np.meshgrid(np.arange(FINAL_WIDTH), np.arange(FINAL_HEIGHT))
-        x = (x - FINAL_WIDTH / 2) / focal_length_x
-        y = (y - FINAL_HEIGHT / 2) / focal_length_y
+        u, v = np.meshgrid(np.arange(FINAL_WIDTH), np.arange(FINAL_HEIGHT))
+        cx, cy = FINAL_WIDTH / 2, FINAL_HEIGHT / 2 # principal point of camera
+        # https://www.open3d.org/docs/0.7.0/python_api/open3d.geometry.create_point_cloud_from_depth_image.html
         z = np.array(dp_map)
-
+        x = (u - cx) * z / focal_length_x
+        y = (v - cy) * z / focal_length_y
         if ground_maps is not None:
         # select only the points in x,y,z that are part of the ground map
             ground = ground_maps.tensor.squeeze().cpu()[::use_nth,::use_nth]
@@ -359,18 +359,18 @@ class ROIHeads_Boxer(StandardROIHeads):
             zg = z; xg = x; yg = y
 
         # normalise the points
-        points = np.stack((np.multiply(xg, zg/2), np.multiply(yg, zg/2), zg), axis=-1).reshape(-1, 3)
+        points = np.stack((xg, yg, zg), axis=-1).reshape(-1, 3)
         # colors = im.reshape(-1, 3) / 255.0
-        #colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth]).reshape(-1, 3) / 255.0
+        colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu())[ground].reshape(-1, 3) / 255.0
         plane = pyrsc.Plane()
         # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
         best_eq, best_inliers = plane.fit(points, thresh=0.05, maxIteration=1000)
         normal_vec = np.array(best_eq[:-1])
 
         # remove ground plane from the points that are fed to the scoring function
-        points_all = np.stack((np.multiply(x, z), np.multiply(y, z), z), axis=-1).reshape(-1, 3)
+        points_all = np.stack((x, y, z), axis=-1).reshape(-1, 3)
         if ground_maps is not None:
-            points_no_ground = np.stack((np.multiply(x_no_g, z_no_g), np.multiply(y_no_g, z_no_g), z_no_g), axis=-1).reshape(-1, 3)
+            points_no_ground = np.stack((x_no_g, y_no_g, z_no_g), axis=-1).reshape(-1, 3)
         else:
             points_no_ground = points_all
 
