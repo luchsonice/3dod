@@ -32,11 +32,13 @@ import ProposalNetwork.proposals.proposals as proposals
 from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation, score_ratios, score_corners, score_mod_segmentation
 from ProposalNetwork.utils.conversions import cubes_to_box
 from ProposalNetwork.utils.spaces import Cubes
-from ProposalNetwork.utils.utils import iou_3d, iou_2d, mask_iou, mod_mask_iou
+from ProposalNetwork.utils.utils import iou_3d
 from cubercnn.modeling.roi_heads.cube_head import build_cube_head
 from cubercnn.modeling.proposal_generator.rpn import subsample_labels
 from cubercnn.modeling.roi_heads.fast_rcnn import FastRCNNOutputs
 from cubercnn import util
+
+from torchvision.ops import generalized_box_iou_loss
 
 logger = logging.getLogger(__name__)
 
@@ -656,26 +658,26 @@ class ROIHeads_Score(StandardROIHeads):
 
         # Cube Pooler
         cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
-        cubes_tensor = self.cube_head(cube_features)
+        cubes = self.cube_head(cube_features)
 
-        cubes = Cubes(cubes_tensor)
         total_num_of_boxes_per_image = cubes.num_instances
         
         # Loss
-        loss_IoU = 0
-        loss_segment = 0
-        for gt_cube, gt_box, K, image_size in zip(cubes.split(total_num_of_boxes_per_image), boxes, Ks_scaled, image_sizes):
+        loss_IoU = torch.tensor(0,device=combined_features.device).float()
+        loss_segment = torch.tensor(0,device=combined_features.device).float()
+        for pred_cube, gt_box, K, image_size in zip(cubes.split(total_num_of_boxes_per_image), boxes, Ks_scaled, image_sizes):
             # because the cubes_to_box function assumes that the K is the same for all cubes in structure, we must loop over it
-            pred_boxes = cubes_to_box(gt_cube, K, image_size)[0]
-            score_IoU += sum(1-iou_2d(gt_box,pred_boxes))
+            pred_boxes = cubes_to_box(pred_cube, K, image_size)[0]
 
+            loss_IoU += generalized_box_iou_loss(gt_box.tensor, pred_boxes.tensor, reduction='sum')
+            
         return loss_IoU, loss_segment
         
         
     def inference(self, combined_features, boxes):
         cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
-        scores, cube_regression = self.cube_head(cube_features)
-        return scores, cube_regression
+        cubes = self.cube_head(cube_features)
+        return cubes
     
 
 @ROI_HEADS_REGISTRY.register()

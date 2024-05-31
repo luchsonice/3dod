@@ -294,7 +294,6 @@ class ScoreHead(nn.Module):
     def __init__(self,  cfg, input_shape: Dict[str, ShapeSpec]):
         super().__init__()
         in_features = input_shape.height * input_shape.width * input_shape.channels
-        out_features = 1
         base_out = 64
         self.mlp = nn.Sequential(
             nn.Linear(in_features, 256),
@@ -307,20 +306,16 @@ class ScoreHead(nn.Module):
             nn.BatchNorm1d(base_out),
             nn.ReLU(),
         )
-        self.fc_score = nn.Linear(base_out, out_features)
         self.fc_cube_centers, self.fc_dims = nn.Linear(base_out, 3), nn.Linear(base_out, 3) # center
-        # following the Cube-RCNN method we also predict 6d rotation. 
+        # following the Cube-RCNN method we also predict 6d rotation.
         self.rotation_6d = nn.Linear(base_out, 6)
-        self.sigmoid = nn.Sigmoid()
-
+        
+        
     def forward(self, x):
         x = self.mlp(x)
-        scores = self.fc_score(x)
-        x_scores = self.sigmoid(scores)
         centers, dims = self.fc_cube_centers(x), self.fc_dims(x)
         x_cubes = Cubes(torch.cat((centers, dims, rotation_6d_to_matrix(self.rotation_6d(x)).view(-1,9)), 1))
-        x_cubes.scores = x_scores
-        return x_scores, x_cubes
+        return x_cubes
 
 def build_cube_head(cfg, input_shape: Dict[str, ShapeSpec]):
     name = cfg.MODEL.ROI_CUBE_HEAD.NAME
