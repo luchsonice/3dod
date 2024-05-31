@@ -2,7 +2,6 @@
 from detectron2.utils.registry import Registry
 from typing import Dict
 from detectron2.layers import ShapeSpec
-from segment_anything.predictor import SamPredictor
 from torch import nn
 import torch
 import numpy as np
@@ -313,7 +312,7 @@ class ScoreHead(nn.Module):
         # following the Cube-RCNN method we also predict 6d rotation. 
         self.rotation_6d = nn.Linear(base_out, 6)
         self.sigmoid = nn.Sigmoid()
-        
+
     def forward(self, x):
         x = self.mlp(x)
         scores = self.fc_score(x)
