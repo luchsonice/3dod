@@ -651,7 +651,7 @@ class ROIHeads_Score(StandardROIHeads):
     
     def _forward_cube(self, combined_features, instances, Ks, im_scales_ratio, image_sizes):
         Ks_scaled = torch.cat([(K/scale).unsqueeze(0) for K, scale in zip(Ks, im_scales_ratio)]).to(combined_features.device)
-        image_sizes = [image_size[::-1] for image_size in image_sizes]
+        image_sizes_wh = [image_size[::-1] for image_size in image_sizes]
         Ks_scaled[:, -1, -1] = 1
        
         boxes = [instances[i].gt_boxes for i in range(len(instances))]
@@ -660,18 +660,28 @@ class ROIHeads_Score(StandardROIHeads):
         cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
         cubes = self.cube_head(cube_features)
 
-        total_num_of_boxes_per_image = cubes.num_instances
+        total_num_of_boxes_per_image = [len(boxes_i) for boxes_i in boxes]
         
+        pred_instances = [Instances(size) for size in image_sizes] # each instance object contains all boxes in one image, the list is for each image
         # Loss
         loss_IoU = torch.tensor(0,device=combined_features.device).float()
         loss_segment = torch.tensor(0,device=combined_features.device).float()
-        for pred_cube, gt_box, K, image_size in zip(cubes.split(total_num_of_boxes_per_image), boxes, Ks_scaled, image_sizes):
+        for pred_cube, gt_box, K, image_size, instances_i in zip(cubes.split(total_num_of_boxes_per_image), boxes, Ks_scaled, image_sizes_wh, pred_instances):
             # because the cubes_to_box function assumes that the K is the same for all cubes in structure, we must loop over it
             pred_boxes = cubes_to_box(pred_cube, K, image_size)[0]
 
             loss_IoU += generalized_box_iou_loss(gt_box.tensor, pred_boxes.tensor, reduction='sum')
             
-        return loss_IoU, loss_segment
+            instances_i.pred_boxes = pred_boxes
+            instances_i.scores = torch.ones(len(instances_i.pred_boxes), device=combined_features.device)
+            instances_i.pred_classes = torch.ones(len(instances_i.pred_boxes), dtype=int, device=combined_features.device)
+            instances_i.pred_bbox3D = pred_cube.get_all_corners().squeeze(0)
+            instances_i.pred_center_cam = pred_cube.centers.squeeze(0)
+            instances_i.pred_dimensions = pred_cube.dimensions.squeeze(0)
+            instances_i.pred_pose = pred_cube.rotations.squeeze(0)
+            instances_i.pred_center_2D = instances_i.pred_boxes.get_centers()  
+
+        return loss_IoU, loss_segment, pred_instances
         
         
     def inference(self, combined_features, boxes):
