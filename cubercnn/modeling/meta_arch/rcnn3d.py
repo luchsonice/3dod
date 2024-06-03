@@ -386,6 +386,41 @@ class RCNN3D_combined_features(nn.Module):
         losses.update(detector_losses)
         losses.update(proposal_losses)
         return losses
+    
+    def inference(
+        self,
+        batched_inputs: List[Dict[str, torch.Tensor]],
+        detected_instances: Optional[List[Instances]] = None,
+        do_postprocess: bool = True,
+    ):
+        assert not self.training
+
+        images = self.preprocess_image(batched_inputs)
+
+        # scaling factor for the sample relative to its original scale
+        # e.g., how much has the image been upsampled by? or downsampled?
+        im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
+        
+        # The unmodified intrinsics for the image
+        Ks = [torch.FloatTensor(info['K']) for info in batched_inputs]
+
+        features = self.backbone(images.tensor)
+
+        # Pass oracle 2D boxes into the RoI heads
+        if type(batched_inputs == list) and np.any(['oracle2D' in b for b in batched_inputs]):
+            oracles = [b['oracle2D'] for b in batched_inputs]
+            results, _ = self.roi_heads(images, features, oracles, Ks, im_scales_ratio, None)
+        
+        # normal inference
+        else:
+            proposals, _ = self.proposal_generator(images, features, None)
+            results, _ = self.roi_heads(images, features, proposals, Ks, im_scales_ratio, None)
+            
+        if do_postprocess:
+            assert not torch.jit.is_scripting(), "Scripting is not supported for postprocess."
+            return GeneralizedRCNN._postprocess(results, batched_inputs, images.image_sizes)
+        else:
+            return results
 
     def visualize_training(self, batched_inputs, proposals, instances):
         """
