@@ -684,9 +684,13 @@ class ROIHeads_Score(StandardROIHeads):
             build_mask[bube_corners[i][:,0].long(),bube_corners[i][:,1].long()] = 1
             bube_mask = convex_hull(build_mask)
 
-            scores[i] = mask_iou_loss(gt_mask[::4,::4], bube_mask[::4,::4])
+            #scores[i] = mask_iou_loss(gt_mask[::4,::4], bube_mask[::4,::4])
+            bube_mask = (bube_mask > 0.5).float()
+            gt_mask = (gt_mask > 0.5).float()
+            scores[i] = F.binary_cross_entropy(gt_mask,bube_mask)
 
-        return 1 - scores.mean()
+        return scores.mean()
+        #return 1 - scores.mean()
     
     def _forward_cube(self, combined_features, instances, Ks, im_scales_ratio, image_sizes, mask_per_image):
         Ks_scaled = torch.cat([(K/scale).unsqueeze(0) for K, scale in zip(Ks, im_scales_ratio)]).to(combined_features.device)
