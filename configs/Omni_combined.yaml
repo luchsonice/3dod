@@ -1,27 +1,34 @@
 _BASE_: "Base.yaml"
 SOLVER:
-  TYPE: "adam"
-  IMS_PER_BATCH: 2
+  TYPE: "sgd"
+  IMS_PER_BATCH: 1
   BASE_LR: 0.001
   STEPS: (5000, 8000)
   MAX_ITER: 10000 #4972
   WARMUP_ITERS: 0
   CHECKPOINT_PERIOD: 1000
 TEST:
-  EVAL_PERIOD: 2
+  EVAL_PERIOD: 1000
 VIS_PERIOD: 40
 DATASETS:
   TRAIN: ('SUNRGBD_train_mini', 'SUNRGBD_val_mini')
   TEST: ('SUNRGBD_test_mini',) 
   CATEGORY_NAMES: ('chair', 'table', 'cabinet', 'car', 'lamp', 'books', 'sofa', 'pedestrian', 'picture', 'window', 'pillow', 'truck', 'door', 'blinds', 'sink', 'shelves', 'television', 'shoes', 'cup', 'bottle', 'bookcase', 'laptop', 'desk', 'cereal box', 'floor mat', 'traffic cone', 'mirror', 'barrier', 'counter', 'camera', 'bicycle', 'toilet', 'bus', 'bed', 'refrigerator', 'trailer', 'box', 'oven', 'clothes', 'van', 'towel', 'motorcycle', 'night stand', 'stove', 'machine', 'stationery', 'bathtub', 'cyclist', 'curtain', 'bin')
 MODEL:
+  FPN:
+    IN_FEATURES: ['p2', 'p3', 'p4', 'p5']
+  RPN:
+    IN_FEATURES: ['p2', 'p3', 'p4', 'p5']
+  ANCHOR_GENERATOR:
+    SIZES: [[32], [64], [128], [256]]  # One size for each in feature map
   ROI_HEADS:
-    NAME: 'ROIHeads_Score' # name of the class that is the 3d predictor
+    NAME: 'ROIHeads3D' # name of the class that is the 3d predictor
+    IN_FEATURES: ["p2", "p3", "p4", "p5"]
     NUM_CLASSES: 50
     POSITIVE_FRACTION: 0.25 # we can use this to control the ratio of positive to negative sampled cubes in
   ROI_CUBE_HEAD:
-    NAME: 'ScoreHead' # name of the 3d head
+    NAME: 'CubeHead' # name of the 3d head
     DIMS_PRIORS_ENABLED: False
     POOLER_TYPE: 'ROIAlignV2'
-    POOLER_RESOLUTION: 5
-  META_ARCHITECTURE: 'ScoreNet' # name of the overall arch that calls the ROI_HEADS.NAME and ROI_CUBE_HEAD.NAME
+    POOLER_RESOLUTION: 7
+  META_ARCHITECTURE: 'RCNN3D_combined_features' # name of the overall arch that calls the ROI_HEADS.NAME and ROI_CUBE_HEAD.NAME

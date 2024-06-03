@@ -363,7 +363,7 @@ def main(args):
     
     cfg = setup(args)
     
-    name = f'cube {datetime.datetime.now().isoformat()}'
+    name = f'cube rcnn combined features {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
     # wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
 
     logger.info('Preprocessing Training Datasets')

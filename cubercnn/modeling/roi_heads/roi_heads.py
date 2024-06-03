@@ -640,86 +640,124 @@ class ROIHeads_Score(StandardROIHeads):
         return {'cube_pooler': cube_pooler,
                 'cube_head': cube_head}
 
+    def l1_loss(self, vals, target):
+        return F.smooth_l1_loss(vals, target, reduction='none', beta=0.0)
+
+    def chamfer_loss(self, vals, target):
+        B = vals.shape[0]
+        xx = vals.view(B, 8, 1, 3)
+        yy = target.view(B, 1, 8, 3)
+        l1_dist = (xx - yy).abs().sum(-1)
+        l1 = (l1_dist.min(1).values.mean(-1) + l1_dist.min(2).values.mean(-1))
+        return l1
+
     def forward(self, combined_features, images_raw, instances, Ks=None, im_scales_ratio=None, image_sizes=None, segmentor=None):
         '''call self._forward_cube or self.inference depending on the training state define by model.train() or model.eval()
         
         instances is a list[boxes] structure in the case of inference and a list of instances in the case of training.
         '''
-        mask_per_image = self.object_masks(images_raw.tensor, instances, segmentor) # over all images in batch
-    
         if self.training:
-            return self._forward_cube(combined_features, instances, Ks, im_scales_ratio, image_sizes, mask_per_image)
+            return self._forward_cube(combined_features, instances, Ks, im_scales_ratio, image_sizes)
         else:
-            return self.inference(combined_features, instances)  
-
-    def object_masks(self, images, instances, segmentor):
-        '''list of masks for each object in the image.
-        Returns
-        ------
-        mask_per_image: List of torch.Tensor of shape (N_instance, 1, H, W)
-        '''
-        if segmentor is None:
-            print('Cannot find segmentations due to segmentor being None')
-        org_shape = images.shape[-2:]
-        resize_transform = ResizeLongestSide(segmentor.image_encoder.img_size)
-        batched_input = []
-        images = resize_transform.apply_image_torch(images*1.0)# .permute(2, 0, 1).contiguous()
-        for image, instance in zip(images, instances):
-            boxes = instance.gt_boxes.tensor
-            transformed_boxes = resize_transform.apply_boxes_torch(boxes, org_shape) # Bx4
-            batched_input.append({'image': image, 'boxes': transformed_boxes, 'original_size':org_shape})
-
-        seg_out = segmentor(batched_input, multimask_output=False)
-
-        mask_per_image = [i['masks'] for i in seg_out]
-        return mask_per_image
+            return self.inference(combined_features, instances)
     
-    def segment_loss(self, gt_mask, bube_corners):
-        bube_corners = bube_corners.to(device=gt_mask.device)
-        bube_corners = bube_corners.squeeze(0) # remove instance dim
-        scores = torch.zeros(len(bube_corners), device=gt_mask.device)
-        
-        for i in range(len(bube_corners)):
-            build_mask = torch.zeros(gt_mask.shape, device=gt_mask.device)
-            build_mask[bube_corners[i][:,0].long(),bube_corners[i][:,1].long()] = 1
-            bube_mask = convex_hull(build_mask)
-
-            scores[i] = mask_iou_loss(gt_mask[::4,::4], bube_mask[::4,::4])
-
-        return 1 - scores.mean()
-    
-    def _forward_cube(self, combined_features, instances, Ks, im_scales_ratio, image_sizes, mask_per_image):
+    def _forward_cube(self, combined_features, instances, Ks, im_scales_ratio, image_sizes):
+        boxes = [instances[i].gt_boxes for i in range(len(instances))]
+        gt_boxes3D = torch.cat([p.gt_boxes3D for p in instances], dim=0)
+        gt_poses = torch.cat([p.gt_poses for p in instances], dim=0)
+        n_box_per_image = [len(boxes_i) for boxes_i in boxes]
         Ks_scaled = torch.cat([(K/scale).unsqueeze(0) for K, scale in zip(Ks, im_scales_ratio)]).to(combined_features.device)
-        image_sizes_wh = [image_size[::-1] for image_size in image_sizes]
         Ks_scaled[:, -1, -1] = 1
-       
+        Ks_scaled_per_box = torch.cat([
+            (Ks[i]/im_scales_ratio[i]).unsqueeze(0).repeat([num, 1, 1]) 
+            for (i, num) in enumerate(n_box_per_image)
+        ]).to(gt_poses.device)
+        Ks_scaled_per_box[:, -1, -1] = 1
+        image_sizes_wh = [image_size[::-1] for image_size in image_sizes]
+
         box_classes = torch.cat([x.gt_classes for x in instances])
-        gt_boxes = [instances[i].gt_boxes for i in range(len(instances))]
+       
+
 
         # Cube Pooler
-        cube_features = self.cube_pooler([combined_features], gt_boxes).flatten(1)
+        cube_features = self.cube_pooler([combined_features], boxes).flatten(1)
+        n = cube_features.shape[0]
         cubes = self.cube_head(cube_features)
 
-        total_num_of_boxes_per_image = [len(boxes_i) for boxes_i in gt_boxes]
+        # assert no Negative dimensions in predictions
+
+
+
+        # Pull off necessary GT information
+        # let lowercase->2D and uppercase->3D
+        # [x, y, Z, W, H, L] 
+        gt_2d = gt_boxes3D[:, :2]
+        gt_z = gt_boxes3D[:, 2]
+        gt_dims = gt_boxes3D[:, 3:6]
+        cube_z = cubes.centers[..., -1].flatten()
+
+        src_boxes = Boxes.cat(boxes).tensor
+        src_widths = src_boxes[:, 2] - src_boxes[:, 0]
+        src_heights = src_boxes[:, 3] - src_boxes[:, 1]
+        src_ctr_x = src_boxes[:, 0] + 0.5 * src_widths
+        src_ctr_y = src_boxes[:, 1] + 0.5 * src_heights
+        cube_x = src_ctr_x + src_widths
+        cube_y = src_ctr_y + src_heights
+
+        # this box may have been mirrored and scaled so
+        # we need to recompute XYZ in 3D by backprojecting.
+        gt_x3d = gt_z * (gt_2d[:, 0] - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
+        gt_y3d = gt_z * (gt_2d[:, 1] - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
+        gt_3d = torch.stack((gt_x3d, gt_y3d, gt_z)).T
+
+        # put together the GT boxes
+        gt_box3d = torch.cat((gt_3d, gt_dims), dim=1)
+
+        # These are the corners which will be the target for all losses!!
+        gt_corners = util.get_cuboid_verts_faces(gt_box3d, gt_poses)[0]
+
+        cube_dis_x3d_from_z = cube_z * (gt_2d[:, 0] - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
+        cube_dis_y3d_from_z = cube_z * (gt_2d[:, 1] - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
+        cube_dis_z = torch.cat((torch.stack((cube_dis_x3d_from_z, cube_dis_y3d_from_z, cube_z)).T, gt_dims), dim=1)
+        dis_z_corners = util.get_cuboid_verts_faces(cube_dis_z, gt_poses)[0]
+        
+        # compute disentangled XY corners
+        cube_dis_x3d = gt_z * (cube_x - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
+        cube_dis_y3d = gt_z * (cube_y - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
+        cube_dis_XY = torch.cat((torch.stack((cube_dis_x3d, cube_dis_y3d, gt_z)).T, gt_dims), dim=1)
+        dis_XY_corners = util.get_cuboid_verts_faces(cube_dis_XY, gt_poses)[0]
+
+        # Pose
+        dis_pose_corners = util.get_cuboid_verts_faces(gt_box3d, cubes.rotations.squeeze())[0]
+        
+        # Dims
+        dis_dims_corners = util.get_cuboid_verts_faces(torch.cat((gt_3d, cubes.dimensions.squeeze()), dim=1), gt_poses)[0]
+        # loss xy
+        loss_xy = self.l1_loss(dis_XY_corners, gt_corners).contiguous().view(n, -1).mean(dim=1)
+        
+        # Loss dims
+        loss_dims = self.l1_loss(dis_dims_corners, gt_corners).contiguous().view(n, -1).mean(dim=1)
+
+        # Loss z
+        loss_z = self.l1_loss(dis_z_corners, gt_corners).contiguous().view(n, -1).mean(dim=1)
+
+        # Rotation uses chamfer 
+        loss_pose = self.chamfer_loss(dis_pose_corners, gt_corners)
+
+        loss = (loss_xy + loss_z + loss_dims + loss_pose).mean()
+
+
         
         pred_instances = [Instances(size) for size in image_sizes] # each instance object contains all boxes in one image, the list is for each image
         # Loss
-        loss_IoU = torch.tensor(0,device=combined_features.device).float()
-        loss_segment = torch.tensor(0,device=combined_features.device).float()
-        for i, pred_cube, gt_box, K, image_size, instances_i, box_classes_im in zip(range(len(image_sizes)), cubes.split(total_num_of_boxes_per_image), gt_boxes, Ks_scaled, image_sizes_wh, pred_instances, box_classes.split(total_num_of_boxes_per_image)):
+        # loss_IoU = torch.tensor(0, device=combined_features.device).float()
+        # loss_segment = torch.tensor(0, device=combined_features.device).float()
+        for pred_cube, gt_box, K, image_size, instances_i, box_classes_im in zip(cubes.split(n_box_per_image), boxes, Ks_scaled, image_sizes_wh, pred_instances, box_classes.split(n_box_per_image)):
             # because the cubes_to_box function assumes that the K is the same for all cubes in structure, we must loop over it
             pred_boxes = cubes_to_box(pred_cube, K, image_size)[0]
 
-            loss_IoU += generalized_box_iou_loss(gt_box.tensor, pred_boxes.tensor, reduction='mean')
+            # loss_IoU += generalized_box_iou_loss(gt_box.tensor, pred_boxes.tensor, reduction='sum')
             
-            bube_corner = pred_cube.get_bube_corners(Ks_scaled[i], image_sizes[i])
-            
-            x = torch.clamp(bube_corner[..., 0], 0, int(image_sizes[i][0]-1))
-            y = torch.clamp(bube_corner[..., 1], 0, int(image_sizes[i][1]-1))
-            bube_corner = torch.stack((x, y), dim=-1)
-
-            loss_segment += self.segment_loss(mask_per_image[i][0,0], bube_corner)
-
             instances_i.pred_boxes = pred_boxes
             instances_i.scores = torch.zeros(len(pred_boxes), device=combined_features.device)
             instances_i.pred_classes = box_classes_im
@@ -729,7 +767,7 @@ class ROIHeads_Score(StandardROIHeads):
             instances_i.pred_pose = pred_cube.rotations.squeeze(0)
             instances_i.pred_center_2D = instances_i.pred_boxes.get_centers()  
 
-        return loss_IoU, loss_segment, pred_instances
+        return loss, pred_instances
         
         
     def inference(self, combined_features, boxes):
