@@ -7,7 +7,7 @@ warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_384 in regis
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_224 in registry")
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_11m_224 in registry")
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_5m_224 in registry")
-
+from cubercnn.data.generate_ground_segmentations import init_segmentation
 
 import logging
 import os
@@ -98,6 +98,8 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     data_iter = iter(data_loader)
     pbar = tqdm(range(start_iter, max_iter), initial=start_iter, total=max_iter, desc="Training", smoothing=0.05)
 
+    segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
+
     with EventStorage(start_iter) as storage:
 
         while True:
@@ -105,12 +107,14 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             storage.iter = iteration
             # forward
             combined_features = modelbase(data)
-            loss_1, loss_2 = model(data, combined_features)
+            loss_1, loss_2 = model(data, combined_features, segmentor)
             # scale the dimension L1-loss by a factor of 1000 to have both the scoring and regression losses in a similar range
-            loss_2 = 0.5 * loss_2/1_000
+            loss_1 /= 2
+            loss_1 /= len(data)
+            #loss_2 = 0.5 * loss_2/1_000
             total_loss = loss_1 + loss_2
             # send loss scalars to tensorboard.
-            storage.put_scalars(total_loss=total_loss, score_loss=loss_1, regression_loss=loss_2)
+            storage.put_scalars(total_loss=total_loss, IoU_loss=loss_1, second_loss=loss_2)
 
             # backward and step
             total_loss.backward()
@@ -137,113 +141,6 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     
     # success
     return True
-"""
-def do_test(cfg, model, iteration='final', storage=None):
-        
-    filter_settings = data.get_filter_settings_from_cfg(cfg)    
-    filter_settings['visibility_thres'] = cfg.TEST.VISIBILITY_THRES
-    filter_settings['truncation_thres'] = cfg.TEST.TRUNCATION_THRES
-    filter_settings['min_height_thres'] = 0.0625
-    filter_settings['max_depth'] = 1e8
-
-    dataset_names_test = cfg.DATASETS.TEST
-    only_2d = cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_3D == 0.0
-    output_folder = os.path.join(cfg.OUTPUT_DIR, "inference", 'iter_{}'.format(iteration))
-
-    for dataset_name in dataset_names_test:
-        #Cycle through each dataset and test them individually.
-        #This loop keeps track of each per-image evaluation result, 
-        #so that it doesn't need to be re-computed for the collective.
-
-        #'''
-        Distributed Cube R-CNN inference
-        '''
-        dataset_paths = [os.path.join('datasets', 'Omni3D', name + '.json') for name in cfg.DATASETS.TEST]
-        datasets = data.Omni3D(dataset_paths, filter_settings=filter_settings)
-
-        # determine the meta data given the datasets used. 
-        data.register_and_store_model_metadata(datasets, cfg.OUTPUT_DIR, filter_settings)
-
-        thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
-        dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
-        
-        infos = datasets.dataset['info']
-
-        if type(infos) == dict:
-            infos = [datasets.dataset['info']]
-
-        dataset_id_to_unknown_cats = {}
-        possible_categories = set(i for i in range(cfg.MODEL.ROI_HEADS.NUM_CLASSES + 1))
-        
-        dataset_id_to_src = {}
-
-        for info in infos:
-            dataset_id = info['id']
-            known_category_training_ids = set()
-
-            if not dataset_id in dataset_id_to_src:
-                dataset_id_to_src[dataset_id] = info['source']
-
-            for id in info['known_category_ids']:
-                if id in dataset_id_to_contiguous_id:
-                    known_category_training_ids.add(dataset_id_to_contiguous_id[id])
-            
-            # determine and store the unknown categories.
-            unknown_categories = possible_categories - known_category_training_ids
-            dataset_id_to_unknown_cats[dataset_id] = unknown_categories
-
-
-        # we need the dataset mapper to get 
-        data_mapper = DatasetMapper3D(cfg, is_train=False, mode='eval_with_gt')
-        data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
-
-        data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, batch_size=cfg.SOLVER.IMS_PER_BATCH, num_workers=1)
-
-        experiment_type = {}
-
-        if cfg.PLOT.EVAL == 'MABO': experiment_type['output_recall_scores'] = True
-        else: experiment_type['output_recall_scores'] = False
-        # either use pred_boxes or GT boxes
-        if cfg.PLOT.MODE2D == 'PRED': experiment_type['use_pred_boxes'] = True
-        else: experiment_type['use_pred_boxes'] = False
-        if experiment_type['output_recall_scores']:
-            _ = mean_average_best_overlap(model, data_loader, segmentor, experiment_type)
-        
-        else:
-            results_json = inference_on_dataset(model, data_loader, segmentor, experiment_type)
-
-            eval_helper = Omni3DEvaluationHelper(
-                dataset_names_test, 
-                filter_settings, 
-                output_folder, 
-                iter_label=iteration,
-                only_2d=only_2d,
-            )
-            '''
-            Individual dataset evaluation
-            '''
-            eval_helper.add_predictions(dataset_name, results_json)
-            eval_helper.save_predictions(dataset_name)
-            eval_helper.evaluate(dataset_name)
-
-            '''
-            Optionally, visualize some instances
-            '''
-            instances = torch.load(os.path.join(output_folder, dataset_name, 'instances_predictions.pth'))
-            log_str = vis.visualize_from_instances(
-                instances, data_loader.dataset, dataset_name, 
-                cfg.INPUT.MIN_SIZE_TEST, os.path.join(output_folder, dataset_name), 
-                MetadataCatalog.get('omni3d_model').thing_classes, iteration, visualize_every=1
-            )
-            logger.info(log_str)
-
-        
-    if cfg.PLOT.EVAL != 'MABO':
-        '''
-        Summarize each Omni3D Evaluation metric
-        '''  
-        eval_helper.summarize_all()
-"""
 
 def setup(args):
     """
@@ -288,7 +185,7 @@ def main(args):
     
     cfg = setup(args)
     
-    name = f'learned score {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
+    name = f'learned proposal {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
     
     if sys.platform == 'linux':
         # only log to wandb on hpc/linux

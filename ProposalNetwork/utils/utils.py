@@ -244,6 +244,16 @@ def mod_mask_iou(segmentation_mask, bube_mask):
     union = torch.logical_or(segmentation_mask, bube_mask).to(torch.int).sum()
     return intersection**5 / union # NOTE not standard IoU
 
+def mask_iou_loss(segmentation_mask, bube_mask):
+    '''
+    Area is of segmentation_mask
+    '''
+    intersection = (segmentation_mask * bube_mask).sum()
+    if intersection == 0:
+        return torch.tensor(0.0)
+    union = torch.logical_or(segmentation_mask, bube_mask).to(torch.int).sum()
+    return intersection / union
+
 def is_gt_included(gt_cube,x_range,y_range,z_range, w_prior, h_prior, l_prior):
     # Define how far away dimensions need to be to be counted as unachievable
     stds_away = 1.5
@@ -355,3 +365,80 @@ def show_box(box, ax):
     x0, y0 = box[0], box[1]
     w, h = box[2] - box[0], box[3] - box[1]
     ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor='green', facecolor=(0,0,0,0), lw=2))    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Convex Hull
+import torch
+
+def jarvis_march(points):
+    # Number of points
+    n = points.size(0)
+    # List to store the convex hull vertices
+    hull = []
+    
+    # Find the leftmost point
+    leftmost = points[torch.argmin(points[:, 0])]
+    point_on_hull = leftmost
+    
+    while True:
+        hull.append(point_on_hull)
+        endpoint = points[0]
+        
+        for j in range(1, n):
+            if torch.equal(endpoint, point_on_hull) or is_left_turn(point_on_hull, endpoint, points[j]):
+                endpoint = points[j]
+        
+        point_on_hull = endpoint
+        
+        if torch.equal(endpoint, leftmost):
+            break
+    
+    return torch.stack(hull)
+
+def is_left_turn(p1, p2, p3):
+    return (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0]) > 0
+
+def fill_polygon(mask, polygon):
+    h, w = mask.shape
+    Y, X = torch.meshgrid(torch.arange(h), torch.arange(w), indexing='ij')
+    grid_coords = torch.stack([X.flatten(), Y.flatten()], dim=1).float().to(mask.device)
+    
+    new_mask = torch.zeros_like(mask, dtype=torch.bool)
+    
+    for i in range(len(polygon)):
+        v1 = polygon[i]
+        v2 = polygon[(i + 1) % len(polygon)]
+        
+        # Determine the direction of the edge
+        edge_direction = v2 - v1
+        
+        # Check if the point is to the left of the edge
+        is_left = (grid_coords[:, 0] - v1[0]) * edge_direction[1] - (grid_coords[:, 1] - v1[1]) * edge_direction[0] > 0
+        
+        # Count the number of times the ray from the point intersects the edge
+        num_intersections = is_left.view(h, w).sum(dim=0) % 2
+        
+        # If the number of intersections is odd, the point is inside the polygon
+        new_mask |= num_intersections.bool()
+    
+    return new_mask
+
+def convex_hull(mask):
+    coords = torch.nonzero(mask).float()
+    hull = jarvis_march(coords)
+    new_mask = fill_polygon(mask, hull)
+
+    return new_mask
