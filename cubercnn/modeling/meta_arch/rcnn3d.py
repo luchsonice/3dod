@@ -683,6 +683,7 @@ class ScoreNet(nn.Module):
         input_format: Optional[str] = None,
         test_nms_thresh: float = 0.5,
     ):
+        
         """
         Args:
             backbone: a backbone module, must follow detectron2's backbone interface
@@ -708,7 +709,7 @@ class ScoreNet(nn.Module):
     @classmethod
     def from_config(cls, cfg, priors):
         return {
-            "roi_heads": build_roi_heads(cfg),
+            "roi_heads": build_roi_heads(cfg, priors=priors),
             "pixel_mean": cfg.MODEL.PIXEL_MEAN,
             "pixel_std": cfg.MODEL.PIXEL_STD,
             "vis_period": cfg.VIS_PERIOD,
@@ -846,7 +847,6 @@ class ScoreNet(nn.Module):
             )/255.0
 
             gt_meshes = util.mesh_cuboid(gt_boxes3D_XYZ_WHL, gt_poses, gt_colors)
-
             # perform a simple NMS, which is not cls dependent. 
             keep = batched_nms(
                 instances_i.pred_boxes.tensor, 
@@ -854,7 +854,7 @@ class ScoreNet(nn.Module):
                 torch.zeros(len(instances_i.scores), dtype=torch.long, device=instances_i.scores.device), 
                 self.test_nms_thresh
             )
-            
+
             keep = keep[:max_vis_prop]
             num_to_visualize = len(keep)
 
