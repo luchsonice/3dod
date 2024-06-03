@@ -750,6 +750,7 @@ class ROIHeads_ScoreOLD(StandardROIHeads):
         cubes = self.cube_head(cube_features)
         return cubes
     
+    
 @ROI_HEADS_REGISTRY.register()
 class ROIHeads3DScore(StandardROIHeads):
 
@@ -918,7 +919,7 @@ class ROIHeads3DScore(StandardROIHeads):
         }
 
 
-    def forward(self, images, features, proposals, Ks, im_scales_ratio, targets=None):
+    def forward(self, images, images_raw, features, proposals, Ks, im_scales_ratio, segmentor, targets):
 
         im_dims = [image.shape[1:] for image in images]
 
@@ -926,8 +927,6 @@ class ROIHeads3DScore(StandardROIHeads):
 
         if self.training:
             proposals = self.label_and_sample_proposals(proposals, targets)
-        
-        del targets
 
         if self.training:
 
@@ -956,7 +955,11 @@ class ROIHeads3DScore(StandardROIHeads):
                 pred_instances = self._forward_box(features, proposals)
             
             if self.loss_w_3d > 0:
-                pred_instances = self._forward_cube(features, pred_instances, Ks, im_dims, im_scales_ratio)
+                mask_per_image = self.object_masks(images_raw.tensor, targets, segmentor) # over all images in batch
+
+                del targets
+
+                pred_instances = self._forward_cube(features, pred_instances, Ks, im_dims, im_scales_ratio, mask_per_image)
             return pred_instances, {}
     
 
@@ -1037,7 +1040,47 @@ class ROIHeads3DScore(StandardROIHeads):
 
         return proposal_boxes_scaled
     
-    def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio):
+    def object_masks(self, images, instances, segmentor):
+        '''list of masks for each object in the image.
+        Returns
+        ------
+        mask_per_image: List of torch.Tensor of shape (N_instance, 1, H, W)
+        '''
+        if segmentor is None:
+            print('Cannot find segmentations due to segmentor being None')
+        org_shape = images.shape[-2:]
+        resize_transform = ResizeLongestSide(segmentor.image_encoder.img_size)
+        batched_input = []
+        images = resize_transform.apply_image_torch(images*1.0)# .permute(2, 0, 1).contiguous()
+        for image, instance in zip(images, instances):
+            boxes = instance.gt_boxes.tensor
+            transformed_boxes = resize_transform.apply_boxes_torch(boxes, org_shape) # Bx4
+            batched_input.append({'image': image, 'boxes': transformed_boxes, 'original_size':org_shape})
+
+        seg_out = segmentor(batched_input, multimask_output=False)
+
+        mask_per_image = [i['masks'] for i in seg_out]
+        return mask_per_image
+    
+    def segment_loss(self, gt_mask, bube_corners):
+        bube_corners = bube_corners.to(device=gt_mask.device)
+        bube_corners = bube_corners.squeeze(0) # remove instance dim
+        scores = torch.zeros(len(bube_corners), device=gt_mask.device)
+        
+        for i in range(len(bube_corners)):
+            build_mask = torch.zeros(gt_mask.shape, device=gt_mask.device)
+            build_mask[bube_corners[i][:,0].long(),bube_corners[i][:,1].long()] = 1
+            bube_mask = convex_hull(build_mask)
+
+            #scores[i] = mask_iou_loss(gt_mask[::4,::4], bube_mask[::4,::4])
+            bube_mask = (bube_mask > 0.5).float()
+            gt_mask = (gt_mask > 0.5).float()
+            scores[i] = F.binary_cross_entropy(gt_mask,bube_mask)
+
+        return scores.mean()
+        #return 1 - scores.mean()
+    
+    def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, mask_per_image):
         
         features = [features[f] for f in self.in_features]
 

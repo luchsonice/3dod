@@ -336,7 +336,7 @@ class RCNN3D_combined_features(nn.Module):
         xs = x.std()
         return (x - xm) * (ys / xs) + ym
 
-    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]]):
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor):
         
         if not self.training:
             return self.inference(batched_inputs)
@@ -371,8 +371,9 @@ class RCNN3D_combined_features(nn.Module):
             features[layer] = torch.cat((img_feature, d_feature), dim=1)        
         
         instances, detector_losses = self.roi_heads(
-            images, features, proposals, 
+            images, images_raw, features, proposals, 
             Ks, im_scales_ratio, 
+            segmentor, 
             gt_instances
         )
 
@@ -395,6 +396,7 @@ class RCNN3D_combined_features(nn.Module):
         assert not self.training
 
         images = self.preprocess_image(batched_inputs)
+        images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
 
         # scaling factor for the sample relative to its original scale
         # e.g., how much has the image been upsampled by? or downsampled?
