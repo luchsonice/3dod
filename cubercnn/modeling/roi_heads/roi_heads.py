@@ -727,7 +727,7 @@ class ROIHeads_ScoreOLD(StandardROIHeads):
         # Loss
         # loss_IoU = torch.tensor(0, device=combined_features.device).float()
         # loss_segment = torch.tensor(0, device=combined_features.device).float()
-        for pred_cube, gt_box, K, image_size, instances_i, box_classes_im in zip(cubes.split(n_box_per_image), boxes, Ks_scaled, image_sizes_wh, pred_instances, box_classes.split(n_box_per_image)):
+        for pred_cube, gt_box, K, image_size, instances_i, box_classes_im in zip(cubes.split(total_num_of_boxes_per_image), gt_boxes, Ks_scaled, image_sizes_wh, pred_instances, box_classes.split(total_num_of_boxes_per_image)):
             # because the cubes_to_box function assumes that the K is the same for all cubes in structure, we must loop over it
             pred_boxes = cubes_to_box(pred_cube, K, image_size)[0]
 
@@ -742,7 +742,7 @@ class ROIHeads_ScoreOLD(StandardROIHeads):
             instances_i.pred_pose = pred_cube.rotations.squeeze(0)
             instances_i.pred_center_2D = instances_i.pred_boxes.get_centers()  
 
-        return pred_instances, loss
+        return pred_instances, loss_IoU
         
         
     def inference(self, combined_features, boxes):
@@ -1115,10 +1115,10 @@ class ROIHeads3DScore(StandardROIHeads):
             proposal_boxes = pred_boxes
             box_classes = torch.cat([x.pred_classes for x in instances])
 
-        proposal_boxes_scaled = self.scale_proposals(proposal_boxes)
+        proposal_boxes_scaled = self.scale_proposals(proposal_boxes) 
 
         # forward features
-        cube_features = self.cube_pooler(features, proposal_boxes_scaled).flatten(1)
+        cube_features = self.cube_pooler(features, proposal_boxes_scaled).flatten(1) #TODO should be gt boxes not proposals
 
         n = cube_features.shape[0]
         
@@ -1322,124 +1322,45 @@ class ROIHeads3DScore(StandardROIHeads):
             gt_y = gt_proj_y1 + 0.5 * gt_heights
 
             gt_proj_boxes = torch.stack((gt_proj_x1, gt_proj_y1, gt_proj_x2, gt_proj_y2), dim=1)
+                    
+            # compute disentangled Z corners
+            cube_dis_x3d_from_z = cube_z * (gt_2d[:, 0] - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
+            cube_dis_y3d_from_z = cube_z * (gt_2d[:, 1] - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
+            cube_dis_z = torch.cat((torch.stack((cube_dis_x3d_from_z, cube_dis_y3d_from_z, cube_z)).T, gt_dims), dim=1)
+            dis_z_corners = util.get_cuboid_verts_faces(cube_dis_z, gt_poses)[0]
             
-            if self.disentangled_loss:
-                '''
-                Disentangled loss compares each varaible group to the 
-                cuboid corners, which is generally more robust to hyperparams.
-                '''
-                    
-                # compute disentangled Z corners
-                cube_dis_x3d_from_z = cube_z * (gt_2d[:, 0] - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
-                cube_dis_y3d_from_z = cube_z * (gt_2d[:, 1] - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
-                cube_dis_z = torch.cat((torch.stack((cube_dis_x3d_from_z, cube_dis_y3d_from_z, cube_z)).T, gt_dims), dim=1)
-                dis_z_corners = util.get_cuboid_verts_faces(cube_dis_z, gt_poses)[0]
-                
-                # compute disentangled XY corners
-                cube_dis_x3d = gt_z * (cube_x - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
-                cube_dis_y3d = gt_z * (cube_y - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
-                cube_dis_XY = torch.cat((torch.stack((cube_dis_x3d, cube_dis_y3d, gt_z)).T, gt_dims), dim=1)
-                dis_XY_corners = util.get_cuboid_verts_faces(cube_dis_XY, gt_poses)[0]
-                loss_xy = self.l1_loss(dis_XY_corners, gt_corners).contiguous().view(n, -1).mean(dim=1)
-                    
-                # Pose
-                dis_pose_corners = util.get_cuboid_verts_faces(gt_box3d, cube_pose)[0]
-                
-                # Dims
-                dis_dims_corners = util.get_cuboid_verts_faces(torch.cat((gt_3d, cube_dims), dim=1), gt_poses)[0]
-
-                # Loss dims
-                loss_dims = self.l1_loss(dis_dims_corners, gt_corners).contiguous().view(n, -1).mean(dim=1)
-
-                # Loss z
-                loss_z = self.l1_loss(dis_z_corners, gt_corners).contiguous().view(n, -1).mean(dim=1)
-    
-                # Rotation uses chamfer or l1 like others
-                if self.chamfer_pose:
-                    loss_pose = self.chamfer_loss(dis_pose_corners, gt_corners)
-
-                else:
-                    loss_pose = self.l1_loss(dis_pose_corners, gt_corners).contiguous().view(n, -1).mean(dim=1)
-                
-            # Non-disentangled training losses
-            else:
-                '''
-                These loss functions are fairly arbitrarily designed. 
-                Generally, they are in some normalized space but there
-                are many alternative implementations for most functions.
-                '''
-
-                # XY
-                gt_deltas = (gt_2d.clone() - torch.cat((src_ctr_x.unsqueeze(1), src_ctr_y.unsqueeze(1)), dim=1)) \
-                            / torch.cat((src_widths.unsqueeze(1), src_heights.unsqueeze(1)), dim=1)
-                
-                loss_xy = self.l1_loss(cube_2d_deltas, gt_deltas).mean(1) 
-
-                # Dims
-                if self.dims_priors_enabled:
-                    cube_dims_gt_normspace = torch.log(gt_dims/prior_dims)
-                    loss_dims = self.l1_loss(cube_dims_norm, cube_dims_gt_normspace).mean(1) 
-
-                else:
-                    loss_dims = self.l1_loss(cube_dims_norm, torch.log(gt_dims)).mean(1)
-                
-                # Pose
-                try:
-                    if self.allocentric_pose:
-                        gt_poses_allocentric = util.R_to_allocentric(Ks_scaled_per_box, gt_poses, u=cube_x.detach(), v=cube_y.detach())
-                        loss_pose = 1-so3_relative_angle(cube_pose_allocentric, gt_poses_allocentric, eps=0.1, cos_angle=True)
-                    else:
-                        loss_pose = 1-so3_relative_angle(cube_pose, gt_poses, eps=0.1, cos_angle=True)
-                
-                # Can fail with bad EPS values/instability
-                except:
-                    loss_pose = None
-
-                if self.z_type == 'direct':
-                    loss_z = self.l1_loss(cube_z, gt_z)
-
-                elif self.z_type == 'sigmoid':
-                    loss_z = self.l1_loss(cube_z_norm, (gt_z * real_to_virtual / 100).clip(0, 1))
-                    
-                elif self.z_type == 'log':
-                    loss_z = self.l1_loss(cube_z_norm, torch.log((gt_z * real_to_virtual).clip(0.01)))
-
-                elif self.z_type == 'clusters':
-                    loss_z = self.l1_loss(cube_z_norm, (((gt_z * real_to_virtual) - z_means)/(z_stds)))
+            # compute disentangled XY corners
+            cube_dis_x3d = gt_z * (cube_x - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
+            cube_dis_y3d = gt_z * (cube_y - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
+            cube_dis_XY = torch.cat((torch.stack((cube_dis_x3d, cube_dis_y3d, gt_z)).T, gt_dims), dim=1)
+            dis_XY_corners = util.get_cuboid_verts_faces(cube_dis_XY, gt_poses)[0]
             
-            total_3D_loss_for_reporting = loss_dims*self.loss_w_dims
+            ### Loss
+            # 2D IoU
+            gt_boxes = [x.gt_boxes for x in proposals]
+            loss_iou = generalized_box_iou_loss(gt_boxes[0].tensor, pred_boxes[0].tensor, reduction='none') #TODO Check if these are the correct boxes to use
+            """
+            # Segment
+            bube_corner = pred_cube.get_bube_corners(Ks_scaled[i], image_sizes[i])
+                
+            x = torch.clamp(bube_corner[..., 0], 0, int(image_sizes[i][0]-1))
+            y = torch.clamp(bube_corner[..., 1], 0, int(image_sizes[i][1]-1))
+            bube_corner = torch.stack((x, y), dim=-1)
 
-            if not loss_pose is None:
-                total_3D_loss_for_reporting += loss_pose*self.loss_w_pose
+            loss_segment = self.segment_loss(mask_per_image[:][0,0], bube_corner)
 
-            if not cube_2d_deltas is None:
-                total_3D_loss_for_reporting += loss_xy*self.loss_w_xy
+            # Other
 
-            if not loss_z is None:
-                total_3D_loss_for_reporting += loss_z*self.loss_w_z
+            """
+            loss_segment = None
+            total_3D_loss_for_reporting = loss_iou*self.loss_w_dims
+
+            if not loss_segment is None:
+                total_3D_loss_for_reporting += loss_segment*self.loss_w_pose
             
             # reporting does not need gradients
             total_3D_loss_for_reporting = total_3D_loss_for_reporting.detach()
-
-            if self.loss_w_joint > 0:
-                '''
-                If we are using joint [entangled] loss, then we also need to pair all 
-                predictions together and compute a chamfer or l1 loss vs. cube corners.
-                '''
-                
-                cube_dis_x3d_from_z = cube_z * (cube_x - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
-                cube_dis_y3d_from_z = cube_z * (cube_y - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
-                cube_dis_z = torch.cat((torch.stack((cube_dis_x3d_from_z, cube_dis_y3d_from_z, cube_z)).T, cube_dims), dim=1)
-                dis_z_corners_joint = util.get_cuboid_verts_faces(cube_dis_z, cube_pose)[0]
-                
-                if self.chamfer_pose and self.disentangled_loss:
-                    loss_joint = self.chamfer_loss(dis_z_corners_joint, gt_corners)
-
-                else:
-                    loss_joint = self.l1_loss(dis_z_corners_joint, gt_corners).contiguous().view(n, -1).mean(dim=1)
-
-                valid_joint = loss_joint < np.inf
-                total_3D_loss_for_reporting += (loss_joint*self.loss_w_joint).detach()
+            
 
             # compute errors for tracking purposes
             z_error = (cube_z - gt_z).detach().abs()
@@ -1480,20 +1401,10 @@ class ROIHeads3DScore(StandardROIHeads):
             if self.use_confidence > 0:
                 
                 uncert_sf = SQRT_2_CONSTANT * torch.exp(-cube_uncert)
-                
-                loss_dims *= uncert_sf
+                loss_iou *= uncert_sf
 
-                if not cube_2d_deltas is None:
-                    loss_xy *= uncert_sf
-
-                if not loss_z is None:
-                    loss_z *= uncert_sf
-
-                if loss_pose is not None:
-                    loss_pose *= uncert_sf
-    
-                if self.loss_w_joint > 0:
-                    loss_joint *= uncert_sf
+                #if not cube_2d_deltas is None:
+                #    loss_segment *= uncert_sf
 
                 losses.update({prefix + 'uncert': self.use_confidence*self.safely_reduce_losses(cube_uncert.clone())})
                 storage.put_scalar(prefix + 'conf', torch.exp(-cube_uncert).mean().item(), smoothing_hint=False)
@@ -1503,9 +1414,9 @@ class ROIHeads3DScore(StandardROIHeads):
             
             if self.loss_w_dims > 0:
                 losses.update({
-                    prefix + 'loss_dims': self.safely_reduce_losses(loss_dims) * self.loss_w_dims * self.loss_w_3d,
+                    prefix + 'loss_iou': self.safely_reduce_losses(loss_iou) * self.loss_w_dims * self.loss_w_3d,
                 })
-
+            """
             if not cube_2d_deltas is None:
                 losses.update({
                     prefix + 'loss_xy': self.safely_reduce_losses(loss_xy) * self.loss_w_xy * self.loss_w_3d,
@@ -1525,7 +1436,7 @@ class ROIHeads3DScore(StandardROIHeads):
             if self.loss_w_joint > 0:
                 if valid_joint.any():
                     losses.update({prefix + 'loss_joint': self.safely_reduce_losses(loss_joint[valid_joint]) * self.loss_w_joint * self.loss_w_3d})
-
+            """
             
         '''
         Inference
