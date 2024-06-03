@@ -1338,7 +1338,10 @@ class ROIHeads3DScore(StandardROIHeads):
             ### Loss
             # 2D IoU
             gt_boxes = [x.gt_boxes for x in proposals]
-            loss_iou = generalized_box_iou_loss(gt_boxes[0].tensor, pred_boxes[0].tensor, reduction='none') #TODO Check if these are the correct boxes to use
+            gt_boxes_tensor = torch.cat([gt_boxes[i].tensor for i in range(len(gt_boxes))])
+            pred_boxes_tensor = torch.cat([pred_boxes[i].tensor for i in range(len(pred_boxes))])
+            
+            loss_iou = generalized_box_iou_loss(gt_boxes_tensor, pred_boxes_tensor, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
             """
             # Segment
             bube_corner = pred_cube.get_bube_corners(Ks_scaled[i], image_sizes[i])
