@@ -297,13 +297,11 @@ class ScoreHead(nn.Module):
         base_out = 64
         self.mlp = nn.Sequential(
             nn.Linear(in_features, 256),
-            nn.BatchNorm1d(256),
             nn.ReLU(),
             nn.Linear(256, 128),
             nn.BatchNorm1d(128), # I think the model could perhaps be better if this was a Dropout layer
             nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.BatchNorm1d(base_out),
+            nn.Linear(128, base_out),
             nn.ReLU(),
         )
         self.fc_cube_centers, self.fc_dims = nn.Linear(base_out, 3), nn.Linear(base_out, 3) # center

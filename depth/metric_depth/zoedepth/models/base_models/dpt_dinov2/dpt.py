@@ -128,7 +128,7 @@ class DPTHead(nn.Module):
         out = self.scratch.output_conv2(out)
             
         if return_features:
-            return out, layer_4_rn
+            return out, (layer_4_rn, layer_3_rn, layer_2_rn, layer_1_rn)
         return out
 
 
