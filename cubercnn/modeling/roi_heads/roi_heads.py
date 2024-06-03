@@ -681,7 +681,7 @@ class ROIHeads_Score(StandardROIHeads):
         
         for i in range(len(bube_corners)):
             build_mask = torch.zeros(gt_mask.shape, device=gt_mask.device)
-            build_mask[bube_corners[i][:,1].long(),bube_corners[i][:,0].long()] = 1
+            build_mask[bube_corners[i][:,0].long(),bube_corners[i][:,1].long()] = 1
             bube_mask = convex_hull(build_mask)
 
             scores[i] = mask_iou_loss(gt_mask[::4,::4], bube_mask[::4,::4])
@@ -700,13 +700,13 @@ class ROIHeads_Score(StandardROIHeads):
         cube_features = self.cube_pooler([combined_features], gt_boxes).flatten(1)
         cubes = self.cube_head(cube_features)
 
-        total_num_of_boxes_per_image = [len(boxes_i) for boxes_i in boxes]
+        total_num_of_boxes_per_image = [len(boxes_i) for boxes_i in gt_boxes]
         
         pred_instances = [Instances(size) for size in image_sizes] # each instance object contains all boxes in one image, the list is for each image
         # Loss
         loss_IoU = torch.tensor(0,device=combined_features.device).float()
         loss_segment = torch.tensor(0,device=combined_features.device).float()
-        for i, pred_cube, gt_box, K, image_size, instances_i, box_classes_im in zip(range(len(image_sizes)), cubes.split(total_num_of_boxes_per_image), boxes, Ks_scaled, image_sizes_wh, pred_instances, box_classes.split(total_num_of_boxes_per_image)):
+        for i, pred_cube, gt_box, K, image_size, instances_i, box_classes_im in zip(range(len(image_sizes)), cubes.split(total_num_of_boxes_per_image), gt_boxes, Ks_scaled, image_sizes_wh, pred_instances, box_classes.split(total_num_of_boxes_per_image)):
             # because the cubes_to_box function assumes that the K is the same for all cubes in structure, we must loop over it
             pred_boxes = cubes_to_box(pred_cube, K, image_size)[0]
 

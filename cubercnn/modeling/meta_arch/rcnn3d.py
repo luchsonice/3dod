@@ -762,7 +762,7 @@ class ScoreNet(nn.Module):
             gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
         else:
             gt_instances = None
-        lossIou, loss_segment, instances = self.roi_heads(combined_features, images_raw, gt_instances, Ks, im_scales_ratio, images.image_sizes)
+        lossIou, loss_segment, instances = self.roi_heads(combined_features, images_raw, gt_instances, Ks, im_scales_ratio, images.image_sizes, segmentor)
         
         if self.vis_period > 0:
             storage = get_event_storage()

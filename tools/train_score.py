@@ -107,7 +107,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             storage.iter = iteration
             # forward
             combined_features = modelbase(data)
-            loss_1, loss_2, instances = model(data, combined_features)
+            loss_1, loss_2, instances = model(data, combined_features, segmentor)
             # scale the dimension L1-loss by a factor of 1000 to have both the scoring and regression losses in a similar range
             loss_1 /= 2
             loss_1 /= len(data)
