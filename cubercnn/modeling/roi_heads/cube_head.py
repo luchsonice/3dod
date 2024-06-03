@@ -314,6 +314,9 @@ class ScoreHead(nn.Module):
     def forward(self, x):
         x = self.mlp(x)
         centers, dims = self.fc_cube_centers(x), self.fc_dims(x)
+        centers_tmp = torch.exp(centers[:,2].clip(max=5))
+        centers = torch.cat((centers[:,:2],centers_tmp.unsqueeze(1)),axis=1)
+        dims = torch.exp(dims.clip(max=5))
         x_cubes = Cubes(torch.cat((centers, dims, rotation_6d_to_matrix(self.rotation_6d(x)).view(-1,9)), 1))
         return x_cubes
 
