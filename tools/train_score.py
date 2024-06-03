@@ -105,15 +105,16 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             storage.iter = iteration
             # forward
             combined_features = modelbase(data)
-            loss_1, loss_2, instances = model(data, combined_features)
+            loss, instances = model(data, combined_features)
             # scale the dimension L1-loss by a factor of 1000 to have both the scoring and regression losses in a similar range
-            loss_2 = 0.5 * loss_2/1_000
-            total_loss = loss_1 + loss_2
+            # loss_1, loss_2 = loss
+            # loss_2 = 0.5 * loss_2/1_000
+            # total_loss = loss_1 + loss_2
             # send loss scalars to tensorboard.
-            storage.put_scalars(total_loss=total_loss, score_loss=loss_1, regression_loss=loss_2)
+            storage.put_scalars(loss=loss)
 
             # backward and step
-            total_loss.backward()
+            loss.backward()
             #for name, param in model.named_parameters():
             #    if param.grad is not None:
             #        print(name, param.grad)
@@ -126,7 +127,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
 
             # logging stuff 
             pbar.update(1)
-            pbar.set_postfix({"tot.loss": total_loss.item(), "S.loss": loss_1.item(), "R.loss": loss_2.item()})
+            pbar.set_postfix({"loss": loss.item()})
             if iteration - start_iter > 5 and ((iteration + 1) % 20 == 0 or iteration == max_iter - 1):
                 for writer in writers[1:]: # 3 writers; 1: prints, 2: json logs, 3: tensorboard
                     writer.write()

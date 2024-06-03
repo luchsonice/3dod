@@ -131,6 +131,15 @@
             "args": ["--config-file", "configs/ScoreNet.yaml", "OUTPUT_DIR", "output/ScoreNet"]
             //, "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth"]
         },
+        {
+            "name": "train Cube R-CNN combined features",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/train_net.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--config-file", "configs/Omni_combined.yaml", "OUTPUT_DIR", "output/omni3d_combined"]
+        },
         
     ]
 }
