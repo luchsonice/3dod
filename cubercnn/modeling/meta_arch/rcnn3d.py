@@ -370,7 +370,6 @@ class RCNN3D_combined_features(nn.Module):
             d_feature = self._standardize(d_feature, img_feature)
             features[layer] = torch.cat((img_feature, d_feature), dim=1)        
         
-
         instances, detector_losses = self.roi_heads(
             images, features, proposals, 
             Ks, im_scales_ratio, 
