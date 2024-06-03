@@ -717,7 +717,6 @@ class ROIHeads_Score(StandardROIHeads):
             bube_corner = torch.stack((x, y), dim=-1)
 
             loss_segment += self.segment_loss(mask_per_image[i][0,0], bube_corner)
-            print(self.segment_loss(mask_per_image[i][0,0], bube_corner))
 
         return loss_IoU, loss_segment
         
