@@ -328,6 +328,14 @@ class RCNN3D_combined_features(nn.Module):
         )
         return images
 
+    def _standardize(self, x:torch.Tensor, y:torch.Tensor):
+        '''standardise x to match the mean and std of y'''
+        ym = y.mean()
+        ys = y.std()
+        xm = x.mean()
+        xs = x.std()
+        return (x - xm) * (ys / xs) + ym
+
     def forward(self, batched_inputs: List[Dict[str, torch.Tensor]]):
         
         if not self.training:
@@ -357,19 +365,11 @@ class RCNN3D_combined_features(nn.Module):
         d_features = pred_o['depth_features']
         # img_features = features['p5']
         # we must scale the depth map to the same size as the conv feature, otherwise the scale will not correspond correctly in the roi pooling
-        for (layer, img_features), d_feature in zip(features.items(), reversed(d_features)):
-            d_feature = F.interpolate(d_feature, size=img_features.shape[-2:], mode='bilinear', align_corners=True)
-            features[layer] = torch.cat((img_features, d_feature), dim=1)        
+        for (layer, img_feature), d_feature in zip(features.items(), reversed(d_features)):
+            d_feature = F.interpolate(d_feature, size=img_feature.shape[-2:], mode='bilinear', align_corners=True)
+            d_feature = self._standardize(d_feature, img_feature)
+            features[layer] = torch.cat((img_feature, d_feature), dim=1)        
         
-        # Standardize features
-        # img_features_mean = img_features.mean()
-        # img_features_std = img_features.std()
-        # d_features_mean = d_features.mean()
-        # d_features_std = d_features.std()
-
-        # img_features = (img_features - img_features_mean) / img_features_std
-        # d_features = (d_features - d_features_mean) / d_features_std
-
 
         instances, detector_losses = self.roi_heads(
             images, features, proposals, 
