@@ -1049,7 +1049,6 @@ class ScoreNet(nn.Module):
             return self.inference(batched_inputs, do_postprocess=True)
 
         images = self.preprocess_image(batched_inputs, img_type='image', convert=False)
-        images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
         # scaling factor for the sample relative to its original scale
         # e.g., how much has the image been upsampled by? or downsampled?
         im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]

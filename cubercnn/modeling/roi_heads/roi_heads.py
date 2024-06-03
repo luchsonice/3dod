@@ -661,7 +661,7 @@ class ROIHeads_Score(StandardROIHeads):
         if self.training:
             return self._forward_cube(combined_features, instances, Ks, im_scales_ratio, image_sizes, mask_per_image)
         else:
-            return self.inference(combined_features, instances)  
+            return self.inference(combined_features, instances) 
 
     def object_masks(self, images, instances, segmentor):
         '''list of masks for each object in the image.
@@ -802,6 +802,22 @@ class ROIHeads_Score(StandardROIHeads):
 
         total_num_of_boxes_per_image = [len(boxes_i) for boxes_i in gt_boxes]
         
+        loss_IoU = torch.tensor(0,device=combined_features.device).float()
+        loss_segment = torch.tensor(0,device=combined_features.device).float()
+        for i, pred_cube, gt_box, K, image_size, instances_i, box_classes_im in zip(range(len(image_sizes)), cubes.split(total_num_of_boxes_per_image), gt_boxes, Ks_scaled, image_sizes_wh, pred_instances, box_classes.split(total_num_of_boxes_per_image)):
+            # because the cubes_to_box function assumes that the K is the same for all cubes in structure, we must loop over it
+            pred_boxes = cubes_to_box(pred_cube, K, image_size)[0]
+
+            loss_IoU += generalized_box_iou_loss(gt_box.tensor, pred_boxes.tensor, reduction='mean')
+            
+            bube_corner = pred_cube.get_bube_corners(Ks_scaled[i], image_sizes[i])
+            
+            x = torch.clamp(bube_corner[..., 0], 0, int(image_sizes[i][0]-1))
+            y = torch.clamp(bube_corner[..., 1], 0, int(image_sizes[i][1]-1))
+            bube_corner = torch.stack((x, y), dim=-1)
+
+            loss_segment += self.segment_loss(mask_per_image[i][0,0], bube_corner)
+
         pred_instances = [Instances(size) for size in image_sizes] # each instance object contains all boxes in one image, the list is for each image
         # Loss
         # loss_IoU = torch.tensor(0, device=combined_features.device).float()
