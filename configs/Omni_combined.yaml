@@ -22,7 +22,7 @@ MODEL:
   ANCHOR_GENERATOR:
     SIZES: [[32], [64], [128], [256]]  # One size for each in feature map
   ROI_HEADS:
-    NAME: 'ROIHeads3D' # name of the class that is the 3d predictor
+    NAME: 'ROIHeads3DScore' # name of the class that is the 3d predictor
     IN_FEATURES: ["p2", "p3", "p4", "p5"]
     NUM_CLASSES: 50
     POSITIVE_FRACTION: 0.25 # we can use this to control the ratio of positive to negative sampled cubes in
