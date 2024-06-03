@@ -656,8 +656,10 @@ class ROIHeads_Score(StandardROIHeads):
         
         instances is a list[boxes] structure in the case of inference and a list of instances in the case of training.
         '''
+        mask_per_image = self.object_masks(images_raw.tensor, instances, segmentor) # over all images in batch
+    
         if self.training:
-            return self._forward_cube(combined_features, instances, Ks, im_scales_ratio, image_sizes)
+            return self._forward_cube(combined_features, instances, Ks, im_scales_ratio, image_sizes, mask_per_image)
         else:
             return self.inference(combined_features, instances)  
 
@@ -819,7 +821,7 @@ class ROIHeads_Score(StandardROIHeads):
             instances_i.pred_pose = pred_cube.rotations.squeeze(0)
             instances_i.pred_center_2D = instances_i.pred_boxes.get_centers()  
 
-        return loss, pred_instances
+        return pred_instances, loss
         
         
     def inference(self, combined_features, boxes):
