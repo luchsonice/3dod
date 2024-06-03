@@ -690,21 +690,23 @@ class ROIHeads_Score(StandardROIHeads):
     
     def _forward_cube(self, combined_features, instances, Ks, im_scales_ratio, image_sizes, mask_per_image):
         Ks_scaled = torch.cat([(K/scale).unsqueeze(0) for K, scale in zip(Ks, im_scales_ratio)]).to(combined_features.device)
-        image_sizes = [image_size[::-1] for image_size in image_sizes]
+        image_sizes_wh = [image_size[::-1] for image_size in image_sizes]
         Ks_scaled[:, -1, -1] = 1
        
+        box_classes = torch.cat([x.gt_classes for x in instances])
         gt_boxes = [instances[i].gt_boxes for i in range(len(instances))]
 
         # Cube Pooler
         cube_features = self.cube_pooler([combined_features], gt_boxes).flatten(1)
         cubes = self.cube_head(cube_features)
 
-        total_num_of_boxes_per_image = cubes.num_instances
+        total_num_of_boxes_per_image = [len(boxes_i) for boxes_i in boxes]
         
+        pred_instances = [Instances(size) for size in image_sizes] # each instance object contains all boxes in one image, the list is for each image
         # Loss
         loss_IoU = torch.tensor(0,device=combined_features.device).float()
         loss_segment = torch.tensor(0,device=combined_features.device).float()
-        for i, pred_cube, gt_box, K, image_size in zip(range(len(image_sizes)), cubes.split(total_num_of_boxes_per_image), gt_boxes, Ks_scaled, image_sizes):
+        for i, pred_cube, gt_box, K, image_size, instances_i, box_classes_im in zip(range(len(image_sizes)), cubes.split(total_num_of_boxes_per_image), boxes, Ks_scaled, image_sizes_wh, pred_instances, box_classes.split(total_num_of_boxes_per_image)):
             # because the cubes_to_box function assumes that the K is the same for all cubes in structure, we must loop over it
             pred_boxes = cubes_to_box(pred_cube, K, image_size)[0]
 
@@ -718,7 +720,16 @@ class ROIHeads_Score(StandardROIHeads):
 
             loss_segment += self.segment_loss(mask_per_image[i][0,0], bube_corner)
 
-        return loss_IoU, loss_segment
+            instances_i.pred_boxes = pred_boxes
+            instances_i.scores = torch.zeros(len(pred_boxes), device=combined_features.device)
+            instances_i.pred_classes = box_classes_im
+            instances_i.pred_bbox3D = pred_cube.get_all_corners().squeeze(0)
+            instances_i.pred_center_cam = pred_cube.centers.squeeze(0)
+            instances_i.pred_dimensions = pred_cube.dimensions.squeeze(0)
+            instances_i.pred_pose = pred_cube.rotations.squeeze(0)
+            instances_i.pred_center_2D = instances_i.pred_boxes.get_centers()  
+
+        return loss_IoU, loss_segment, pred_instances
         
         
     def inference(self, combined_features, boxes):

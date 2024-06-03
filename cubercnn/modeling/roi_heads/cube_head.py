@@ -2,7 +2,6 @@
 from detectron2.utils.registry import Registry
 from typing import Dict
 from detectron2.layers import ShapeSpec
-from segment_anything.predictor import SamPredictor
 from torch import nn
 import torch
 import numpy as np
