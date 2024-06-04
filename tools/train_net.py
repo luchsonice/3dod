@@ -375,8 +375,10 @@ def main(args):
     
     cfg = setup(args)
     
-    name = f'cube rcnn combined features {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
-    #wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
+    if cfg.log:
+        idx = cfg.OUTPUT_DIR.find('/')
+        name = f'{cfg.OUTPUT_DIR[idx+1:]} cube rcnn combined features {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
+        wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
 
     logger.info('Preprocessing Training Datasets')
 
