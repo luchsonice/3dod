@@ -759,11 +759,9 @@ class ROIHeads3DScore(StandardROIHeads):
         cube_head: nn.Module,
         cube_pooler: nn.Module,
         loss_w_3d: float,
-        loss_w_xy: float,
-        loss_w_z: float,
-        loss_w_dims: float,
+        loss_w_iou: float,
+        loss_w_seg: float,
         loss_w_pose: float,
-        loss_w_joint: float,
         use_confidence: float,
         inverse_z_weight: bool,
         z_type: str,
@@ -795,11 +793,9 @@ class ROIHeads3DScore(StandardROIHeads):
 
         # loss weights, <=0 is off
         self.loss_w_3d = loss_w_3d
-        self.loss_w_xy = loss_w_xy
-        self.loss_w_z = loss_w_z
-        self.loss_w_dims = loss_w_dims
+        self.loss_w_iou = loss_w_iou
+        self.loss_w_seg = loss_w_seg
         self.loss_w_pose = loss_w_pose
-        self.loss_w_joint = loss_w_joint
 
         # loss modes
         self.disentangled_loss = disentangled_loss
@@ -897,7 +893,7 @@ class ROIHeads3DScore(StandardROIHeads):
             'loss_w_3d': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_3D,
             'loss_w_iou': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_IOU,
             'loss_w_seg': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_SEG,
-            'loss_w_align': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_ALIGN,
+            'loss_w_pose': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_POSE,
             'z_type': cfg.MODEL.ROI_CUBE_HEAD.Z_TYPE,
             'pose_type': cfg.MODEL.ROI_CUBE_HEAD.POSE_TYPE,
             'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED,
@@ -1284,51 +1280,19 @@ class ROIHeads3DScore(StandardROIHeads):
             storage = get_event_storage()
 
             # Pull off necessary GT information
-            # let lowercase->2D and uppercase->3D
-            # [x, y, Z, W, H, L] 
             gt_2d = gt_boxes3D[:, :2]
-            gt_z = gt_boxes3D[:, 2]
-            gt_dims = gt_boxes3D[:, 3:6]
 
-            # this box may have been mirrored and scaled so
-            # we need to recompute XYZ in 3D by backprojecting.
-            gt_x3d = gt_z * (gt_2d[:, 0] - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
-            gt_y3d = gt_z * (gt_2d[:, 1] - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
-            gt_3d = torch.stack((gt_x3d, gt_y3d, gt_z)).T
+            # Create cubes
+            cubes_tensor = torch.cat((cube_xy,cube_z.unsqueeze(1),cube_dims,cube_pose.reshape(n,9)),axis=1).unsqueeze(1)
+            cubes = Cubes(cubes_tensor)
 
-            # put together the GT boxes
-            gt_box3d = torch.cat((gt_3d, gt_dims), dim=1)
-
-            # These are the corners which will be the target for all losses!!
-            gt_corners = util.get_cuboid_verts_faces(gt_box3d, gt_poses)[0]
-
-            # project GT corners
-            gt_proj_boxes = torch.bmm(Ks_scaled_per_box, gt_corners.transpose(1,2))
-            gt_proj_boxes /= gt_proj_boxes[:, -1, :].clone().unsqueeze(1)
-
-            gt_proj_x1 = gt_proj_boxes[:, 0, :].min(1)[0]
-            gt_proj_y1 = gt_proj_boxes[:, 1, :].min(1)[0]
-            gt_proj_x2 = gt_proj_boxes[:, 0, :].max(1)[0]
-            gt_proj_y2 = gt_proj_boxes[:, 1, :].max(1)[0]
-
-            gt_widths = gt_proj_x2 - gt_proj_x1
-            gt_heights = gt_proj_y2 - gt_proj_y1
-            gt_x = gt_proj_x1 + 0.5 * gt_widths
-            gt_y = gt_proj_y1 + 0.5 * gt_heights
-
-            gt_proj_boxes = torch.stack((gt_proj_x1, gt_proj_y1, gt_proj_x2, gt_proj_y2), dim=1)
-                    
-            # compute disentangled Z corners
-            cube_dis_x3d_from_z = cube_z * (gt_2d[:, 0] - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
-            cube_dis_y3d_from_z = cube_z * (gt_2d[:, 1] - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
-            cube_dis_z = torch.cat((torch.stack((cube_dis_x3d_from_z, cube_dis_y3d_from_z, cube_z)).T, gt_dims), dim=1)
-            dis_z_corners = util.get_cuboid_verts_faces(cube_dis_z, gt_poses)[0]
-            
-            # compute disentangled XY corners
-            cube_dis_x3d = gt_z * (cube_x - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
-            cube_dis_y3d = gt_z * (cube_y - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
-            cube_dis_XY = torch.cat((torch.stack((cube_dis_x3d, cube_dis_y3d, gt_z)).T, gt_dims), dim=1)
-            dis_XY_corners = util.get_cuboid_verts_faces(cube_dis_XY, gt_poses)[0]
+            # Get bube corners
+            """
+            bube_corner = cubes.get_bube_corners(Ks_scaled, image_sizes) 
+            x = torch.clamp(bube_corner[..., 0], 0, int(image_sizes[i][0]-1))
+            y = torch.clamp(bube_corner[..., 1], 0, int(image_sizes[i][1]-1))
+            bube_corner = torch.stack((x, y), dim=-1)
+            """
             
             ### Loss
             # 2D IoU
@@ -1346,23 +1310,17 @@ class ROIHeads3DScore(StandardROIHeads):
             for i, (p1, p2) in enumerate(combinations):
                 loss_pose[i] = 1-so3_relative_angle(p1.unsqueeze(0), p2.unsqueeze(0), eps=10000, cos_angle=True).abs()
 
-            loss_pose = loss_pose.reshape(-1, len(cube_pose), len(cube_pose))
-            loss_pose = torch.sum(torch.triu(loss_pose, diagonal=1)) 
+            #loss_pose = loss_pose.reshape(-1, len(cube_pose), len(cube_pose))
+            #loss_pose = torch.sum(torch.triu(loss_pose, diagonal=1))
 
-            """
+            
             # Segment
-            bube_corner = pred_cube.get_bube_corners(Ks_scaled[i], image_sizes[i])
-                
-            x = torch.clamp(bube_corner[..., 0], 0, int(image_sizes[i][0]-1))
-            y = torch.clamp(bube_corner[..., 1], 0, int(image_sizes[i][1]-1))
-            bube_corner = torch.stack((x, y), dim=-1)
-
-            loss_segment = self.segment_loss(mask_per_image[:][0,0], bube_corner)
-
-            # Other
-
             """
+            loss_seg = self.segment_loss(mask_per_image[:][0,0], bube_corner)
+            """
+            
             loss_seg = None
+
             total_3D_loss_for_reporting = loss_iou*self.loss_w_iou
 
             if not loss_seg is None:
@@ -1423,7 +1381,7 @@ class ROIHeads3DScore(StandardROIHeads):
                 losses.update({
                     prefix + 'loss_iou': self.safely_reduce_losses(loss_iou) * self.loss_w_dims * self.loss_w_3d,
                 })
-                
+
             if loss_pose is not None:
                 losses.update({
                     prefix + 'loss_pose': self.safely_reduce_losses(loss_pose) * self.loss_w_pose * self.loss_w_3d, 
