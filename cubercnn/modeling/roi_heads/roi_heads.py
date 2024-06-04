@@ -1318,13 +1318,6 @@ class ROIHeads3DScore(StandardROIHeads):
 
                 # normalise with the number of elements in the lower triangle to make the loss more fair between images with different number of boxes
                 loss_pose += torch.sum(torch.tril(loss_pose_t,diagonal=-1)) / n_elements_lower_triangle 
-
-<<<<<<< HEAD
-            #loss_pose = loss_pose.reshape(-1, len(cube_pose), len(cube_pose))
-            #loss_pose = torch.sum(torch.triu(loss_pose, diagonal=1))
-=======
->>>>>>> 4e0920fd0f303e88f7c7c89f3952ef63ce8fd733
-
             
             # Segment
             """
@@ -1346,15 +1339,9 @@ class ROIHeads3DScore(StandardROIHeads):
             
 
             # compute errors for tracking purposes
-            z_error = (cube_z - gt_z).detach().abs()
-            dims_error = (cube_dims - gt_dims).detach().abs()
             xy_error = (cube_xy - gt_2d).detach().abs()
 
-            storage.put_scalar(prefix + 'z_error', z_error.mean().item(), smoothing_hint=False)
-            storage.put_scalar(prefix + 'dims_error', dims_error.mean().item(), smoothing_hint=False)
             storage.put_scalar(prefix + 'xy_error', xy_error.mean().item(), smoothing_hint=False)
-            storage.put_scalar(prefix + 'z_close', (z_error<0.20).float().mean().item(), smoothing_hint=False)
-            
             storage.put_scalar(prefix + 'total_3D_loss', self.loss_w_3d * self.safely_reduce_losses(total_3D_loss_for_reporting), smoothing_hint=False)
 
             if self.inverse_z_weight:
