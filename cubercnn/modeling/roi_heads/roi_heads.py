@@ -1307,17 +1307,16 @@ class ROIHeads3DScore(StandardROIHeads):
             # this will give the equivalent to the lower triangle of the matrix
             loss_pose = 0
             for cube_pose_ in cube_pose.split(num_boxes_per_image):
+                loss_pose_t = 0
                 n_lo = len(cube_pose_)
-                n_elements_lower_triangle = n_lo*(n_lo-1)/2
-                loss_pose_t = torch.zeros(n_lo,n_lo)
                 for i in range(1, n_lo):
                     for j in range(i):
                         p1 = cube_pose_[i]
                         p2 = cube_pose_[j]
-                        loss_pose_t[i,j] = 1-so3_relative_angle(p1.unsqueeze(0), p2.unsqueeze(0), eps=10000, cos_angle=True).abs()
+                        loss_pose_t += 1-so3_relative_angle(p1.unsqueeze(0), p2.unsqueeze(0), eps=10000, cos_angle=True).abs()
 
                 # normalise with the number of elements in the lower triangle to make the loss more fair between images with different number of boxes
-                loss_pose += torch.sum(torch.tril(loss_pose_t,diagonal=-1)) / n_elements_lower_triangle 
+                loss_pose += loss_pose_t / n_lo 
             
             # Segment
             """
