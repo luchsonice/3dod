@@ -38,6 +38,8 @@ from cubercnn import util
 
 from torchvision.ops import generalized_box_iou_loss
 
+from cubercnn.util.math_util import so3_relative_angle_batched
+
 logger = logging.getLogger(__name__)
 
 E_CONSTANT = 2.71828183
@@ -762,6 +764,7 @@ class ROIHeads3DScore(StandardROIHeads):
         loss_w_iou: float,
         loss_w_seg: float,
         loss_w_pose: float,
+        loss_w_dims: float,
         use_confidence: float,
         inverse_z_weight: bool,
         z_type: str,
@@ -796,6 +799,7 @@ class ROIHeads3DScore(StandardROIHeads):
         self.loss_w_iou = loss_w_iou
         self.loss_w_seg = loss_w_seg
         self.loss_w_pose = loss_w_pose
+        self.loss_w_dims = loss_w_dims
 
         # loss modes
         self.disentangled_loss = disentangled_loss
@@ -894,6 +898,7 @@ class ROIHeads3DScore(StandardROIHeads):
             'loss_w_iou': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_IOU,
             'loss_w_seg': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_SEG,
             'loss_w_pose': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_POSE,
+            'loss_w_dims': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS,
             'z_type': cfg.MODEL.ROI_CUBE_HEAD.Z_TYPE,
             'pose_type': cfg.MODEL.ROI_CUBE_HEAD.POSE_TYPE,
             'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED,
@@ -921,6 +926,7 @@ class ROIHeads3DScore(StandardROIHeads):
 
             losses = self._forward_box(features, proposals)
             if self.loss_w_3d > 0:
+<<<<<<< HEAD
                 tmp_list = [x.gt_boxes3D.tolist() for x in targets]
                 idx_list = []
                 for i in range(len(tmp_list)):
@@ -942,6 +948,12 @@ class ROIHeads3DScore(StandardROIHeads):
                 masks_all_images = [sublist for outer_list in mask_per_image for sublist in outer_list]
 
                 instances_3d, losses_cube = self._forward_cube(features, proposals, Ks, im_dims, im_scales_ratio, masks_all_images, first_occurrence_indices)
+=======
+                if self.loss_w_seg > 0:
+                    mask_per_image = self.object_masks(images_raw.tensor, targets, segmentor) # over all images in batch
+                mask_per_image = None
+                instances_3d, losses_cube = self._forward_cube(features, proposals, Ks, im_dims, im_scales_ratio, mask_per_image)
+>>>>>>> 9531b0082b93d69e3d514f69b9a9b21d149fc206
                 losses.update(losses_cube)
 
             return instances_3d, losses
@@ -964,8 +976,15 @@ class ROIHeads3DScore(StandardROIHeads):
                 pred_instances = self._forward_box(features, proposals)
             
             if self.loss_w_3d > 0:
+<<<<<<< HEAD
                 mask_per_image = self.object_masks(images_raw.tensor, targets, segmentor) # over all images in batch
                 masks_all_images = [sublist for outer_list in mask_per_image for sublist in outer_list]
+=======
+                if self.loss_w_seg > 0:
+                    mask_per_image = self.object_masks(images_raw.tensor, proposals, segmentor) # over all images in batch
+                mask_per_image = None
+
+>>>>>>> 9531b0082b93d69e3d514f69b9a9b21d149fc206
                 del targets
 
                 pred_instances = self._forward_cube(features, pred_instances, Ks, im_dims, im_scales_ratio, masks_all_images)
@@ -1081,7 +1100,32 @@ class ROIHeads3DScore(StandardROIHeads):
         gt_mask = (gt_mask > 0.5).float()
         score = F.binary_cross_entropy(gt_mask,bube_mask) #mask_iou_loss(gt_mask[::4,::4], bube_mask[::4,::4])
 
+<<<<<<< HEAD
         return score
+=======
+        return scores.mean()
+        #return 1 - scores.mean()
+
+    def pose_loss(self, cube_pose:torch.Tensor, num_boxes_per_image:list[int]):
+        '''
+        Loss based on pose consistency within a single image
+        generate all combinations of poses as one row of the combination matrix at the time
+        this will give the equivalent to the lower triangle of the matrix
+        '''
+        loss_pose = torch.zeros(1, device=cube_pose.device)
+        fail_count = 0
+        for cube_pose_ in cube_pose.split(num_boxes_per_image):
+            # normalise with the number of elements in the lower triangle to make the loss more fair between images with different number of boxes
+            # we don't really care about the eps
+            if len(cube_pose_) == 1:
+                fail_count += 1
+                continue
+            loss_pose_t = 1-so3_relative_angle_batched(cube_pose_, eps=10000, cos_angle=True).abs()
+            loss_pose += torch.mean(loss_pose_t)
+        if fail_count == len(num_boxes_per_image): # ensure that loss is None if all images in batch only had 1 box
+            return None
+        return loss_pose * 1/(fail_count+1)
+>>>>>>> 9531b0082b93d69e3d514f69b9a9b21d149fc206
     
     def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, masks_all_images, first_occurrence_indices):
         
@@ -1324,22 +1368,8 @@ class ROIHeads3DScore(StandardROIHeads):
             
             loss_iou = generalized_box_iou_loss(gt_boxes_tensor, pred_boxes_tensor, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
 
-            ## Loss based on pose consistency within batch
-            # generate all combinations of poses as one row of the combination matrix at the time
-            # this will give the equivalent to the lower triangle of the matrix
-            loss_pose = 0
-            for cube_pose_ in cube_pose.split(num_boxes_per_image):
-                n_lo = len(cube_pose_)
-                n_elements_lower_triangle = n_lo*(n_lo-1)/2
-                loss_pose_t = torch.zeros(n_lo,n_lo)
-                for i in range(1, n_lo):
-                    for j in range(i):
-                        p1 = cube_pose_[i]
-                        p2 = cube_pose_[j]
-                        loss_pose_t[i,j] = 1-so3_relative_angle(p1.unsqueeze(0), p2.unsqueeze(0), eps=10000, cos_angle=True).abs()
-
-                # normalise with the number of elements in the lower triangle to make the loss more fair between images with different number of boxes
-                loss_pose += torch.sum(torch.tril(loss_pose_t,diagonal=-1)) / n_elements_lower_triangle 
+            loss_pose = None
+            loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
             
             # Segment
             loss_seg = torch.zeros(n, device=cubes.device)
@@ -1348,7 +1378,7 @@ class ROIHeads3DScore(StandardROIHeads):
 
             total_3D_loss_for_reporting = loss_iou*self.loss_w_iou
 
-            if not loss_seg is None:
+            if loss_seg is not None:
                 total_3D_loss_for_reporting += loss_seg*self.loss_w_seg
  
             if loss_pose is not None:
@@ -1406,7 +1436,7 @@ class ROIHeads3DScore(StandardROIHeads):
                     prefix + 'loss_pose': self.safely_reduce_losses(loss_pose) * self.loss_w_pose * self.loss_w_3d, 
                 })
 
-            if self.loss_w_seg > 0:
+            if loss_seg is not None:
                 losses.update({
                     prefix + 'loss_seg': self.safely_reduce_losses(loss_seg) * self.loss_w_seg * self.loss_w_3d,
                 })

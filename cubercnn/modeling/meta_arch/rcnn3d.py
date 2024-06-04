@@ -335,11 +335,24 @@ class RCNN3D_combined_features(nn.Module):
         xm = x.mean()
         xs = x.std()
         return (x - xm) * (ys / xs) + ym
+    
+    def cat_depth_features(self, features, images_raw):
+        pred_o = self.depth_model(images_raw.tensor.float()/255.0)
+        # depth features corresponding to p2, p3, p4, p5
 
-    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor):
+        d_features = pred_o['depth_features']
+        # img_features = features['p5']
+        # we must scale the depth map to the same size as the conv feature, otherwise the scale will not correspond correctly in the roi pooling
+        for (layer, img_feature), d_feature in zip(features.items(), reversed(d_features)):
+            d_feature = F.interpolate(d_feature, size=img_feature.shape[-2:], mode='bilinear', align_corners=True)
+            d_feature = self._standardize(d_feature, img_feature)
+            features[layer] = torch.cat((img_feature, d_feature), dim=1)
+        return features
+
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor=None):
         
         if not self.training:
-            return self.inference(batched_inputs)
+            return self.inference(batched_inputs, segmentor) # segmentor is just none in inference because we dont need the loss
 
         images = self.preprocess_image(batched_inputs)
         images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
@@ -357,16 +370,7 @@ class RCNN3D_combined_features(nn.Module):
         features = self.backbone(images.tensor)
         proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
 
-        pred_o = self.depth_model(images_raw.tensor.float()/255.0)
-        # depth features corresponding to p2, p3, p4, p5
-
-        d_features = pred_o['depth_features']
-        # img_features = features['p5']
-        # we must scale the depth map to the same size as the conv feature, otherwise the scale will not correspond correctly in the roi pooling
-        for (layer, img_feature), d_feature in zip(features.items(), reversed(d_features)):
-            d_feature = F.interpolate(d_feature, size=img_feature.shape[-2:], mode='bilinear', align_corners=True)
-            d_feature = self._standardize(d_feature, img_feature)
-            features[layer] = torch.cat((img_feature, d_feature), dim=1)        
+        features = self.cat_depth_features(features, images_raw)
         
         instances, detector_losses = self.roi_heads(
             images, images_raw, features, proposals, 
@@ -387,7 +391,8 @@ class RCNN3D_combined_features(nn.Module):
     
     def inference(
         self,
-        batched_inputs: List[Dict[str, torch.Tensor]],
+        batched_inputs: List[Dict[str, torch.Tensor]], 
+        segmentor,
         detected_instances: Optional[List[Instances]] = None,
         do_postprocess: bool = True,
     ):
@@ -408,12 +413,13 @@ class RCNN3D_combined_features(nn.Module):
         # Pass oracle 2D boxes into the RoI heads
         if type(batched_inputs == list) and np.any(['oracle2D' in b for b in batched_inputs]):
             oracles = [b['oracle2D'] for b in batched_inputs]
-            results, _ = self.roi_heads(images, features, oracles, Ks, im_scales_ratio, None)
+            results, _ = self.roi_heads(images, images_raw, features, oracles, Ks, im_scales_ratio, segmentor, None)
         
         # normal inference
         else:
             proposals, _ = self.proposal_generator(images, features, None)
-            results, _ = self.roi_heads(images, features, proposals, Ks, im_scales_ratio, None)
+            features = self.cat_depth_features(features, images_raw)
+            results, _ = self.roi_heads(images, images_raw, features, proposals, Ks, im_scales_ratio, segmentor, None)
             
         if do_postprocess:
             assert not torch.jit.is_scripting(), "Scripting is not supported for postprocess."
