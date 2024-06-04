@@ -339,7 +339,7 @@ class RCNN3D_combined_features(nn.Module):
     def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor):
         
         if not self.training:
-            return self.inference(batched_inputs)
+            return self.inference(batched_inputs, segmentor)
 
         images = self.preprocess_image(batched_inputs)
         images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
@@ -389,7 +389,8 @@ class RCNN3D_combined_features(nn.Module):
     
     def inference(
         self,
-        batched_inputs: List[Dict[str, torch.Tensor]],
+        batched_inputs: List[Dict[str, torch.Tensor]], 
+        segmentor,
         detected_instances: Optional[List[Instances]] = None,
         do_postprocess: bool = True,
     ):
@@ -410,12 +411,12 @@ class RCNN3D_combined_features(nn.Module):
         # Pass oracle 2D boxes into the RoI heads
         if type(batched_inputs == list) and np.any(['oracle2D' in b for b in batched_inputs]):
             oracles = [b['oracle2D'] for b in batched_inputs]
-            results, _ = self.roi_heads(images, features, oracles, Ks, im_scales_ratio, None)
+            results, _ = self.roi_heads(images, features, oracles, Ks, im_scales_ratio, segmentor, None)
         
         # normal inference
         else:
             proposals, _ = self.proposal_generator(images, features, None)
-            results, _ = self.roi_heads(images, features, proposals, Ks, im_scales_ratio, None)
+            results, _ = self.roi_heads(images, features, proposals, Ks, im_scales_ratio, segmentor, None)
             
         if do_postprocess:
             assert not torch.jit.is_scripting(), "Scripting is not supported for postprocess."

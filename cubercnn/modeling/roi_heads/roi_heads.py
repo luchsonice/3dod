@@ -38,6 +38,8 @@ from cubercnn import util
 
 from torchvision.ops import generalized_box_iou_loss
 
+from cubercnn.util.math_util import so3_relative_angle_batched
+
 logger = logging.getLogger(__name__)
 
 E_CONSTANT = 2.71828183
@@ -1084,16 +1086,10 @@ class ROIHeads3DScore(StandardROIHeads):
         '''
         loss_pose = torch.zeros(1, device=cube_pose.device)
         for cube_pose_ in cube_pose.split(num_boxes_per_image):
-            loss_pose_t = 0
-            n_lo = len(cube_pose_)
-            for i in range(1, n_lo):
-                for j in range(i):
-                    p1 = cube_pose_[i]
-                    p2 = cube_pose_[j]
-                    loss_pose_t += 1-so3_relative_angle(p1.unsqueeze(0), p2.unsqueeze(0), eps=10000, cos_angle=True).abs()
-
             # normalise with the number of elements in the lower triangle to make the loss more fair between images with different number of boxes
-            loss_pose += loss_pose_t / n_lo
+            # we don't really care about the eps
+            loss_pose_t = 1-so3_relative_angle_batched(cube_pose_, eps=10000, cos_angle=True).abs()
+            loss_pose += torch.mean(loss_pose_t)
         return loss_pose
     
     def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, mask_per_image):
