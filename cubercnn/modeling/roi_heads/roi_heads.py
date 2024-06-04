@@ -895,11 +895,9 @@ class ROIHeads3DScore(StandardROIHeads):
             'use_confidence': cfg.MODEL.ROI_CUBE_HEAD.USE_CONFIDENCE,
             'inverse_z_weight': cfg.MODEL.ROI_CUBE_HEAD.INVERSE_Z_WEIGHT,
             'loss_w_3d': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_3D,
-            'loss_w_xy': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_XY,
-            'loss_w_z': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_Z,
-            'loss_w_dims': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS,
-            'loss_w_pose': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_POSE,
-            'loss_w_joint': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_JOINT,
+            'loss_w_iou': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_IOU,
+            'loss_w_seg': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_SEG,
+            'loss_w_align': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_ALIGN,
             'z_type': cfg.MODEL.ROI_CUBE_HEAD.Z_TYPE,
             'pose_type': cfg.MODEL.ROI_CUBE_HEAD.POSE_TYPE,
             'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED,
@@ -1371,11 +1369,12 @@ class ROIHeads3DScore(StandardROIHeads):
             # Other
 
             """
-            loss_segment = None
-            total_3D_loss_for_reporting = loss_iou*self.loss_w_dims
+            loss_seg = None
+            total_3D_loss_for_reporting = loss_iou*self.loss_w_iou
 
-            if not loss_segment is None:
-                total_3D_loss_for_reporting += loss_segment*self.loss_w_pose
+            if not loss_seg is None:
+                total_3D_loss_for_reporting += loss_seg*self.loss_w_seg
+ 
             if loss_pose is not None:
                 total_3D_loss_for_reporting += loss_pose*self.loss_w_pose
             
@@ -1404,20 +1403,14 @@ class ROIHeads3DScore(StandardROIHeads):
 
                 inverse_z_w = 1/torch.log(gt_z.clip(E_CONSTANT))
                 
-                loss_dims *= inverse_z_w
+                loss_iou *= inverse_z_w
 
                 # scale based on log, but clip at e
-                if not cube_2d_deltas is None:
-                    loss_xy *= inverse_z_w
-                
-                if loss_z is not None:
-                    loss_z *= inverse_z_w
+                if loss_seg is not None:
+                    loss_seg *= inverse_z_w
 
                 if loss_pose is not None:
                     loss_pose *= inverse_z_w
-    
-                if self.loss_w_joint > 0:
-                    loss_joint *= inverse_z_w
 
             if self.use_confidence > 0:
                 
@@ -1433,31 +1426,22 @@ class ROIHeads3DScore(StandardROIHeads):
             # store per batch loss stats temporarily
             self.batch_losses = [batch_losses.mean().item() for batch_losses in total_3D_loss_for_reporting.split(num_boxes_per_image)]
             
-            if self.loss_w_dims > 0:
+            if self.loss_w_iou > 0:
                 losses.update({
                     prefix + 'loss_iou': self.safely_reduce_losses(loss_iou) * self.loss_w_dims * self.loss_w_3d,
                 })
-            if loss_pose is not None:
                 
+            if loss_pose is not None:
                 losses.update({
                     prefix + 'loss_pose': self.safely_reduce_losses(loss_pose) * self.loss_w_pose * self.loss_w_3d, 
                 })
-            """
-            if not cube_2d_deltas is None:
+
+            if self.loss_w_seg > 0:
                 losses.update({
-                    prefix + 'loss_xy': self.safely_reduce_losses(loss_xy) * self.loss_w_xy * self.loss_w_3d,
+                    prefix + 'loss_seg': self.safely_reduce_losses(loss_seg) * self.loss_w_seg * self.loss_w_3d,
                 })
 
-            if not loss_z is None:
-                losses.update({
-                    prefix + 'loss_z': self.safely_reduce_losses(loss_z) * self.loss_w_z * self.loss_w_3d,
-                })
-
-
-            if self.loss_w_joint > 0:
-                if valid_joint.any():
-                    losses.update({prefix + 'loss_joint': self.safely_reduce_losses(loss_joint[valid_joint]) * self.loss_w_joint * self.loss_w_3d})
-            """
+            
             
         '''
         Inference
