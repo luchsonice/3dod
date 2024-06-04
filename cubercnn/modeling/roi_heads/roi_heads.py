@@ -1303,15 +1303,27 @@ class ROIHeads3DScore(StandardROIHeads):
             loss_iou = generalized_box_iou_loss(gt_boxes_tensor, pred_boxes_tensor, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
 
             ## Loss based on pose consistency within batch
-            # generate all combinations of poses
-            combinations = list(itertools.combinations(cube_pose, 2))
+            # generate all combinations of poses as one row of the combination matrix at the time
+            # this will give the equivalent to the lower triangle of the matrix
+            loss_pose = 0
+            for cube_pose_ in cube_pose.split(num_boxes_per_image):
+                n_lo = len(cube_pose_)
+                n_elements_lower_triangle = n_lo*(n_lo-1)/2
+                loss_pose_t = torch.zeros(n_lo,n_lo)
+                for i in range(1, n_lo):
+                    for j in range(i):
+                        p1 = cube_pose_[i]
+                        p2 = cube_pose_[j]
+                        loss_pose_t[i,j] = 1-so3_relative_angle(p1.unsqueeze(0), p2.unsqueeze(0), eps=10000, cos_angle=True).abs()
 
-            loss_pose = torch.zeros(len(combinations))
-            for i, (p1, p2) in enumerate(combinations):
-                loss_pose[i] = 1-so3_relative_angle(p1.unsqueeze(0), p2.unsqueeze(0), eps=10000, cos_angle=True).abs()
+                # normalise with the number of elements in the lower triangle to make the loss more fair between images with different number of boxes
+                loss_pose += torch.sum(torch.tril(loss_pose_t,diagonal=-1)) / n_elements_lower_triangle 
 
+<<<<<<< HEAD
             #loss_pose = loss_pose.reshape(-1, len(cube_pose), len(cube_pose))
             #loss_pose = torch.sum(torch.triu(loss_pose, diagonal=1))
+=======
+>>>>>>> 4e0920fd0f303e88f7c7c89f3952ef63ce8fd733
 
             
             # Segment
