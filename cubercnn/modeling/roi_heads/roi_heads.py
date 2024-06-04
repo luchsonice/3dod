@@ -1423,8 +1423,8 @@ class ROIHeads3DScore(StandardROIHeads):
                 losses.update({
                     prefix + 'loss_iou': self.safely_reduce_losses(loss_iou) * self.loss_w_dims * self.loss_w_3d,
                 })
-            if loss_pose is not None:
                 
+            if loss_pose is not None:
                 losses.update({
                     prefix + 'loss_pose': self.safely_reduce_losses(loss_pose) * self.loss_w_pose * self.loss_w_3d, 
                 })
