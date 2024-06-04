@@ -1,11 +1,9 @@
 from collections import OrderedDict
 import os
+import itertools
 from detectron2.layers.nms import batched_nms
 import pyransac3d as pyrsc
-#import open3d as o3d
-from pytorch3d.transforms.rotation_conversions import rotation_6d_to_matrix
 from segment_anything.utils.transforms import ResizeLongestSide
-
 
 from dataclasses import dataclass
 import logging
@@ -39,7 +37,6 @@ from cubercnn.modeling.roi_heads.fast_rcnn import FastRCNNOutputs
 from cubercnn import util
 
 from torchvision.ops import generalized_box_iou_loss
-import cv2
 
 logger = logging.getLogger(__name__)
 
@@ -1340,6 +1337,18 @@ class ROIHeads3DScore(StandardROIHeads):
             pred_boxes_tensor = torch.cat([pred_boxes[i].tensor for i in range(len(pred_boxes))])
             
             loss_iou = generalized_box_iou_loss(gt_boxes_tensor, pred_boxes_tensor, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
+
+            ## Loss based on pose consistency within batch
+            # generate all combinations of poses
+            combinations = list(itertools.combinations(cube_pose, 2))
+
+            loss_pose = torch.zeros(len(combinations))
+            for i, (p1, p2) in enumerate(combinations):
+                loss_pose[i] = 1-so3_relative_angle(p1.unsqueeze(0), p2.unsqueeze(0), eps=10000, cos_angle=True).abs()
+
+            loss_pose = loss_pose.reshape(-1, len(cube_pose), len(cube_pose))
+            loss_pose = torch.sum(torch.triu(loss_pose, diagonal=1)) 
+
             """
             # Segment
             bube_corner = pred_cube.get_bube_corners(Ks_scaled[i], image_sizes[i])
@@ -1358,6 +1367,9 @@ class ROIHeads3DScore(StandardROIHeads):
 
             if not loss_seg is None:
                 total_3D_loss_for_reporting += loss_seg*self.loss_w_seg
+ 
+            if loss_pose is not None:
+                total_3D_loss_for_reporting += loss_pose*self.loss_w_pose
             
             # reporting does not need gradients
             total_3D_loss_for_reporting = total_3D_loss_for_reporting.detach()
@@ -1384,20 +1396,14 @@ class ROIHeads3DScore(StandardROIHeads):
 
                 inverse_z_w = 1/torch.log(gt_z.clip(E_CONSTANT))
                 
-                loss_dims *= inverse_z_w
+                loss_iou *= inverse_z_w
 
                 # scale based on log, but clip at e
-                if not cube_2d_deltas is None:
-                    loss_xy *= inverse_z_w
-                
-                if loss_z is not None:
-                    loss_z *= inverse_z_w
+                if loss_seg is not None:
+                    loss_seg *= inverse_z_w
 
                 if loss_pose is not None:
                     loss_pose *= inverse_z_w
-    
-                if self.loss_w_joint > 0:
-                    loss_joint *= inverse_z_w
 
             if self.use_confidence > 0:
                 
@@ -1415,7 +1421,12 @@ class ROIHeads3DScore(StandardROIHeads):
             
             if self.loss_w_iou > 0:
                 losses.update({
-                    prefix + 'loss_iou': self.safely_reduce_losses(loss_iou) * self.loss_w_iou * self.loss_w_3d,
+                    prefix + 'loss_iou': self.safely_reduce_losses(loss_iou) * self.loss_w_dims * self.loss_w_3d,
+                })
+            if loss_pose is not None:
+                
+                losses.update({
+                    prefix + 'loss_pose': self.safely_reduce_losses(loss_pose) * self.loss_w_pose * self.loss_w_3d, 
                 })
 
             if self.loss_w_seg > 0:
