@@ -928,8 +928,9 @@ class ROIHeads3DScore(StandardROIHeads):
 
             losses = self._forward_box(features, proposals)
             if self.loss_w_3d > 0:
-                mask_per_image = self.object_masks(images_raw.tensor, targets, segmentor) # over all images in batch
-
+                if self.loss_w_seg > 0:
+                    mask_per_image = self.object_masks(images_raw.tensor, targets, segmentor) # over all images in batch
+                mask_per_image = None
                 instances_3d, losses_cube = self._forward_cube(features, proposals, Ks, im_dims, im_scales_ratio, mask_per_image)
                 losses.update(losses_cube)
 
@@ -953,7 +954,9 @@ class ROIHeads3DScore(StandardROIHeads):
                 pred_instances = self._forward_box(features, proposals)
             
             if self.loss_w_3d > 0:
-                mask_per_image = self.object_masks(images_raw.tensor, targets, segmentor) # over all images in batch
+                if self.loss_w_seg > 0:
+                    mask_per_image = self.object_masks(images_raw.tensor, proposals, segmentor) # over all images in batch
+                mask_per_image = None
 
                 del targets
 
