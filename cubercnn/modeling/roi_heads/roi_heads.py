@@ -919,13 +919,29 @@ class ROIHeads3DScore(StandardROIHeads):
         if self.training:
             proposals = self.label_and_sample_proposals(proposals, targets)
 
-        if self.training:
-
             losses = self._forward_box(features, proposals)
             if self.loss_w_3d > 0:
-                mask_per_image = self.object_masks(images_raw.tensor, targets, segmentor) # over all images in batch
+                tmp_list = [x.gt_boxes3D.tolist() for x in targets]
+                idx_list = []
+                for i in range(len(tmp_list)):
+                    for j in range(len(tmp_list[i])):
+                        idx_list.append(tmp_list[i][j][0])
+                
 
-                instances_3d, losses_cube = self._forward_cube(features, proposals, Ks, im_dims, im_scales_ratio, mask_per_image)
+                first_occurrence_indices = {}
+                unique_counter = 0
+                result_indices = []
+
+                for entry in idx_list:
+                    if entry not in first_occurrence_indices:
+                        first_occurrence_indices[entry] = unique_counter
+                        unique_counter += 1
+                    result_indices.append(first_occurrence_indices[entry])
+
+                mask_per_image = self.object_masks(images_raw.tensor, targets, segmentor) # over all images in batch
+                masks_all_images = [sublist for outer_list in mask_per_image for sublist in outer_list]
+
+                instances_3d, losses_cube = self._forward_cube(features, proposals, Ks, im_dims, im_scales_ratio, masks_all_images, first_occurrence_indices)
                 losses.update(losses_cube)
 
             return instances_3d, losses
@@ -949,10 +965,10 @@ class ROIHeads3DScore(StandardROIHeads):
             
             if self.loss_w_3d > 0:
                 mask_per_image = self.object_masks(images_raw.tensor, targets, segmentor) # over all images in batch
-
+                masks_all_images = [sublist for outer_list in mask_per_image for sublist in outer_list]
                 del targets
 
-                pred_instances = self._forward_cube(features, pred_instances, Ks, im_dims, im_scales_ratio, mask_per_image)
+                pred_instances = self._forward_cube(features, pred_instances, Ks, im_dims, im_scales_ratio, masks_all_images)
             return pred_instances, {}
     
 
@@ -1057,23 +1073,17 @@ class ROIHeads3DScore(StandardROIHeads):
     
     def segment_loss(self, gt_mask, bube_corners):
         bube_corners = bube_corners.to(device=gt_mask.device)
-        bube_corners = bube_corners.squeeze(0) # remove instance dim
-        scores = torch.zeros(len(bube_corners), device=gt_mask.device)
-        
-        for i in range(len(bube_corners)):
-            build_mask = torch.zeros(gt_mask.shape, device=gt_mask.device)
-            build_mask[bube_corners[i][:,0].long(),bube_corners[i][:,1].long()] = 1
-            bube_mask = convex_hull(build_mask)
+        build_mask = torch.zeros(gt_mask.shape, device=gt_mask.device)
+        build_mask[bube_corners[:,0].long(),bube_corners[:,1].long()] = 1
+        bube_mask = convex_hull(build_mask)
 
-            #scores[i] = mask_iou_loss(gt_mask[::4,::4], bube_mask[::4,::4])
-            bube_mask = (bube_mask > 0.5).float()
-            gt_mask = (gt_mask > 0.5).float()
-            scores[i] = F.binary_cross_entropy(gt_mask,bube_mask)
+        bube_mask = (bube_mask > 0.5).float()
+        gt_mask = (gt_mask > 0.5).float()
+        score = F.binary_cross_entropy(gt_mask,bube_mask) #mask_iou_loss(gt_mask[::4,::4], bube_mask[::4,::4])
 
-        return scores.mean()
-        #return 1 - scores.mean()
+        return score
     
-    def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, mask_per_image):
+    def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, masks_all_images, first_occurrence_indices):
         
         features = [features[f] for f in self.in_features]
 
@@ -1092,12 +1102,16 @@ class ROIHeads3DScore(StandardROIHeads):
             proposals, _ = select_foreground_proposals(instances, self.num_classes)
             proposal_boxes = [x.proposal_boxes for x in proposals]
             pred_boxes = [x.pred_boxes for x in proposals]
-
             box_classes = (torch.cat([p.gt_classes for p in proposals], dim=0) if len(proposals) else torch.empty(0))
             gt_boxes3D = torch.cat([p.gt_boxes3D for p in proposals], dim=0,)
             gt_poses = torch.cat([p.gt_poses for p in proposals], dim=0,)
 
             assert len(gt_poses) == len(gt_boxes3D) == len(box_classes)
+
+            at_which_mask_idx = []
+            for entry in gt_boxes3D:
+                entry = entry[0].item()
+                at_which_mask_idx.append(first_occurrence_indices[entry])
         
         # eval on all instances
         else:
@@ -1287,12 +1301,20 @@ class ROIHeads3DScore(StandardROIHeads):
             cubes = Cubes(cubes_tensor)
 
             # Get bube corners
-            """
-            bube_corner = cubes.get_bube_corners(Ks_scaled, image_sizes) 
-            x = torch.clamp(bube_corner[..., 0], 0, int(image_sizes[i][0]-1))
-            y = torch.clamp(bube_corner[..., 1], 0, int(image_sizes[i][1]-1))
-            bube_corner = torch.stack((x, y), dim=-1)
-            """
+            im_sizes = []
+            im_idx = []
+            for i,j in enumerate(num_boxes_per_image):
+                for _ in range(j):
+                    im_sizes.append(list(im_current_dims[i]))
+                    im_idx.append(i)
+
+            bube_corners = torch.zeros((n,8,2))
+            for i in range(n):
+                bube_corner = cubes[i].get_bube_corners(Ks_scaled_per_box[i], im_sizes[i]) 
+                x = torch.clamp(bube_corner[..., 0], 0, int(im_sizes[i][0]-1)) # clamp for segment loss, else CUDA error bc of accesing elements otside mask range
+                y = torch.clamp(bube_corner[..., 1], 0, int(im_sizes[i][1]-1))
+                bube_corner = torch.stack((x, y), dim=-1)
+                bube_corners[i] = bube_corner
             
             ### Loss
             # 2D IoU
@@ -1320,11 +1342,9 @@ class ROIHeads3DScore(StandardROIHeads):
                 loss_pose += torch.sum(torch.tril(loss_pose_t,diagonal=-1)) / n_elements_lower_triangle 
             
             # Segment
-            """
-            loss_seg = self.segment_loss(mask_per_image[:][0,0], bube_corner)
-            """
-            
-            loss_seg = None
+            loss_seg = torch.zeros(n, device=cubes.device)
+            for i in range(n):
+                loss_seg[i] = self.segment_loss(masks_all_images[at_which_mask_idx[i]][0], bube_corners[i])
 
             total_3D_loss_for_reporting = loss_iou*self.loss_w_iou
 
@@ -1378,7 +1398,7 @@ class ROIHeads3DScore(StandardROIHeads):
             
             if self.loss_w_iou > 0:
                 losses.update({
-                    prefix + 'loss_iou': self.safely_reduce_losses(loss_iou) * self.loss_w_dims * self.loss_w_3d,
+                    prefix + 'loss_iou': self.safely_reduce_losses(loss_iou) * self.loss_w_iou * self.loss_w_3d,
                 })
 
             if loss_pose is not None:

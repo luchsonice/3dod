@@ -2,6 +2,13 @@
 import logging
 import os
 import sys
+import warnings
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_512 in registry")
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_384 in registry")
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_224 in registry")
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_11m_224 in registry")
+warnings.filterwarnings("ignore", message="Overwriting tiny_vit_5m_224 in registry")
+
 import numpy as np
 import copy
 from collections import OrderedDict
@@ -50,6 +57,7 @@ from cubercnn.modeling.meta_arch import RCNN3D, build_model
 from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
 from cubercnn import util, vis, data
 import cubercnn.vis.logperf as utils_logperf
+
 
 from cubercnn.data.generate_ground_segmentations import init_segmentation
 

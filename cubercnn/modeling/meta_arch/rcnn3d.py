@@ -353,8 +353,6 @@ class RCNN3D_combined_features(nn.Module):
 
         if "instances" in batched_inputs[0]:
             gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
-        else:
-            gt_instances = None
 
         features = self.backbone(images.tensor)
         proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
