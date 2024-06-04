@@ -926,7 +926,6 @@ class ROIHeads3DScore(StandardROIHeads):
 
             losses = self._forward_box(features, proposals)
             if self.loss_w_3d > 0:
-<<<<<<< HEAD
                 tmp_list = [x.gt_boxes3D.tolist() for x in targets]
                 idx_list = []
                 for i in range(len(tmp_list)):
@@ -948,12 +947,6 @@ class ROIHeads3DScore(StandardROIHeads):
                 masks_all_images = [sublist for outer_list in mask_per_image for sublist in outer_list]
 
                 instances_3d, losses_cube = self._forward_cube(features, proposals, Ks, im_dims, im_scales_ratio, masks_all_images, first_occurrence_indices)
-=======
-                if self.loss_w_seg > 0:
-                    mask_per_image = self.object_masks(images_raw.tensor, targets, segmentor) # over all images in batch
-                mask_per_image = None
-                instances_3d, losses_cube = self._forward_cube(features, proposals, Ks, im_dims, im_scales_ratio, mask_per_image)
->>>>>>> 9531b0082b93d69e3d514f69b9a9b21d149fc206
                 losses.update(losses_cube)
 
             return instances_3d, losses
@@ -976,15 +969,8 @@ class ROIHeads3DScore(StandardROIHeads):
                 pred_instances = self._forward_box(features, proposals)
             
             if self.loss_w_3d > 0:
-<<<<<<< HEAD
                 mask_per_image = self.object_masks(images_raw.tensor, targets, segmentor) # over all images in batch
                 masks_all_images = [sublist for outer_list in mask_per_image for sublist in outer_list]
-=======
-                if self.loss_w_seg > 0:
-                    mask_per_image = self.object_masks(images_raw.tensor, proposals, segmentor) # over all images in batch
-                mask_per_image = None
-
->>>>>>> 9531b0082b93d69e3d514f69b9a9b21d149fc206
                 del targets
 
                 pred_instances = self._forward_cube(features, pred_instances, Ks, im_dims, im_scales_ratio, masks_all_images)
@@ -1100,9 +1086,6 @@ class ROIHeads3DScore(StandardROIHeads):
         gt_mask = (gt_mask > 0.5).float()
         score = F.binary_cross_entropy(gt_mask,bube_mask) #mask_iou_loss(gt_mask[::4,::4], bube_mask[::4,::4])
 
-<<<<<<< HEAD
-        return score
-=======
         return scores.mean()
         #return 1 - scores.mean()
 
@@ -1125,7 +1108,6 @@ class ROIHeads3DScore(StandardROIHeads):
         if fail_count == len(num_boxes_per_image): # ensure that loss is None if all images in batch only had 1 box
             return None
         return loss_pose * 1/(fail_count+1)
->>>>>>> 9531b0082b93d69e3d514f69b9a9b21d149fc206
     
     def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, masks_all_images, first_occurrence_indices):
         
