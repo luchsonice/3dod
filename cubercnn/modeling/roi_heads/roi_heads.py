@@ -1088,12 +1088,18 @@ class ROIHeads3DScore(StandardROIHeads):
         this will give the equivalent to the lower triangle of the matrix
         '''
         loss_pose = torch.zeros(1, device=cube_pose.device)
+        fail_count = 0
         for cube_pose_ in cube_pose.split(num_boxes_per_image):
             # normalise with the number of elements in the lower triangle to make the loss more fair between images with different number of boxes
             # we don't really care about the eps
+            if len(cube_pose_) == 1:
+                fail_count += 1
+                continue
             loss_pose_t = 1-so3_relative_angle_batched(cube_pose_, eps=10000, cos_angle=True).abs()
             loss_pose += torch.mean(loss_pose_t)
-        return loss_pose
+        if fail_count == len(num_boxes_per_image): # ensure that loss is None if all images in batch only had 1 box
+            return None
+        return loss_pose * 1/(fail_count+1)
     
     def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, mask_per_image):
         
@@ -1325,8 +1331,7 @@ class ROIHeads3DScore(StandardROIHeads):
             loss_iou = generalized_box_iou_loss(gt_boxes_tensor, pred_boxes_tensor, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
 
             loss_pose = None
-            if n > 1:
-                loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
+            loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
             
             # Segment
             """
@@ -1337,7 +1342,7 @@ class ROIHeads3DScore(StandardROIHeads):
 
             total_3D_loss_for_reporting = loss_iou*self.loss_w_iou
 
-            if not loss_seg is None:
+            if loss_seg is not None:
                 total_3D_loss_for_reporting += loss_seg*self.loss_w_seg
  
             if loss_pose is not None:
