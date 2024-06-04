@@ -762,6 +762,7 @@ class ROIHeads3DScore(StandardROIHeads):
         loss_w_iou: float,
         loss_w_seg: float,
         loss_w_pose: float,
+        loss_w_dims: float,
         use_confidence: float,
         inverse_z_weight: bool,
         z_type: str,
@@ -796,6 +797,7 @@ class ROIHeads3DScore(StandardROIHeads):
         self.loss_w_iou = loss_w_iou
         self.loss_w_seg = loss_w_seg
         self.loss_w_pose = loss_w_pose
+        self.loss_w_dims = loss_w_dims
 
         # loss modes
         self.disentangled_loss = disentangled_loss
@@ -894,6 +896,7 @@ class ROIHeads3DScore(StandardROIHeads):
             'loss_w_iou': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_IOU,
             'loss_w_seg': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_SEG,
             'loss_w_pose': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_POSE,
+            'loss_w_dims': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS,
             'z_type': cfg.MODEL.ROI_CUBE_HEAD.Z_TYPE,
             'pose_type': cfg.MODEL.ROI_CUBE_HEAD.POSE_TYPE,
             'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED,
@@ -1072,6 +1075,26 @@ class ROIHeads3DScore(StandardROIHeads):
 
         return scores.mean()
         #return 1 - scores.mean()
+
+    def pose_loss(self, cube_pose:torch.Tensor, num_boxes_per_image:list[int]):
+        '''
+        Loss based on pose consistency within a single image
+        generate all combinations of poses as one row of the combination matrix at the time
+        this will give the equivalent to the lower triangle of the matrix
+        '''
+        loss_pose = torch.zeros(1, device=cube_pose.device)
+        for cube_pose_ in cube_pose.split(num_boxes_per_image):
+            loss_pose_t = 0
+            n_lo = len(cube_pose_)
+            for i in range(1, n_lo):
+                for j in range(i):
+                    p1 = cube_pose_[i]
+                    p2 = cube_pose_[j]
+                    loss_pose_t += 1-so3_relative_angle(p1.unsqueeze(0), p2.unsqueeze(0), eps=10000, cos_angle=True).abs()
+
+            # normalise with the number of elements in the lower triangle to make the loss more fair between images with different number of boxes
+            loss_pose += loss_pose_t / n_lo
+        return loss_pose
     
     def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, mask_per_image):
         
@@ -1302,21 +1325,9 @@ class ROIHeads3DScore(StandardROIHeads):
             
             loss_iou = generalized_box_iou_loss(gt_boxes_tensor, pred_boxes_tensor, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
 
-            ## Loss based on pose consistency within batch
-            # generate all combinations of poses as one row of the combination matrix at the time
-            # this will give the equivalent to the lower triangle of the matrix
-            loss_pose = 0
-            for cube_pose_ in cube_pose.split(num_boxes_per_image):
-                loss_pose_t = 0
-                n_lo = len(cube_pose_)
-                for i in range(1, n_lo):
-                    for j in range(i):
-                        p1 = cube_pose_[i]
-                        p2 = cube_pose_[j]
-                        loss_pose_t += 1-so3_relative_angle(p1.unsqueeze(0), p2.unsqueeze(0), eps=10000, cos_angle=True).abs()
-
-                # normalise with the number of elements in the lower triangle to make the loss more fair between images with different number of boxes
-                loss_pose += loss_pose_t / n_lo 
+            loss_pose = None
+            if n > 1:
+                loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
             
             # Segment
             """
@@ -1385,7 +1396,7 @@ class ROIHeads3DScore(StandardROIHeads):
                     prefix + 'loss_pose': self.safely_reduce_losses(loss_pose) * self.loss_w_pose * self.loss_w_3d, 
                 })
 
-            if self.loss_w_seg > 0:
+            if loss_seg is not None:
                 losses.update({
                     prefix + 'loss_seg': self.safely_reduce_losses(loss_seg) * self.loss_w_seg * self.loss_w_3d,
                 })
