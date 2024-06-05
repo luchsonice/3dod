@@ -76,7 +76,7 @@ class Plane:
 
         return -self.equation, self.inliers
 
-    def fit_parallel(self, pts, thresh=0.05, minPoints=100, maxIteration=1000):
+    def fit_parallel(self, pts:torch.Tensor, thresh=0.05, minPoints=100, maxIteration=1000):
         """
         Find the best equation for a plane.
 

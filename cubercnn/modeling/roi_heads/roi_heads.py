@@ -1,8 +1,6 @@
-from collections import OrderedDict
-import os
-import itertools
 from detectron2.layers.nms import batched_nms
 import pyransac3d as pyrsc
+from ProposalNetwork.utils.plane import Plane as Plane_cuda
 from segment_anything.utils.transforms import ResizeLongestSide
 
 from dataclasses import dataclass
@@ -38,7 +36,7 @@ from cubercnn import util
 
 from torchvision.ops import generalized_box_iou_loss
 
-from cubercnn.util.math_util import so3_relative_angle_batched
+from cubercnn.util.math_util import mat2euler_torch, so3_relative_angle_batched
 
 logger = logging.getLogger(__name__)
 
@@ -103,19 +101,19 @@ class ROIHeads_Boxer(StandardROIHeads):
         ret["box_predictor"] = FastRCNNOutputs(cfg, ret['box_head'].output_shape)
         ret.update(cls._init_cube_head(cfg, input_shape))
         ret["priors"] = priors
-        ret['scorenet'] = ROI_HEADS_REGISTRY.get('ROIHeads_Score')(cfg, None, priors=None)
-        save_dir = cfg.OUTPUT_DIR
-        save_path = save_dir+'/model_recent.pth' #TODO: expose as config
-        if os.path.exists(save_dir):
-            model_weights = torch.load(save_path, map_location=cfg.MODEL.DEVICE)['model']
-            # must strip out the "roi_heads." from the keys to load the weights correctly
-            new_weights = OrderedDict()
-            for key,val in model_weights.items():
-                new_weights[key[10:]] = val
-            ret['scorenet'].load_state_dict(new_weights)
-            ret['scorenet'].eval()
-        else:
-            logger.info('No model found for scoring network, use OUTPUT_DIR output/ScoreNet (code looks for model_recent.pth)')
+        # ret['scorenet'] = ROI_HEADS_REGISTRY.get('ROIHeads_Score')(cfg, None, priors=None)
+        # save_dir = cfg.OUTPUT_DIR
+        # save_path = save_dir+'/model_recent.pth' #TODO: expose as config
+        # if os.path.exists(save_dir):
+        #     model_weights = torch.load(save_path, map_location=cfg.MODEL.DEVICE)['model']
+        #     # must strip out the "roi_heads." from the keys to load the weights correctly
+        #     new_weights = OrderedDict()
+        #     for key,val in model_weights.items():
+        #         new_weights[key[10:]] = val
+        #     ret['scorenet'].load_state_dict(new_weights)
+        #     ret['scorenet'].eval()
+        # else:
+        #     logger.info('No model found for scoring network, use OUTPUT_DIR output/ScoreNet (code looks for model_recent.pth)')
         return ret
     
     @classmethod
@@ -765,6 +763,7 @@ class ROIHeads3DScore(StandardROIHeads):
         loss_w_seg: float,
         loss_w_pose: float,
         loss_w_dims: float,
+        loss_w_normal_vec: float,
         use_confidence: float,
         inverse_z_weight: bool,
         z_type: str,
@@ -800,6 +799,7 @@ class ROIHeads3DScore(StandardROIHeads):
         self.loss_w_seg = loss_w_seg
         self.loss_w_pose = loss_w_pose
         self.loss_w_dims = loss_w_dims
+        self.loss_w_normal_vec = loss_w_normal_vec
 
         # loss modes
         self.disentangled_loss = disentangled_loss
@@ -899,6 +899,7 @@ class ROIHeads3DScore(StandardROIHeads):
             'loss_w_seg': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_SEG,
             'loss_w_pose': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_POSE,
             'loss_w_dims': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS,
+            'loss_w_normal_vec': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_NORMAL_VEC,
             'z_type': cfg.MODEL.ROI_CUBE_HEAD.Z_TYPE,
             'pose_type': cfg.MODEL.ROI_CUBE_HEAD.POSE_TYPE,
             'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED,
@@ -915,7 +916,7 @@ class ROIHeads3DScore(StandardROIHeads):
         }
 
 
-    def forward(self, images, images_raw, features, proposals, Ks, im_scales_ratio, segmentor, targets):
+    def forward(self, images, images_raw, ground_maps, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, targets):
 
         im_dims = [image.shape[1:] for image in images]
 
@@ -946,7 +947,7 @@ class ROIHeads3DScore(StandardROIHeads):
                 mask_per_image = self.object_masks(images_raw.tensor, targets, segmentor) # over all images in batch
                 masks_all_images = [sublist for outer_list in mask_per_image for sublist in outer_list]
 
-                instances_3d, losses_cube = self._forward_cube(features, proposals, Ks, im_dims, im_scales_ratio, masks_all_images, first_occurrence_indices)
+                instances_3d, losses_cube = self._forward_cube(features, proposals, Ks, im_dims, im_scales_ratio, masks_all_images, first_occurrence_indices, ground_maps, depth_maps)
                 losses.update(losses_cube)
 
             return instances_3d, losses
@@ -969,11 +970,12 @@ class ROIHeads3DScore(StandardROIHeads):
                 pred_instances = self._forward_box(features, proposals)
             
             if self.loss_w_3d > 0:
-                mask_per_image = self.object_masks(images_raw.tensor, targets, segmentor) # over all images in batch
+                # this will fail because the object mask function assume that proposals has gt_boxes field
+                mask_per_image = self.object_masks(images_raw.tensor, proposals, segmentor) # over all images in batch
                 masks_all_images = [sublist for outer_list in mask_per_image for sublist in outer_list]
                 del targets
 
-                pred_instances = self._forward_cube(features, pred_instances, Ks, im_dims, im_scales_ratio, masks_all_images)
+                pred_instances = self._forward_cube(features, pred_instances, Ks, im_dims, im_scales_ratio, masks_all_images, first_occurrence_indices, ground_maps, depth_maps)
             return pred_instances, {}
     
 
@@ -1109,7 +1111,54 @@ class ROIHeads3DScore(StandardROIHeads):
             return None
         return loss_pose * 1/(fail_count+1)
     
-    def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, masks_all_images, first_occurrence_indices):
+    def normal_vector_from_maps(self, ground_maps, depth_maps, use_nth=5):
+        '''compute a normal vector corresponding to the ground from a point ground generated from a depth map'''
+        # ### point cloud
+        dvc = depth_maps.device
+        z = depth_maps.tensor.squeeze()[:, ::use_nth,::use_nth]
+        focal_length_x, focal_length_y = z.shape[1], z.shape[0]
+        FINAL_WIDTH, FINAL_HEIGHT = z.shape[1], z.shape[0]
+        u, v = torch.meshgrid(torch.arange(FINAL_WIDTH, device=dvc), torch.arange(FINAL_HEIGHT,device=dvc), indexing='xy')
+        cx, cy = FINAL_WIDTH / 2, FINAL_HEIGHT / 2 # principal point of camera
+        # https://www.open3d.org/docs/0.7.0/python_api/open3d.geometry.create_point_cloud_from_depth_image.html
+        x = (u - cx) * z / focal_length_x
+        y = (v - cy) * z / focal_length_y
+        if ground_maps is not None:
+        # select only the points in x,y,z that are part of the ground map
+            ground = ground_maps.tensor.squeeze()[::use_nth,::use_nth]
+            zg = z[ground > 0]
+            xg = x[ground > 0]
+            yg = y[ground > 0]
+        else:
+            zg = z; xg = x; yg = y
+
+        # normalise the points
+        points = torch.stack((xg, yg, zg), axis=-1)#.reshape(-1, 3)
+        plane = Plane_cuda()
+        # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
+        best_eq, best_inliers = plane.fit_parallel(points, thresh=0.05, maxIteration=1000)
+        normal_vec = best_eq[:-1]
+
+        x_up = torch.tensor([1.0, 0.0, 0.0], device=dvc)
+        y_up = torch.tensor([0.0, 1.0, 0.0], device=dvc)
+        z_up = torch.tensor([0.0, 0.0, 1.0], device=dvc)
+        # make sure normal vector is consistent with y-up
+        if (normal_vec @ z_up).abs() > (normal_vec @ y_up).abs():
+            # this means the plane has been found as the back wall
+            # to rectify this we can turn the vector 90 degrees around the local x-axis
+            # note that this assumes that the walls are perpendicular to the floor
+            normal_vec = normal_vec.permute(0, 2, 1) * torch.tensor([1, 1, -1], device=dvc)
+        if (normal_vec @ x_up).abs() > (normal_vec @ y_up).abs():
+            # this means the plane has been found as the side wall
+            # to rectify this we can turn the vector 90 degrees around the local y-axis
+            # note that this assumes that the walls are perpendicular to the floor
+            normal_vec = normal_vec.permute(2, 0, 1) * torch.tensor([-1, 1, 1], device=dvc)
+        if normal_vec @ y_up < 0:
+            normal_vec *= -1
+
+        return normal_vec
+    
+    def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, masks_all_images, first_occurrence_indices, ground_maps, depth_maps):
         
         features = [features[f] for f in self.in_features]
 
@@ -1322,6 +1371,10 @@ class ROIHeads3DScore(StandardROIHeads):
             # Pull off necessary GT information
             gt_2d = gt_boxes3D[:, :2]
 
+            normal_vector = self.normal_vector_from_maps(ground_maps, depth_maps).repeat(len(cube_pose), 1)
+            pred_normal = cube_pose[:, 1, :]
+            ground_rot_loss = 1-F.cosine_similarity(normal_vector, pred_normal, dim=1).abs()#.mean()
+            
             # Create cubes
             cubes_tensor = torch.cat((cube_xy,cube_z.unsqueeze(1),cube_dims,cube_pose.reshape(n,9)),axis=1).unsqueeze(1)
             cubes = Cubes(cubes_tensor)
@@ -1350,6 +1403,7 @@ class ROIHeads3DScore(StandardROIHeads):
             
             loss_iou = generalized_box_iou_loss(gt_boxes_tensor, pred_boxes_tensor, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
 
+            # Pose
             loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
             
             # Segment
@@ -1364,6 +1418,9 @@ class ROIHeads3DScore(StandardROIHeads):
  
             if loss_pose is not None:
                 total_3D_loss_for_reporting += loss_pose*self.loss_w_pose
+
+            if ground_rot_loss is not None:
+                total_3D_loss_for_reporting += ground_rot_loss*self.loss_w_normal_vec
             
             # reporting does not need gradients
             total_3D_loss_for_reporting = total_3D_loss_for_reporting.detach()
@@ -1415,6 +1472,11 @@ class ROIHeads3DScore(StandardROIHeads):
             if loss_pose is not None:
                 losses.update({
                     prefix + 'loss_pose': self.safely_reduce_losses(loss_pose) * self.loss_w_pose * self.loss_w_3d, 
+                })
+            
+            if ground_rot_loss is not None:
+                losses.update({
+                    prefix + 'loss_normal_vec': self.safely_reduce_losses(ground_rot_loss) * self.loss_w_normal_vec * self.loss_w_3d,
                 })
 
             if loss_seg is not None:
