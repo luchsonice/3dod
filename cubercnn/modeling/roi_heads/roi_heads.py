@@ -1086,7 +1086,7 @@ class ROIHeads3DScore(StandardROIHeads):
         gt_mask = (gt_mask > 0.5).float()
         score = F.binary_cross_entropy(gt_mask,bube_mask) #mask_iou_loss(gt_mask[::4,::4], bube_mask[::4,::4])
 
-        return scores.mean()
+        return score
         #return 1 - scores.mean()
 
     def pose_loss(self, cube_pose:torch.Tensor, num_boxes_per_image:list[int]):
