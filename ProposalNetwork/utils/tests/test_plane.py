@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 # Load saved point cloud and visualize it
-pcd_load = o3d.io.read_point_cloud("ProposalNetwork/utils/caixa.ply")
+pcd_load = o3d.io.read_point_cloud("ProposalNetwork/utils/tests/caixa.ply")
 # o3d.visualization.draw_geometries([pcd_load])
 points = np.asarray(pcd_load.points)
 import time
