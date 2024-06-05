@@ -1,7 +1,7 @@
 _BASE_: "Base.yaml"
 SOLVER:
   TYPE: "sgd"
-  IMS_PER_BATCH: 2
+  IMS_PER_BATCH: 8
   BASE_LR: 0.001
   STEPS: (5000, 8000)
   MAX_ITER: 10000 #4972

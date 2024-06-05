@@ -5,8 +5,8 @@
 #BSUB -n 4
 #BSUB -q gpua100
 #BSUB -gpu 'num=1:mode=exclusive_process'
-#BSUB -W 6:00
-#BSUB -R 'rusage[mem=16GB]'
+#BSUB -W 12:00
+#BSUB -R 'rusage[mem=30GB]'
 #BSUB -R 'span[hosts=1]'
 #BSUB -B
 
@@ -14,6 +14,6 @@ source /work3/s194369/3dod_hpc_env/bin/activate
 export PYTHONPATH=/work3/s194369/3dod
 
 # Run evaluation
-python tools/train_score.py \
-    --config-file configs/ScoreNet.yaml \
-    OUTPUT_DIR output/ScoreNet
+python tools/train_net.py \
+    --config-file configs/Omni_combined.yaml \
+    OUTPUT_DIR output/Proposal_v1
