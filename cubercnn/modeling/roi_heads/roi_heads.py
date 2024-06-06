@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import logging
 
 import numpy as np
+import time
 
 from typing import Dict, List, Tuple
 import torch
@@ -1136,6 +1137,9 @@ class ROIHeads3DScore(StandardROIHeads):
                 # Check if too small or too big.
                 c = 1
                 if gt_area < pred_area: # NOTE has disadvantage when box has different shape, CAN FAIL TODO Change to checking each corner instead
+                    
+                    
+                    
                     while c <= max_count and gt_area < pred_area: 
                         # Decrease z
                         mod_cube_tensor = cube_tensor[0,0].clone()
@@ -1285,7 +1289,7 @@ class ROIHeads3DScore(StandardROIHeads):
                 im_idx.append(i)
         
         # forward predictions
-        cube_xy, cube_z, cube_dims, cube_pose, cube_uncert = self.cube_head(cube_features)
+        cube_2d_deltas, cube_z, cube_dims, cube_pose, cube_uncert = self.cube_head(cube_features)
         
         # simple indexing re-used commonly for selection purposes
         fg_inds = torch.arange(n)
@@ -1315,6 +1319,38 @@ class ROIHeads3DScore(StandardROIHeads):
             
             # if uncertainty is available, collect the per-category predictions.
             cube_uncert = cube_uncert[fg_inds, box_classes]
+        
+        cube_2d_deltas = cube_2d_deltas[fg_inds, box_classes, :]
+        
+        # apply our predicted deltas based on src boxes.
+        cube_x = src_ctr_x + src_widths * cube_2d_deltas[:, 0]
+        cube_y = src_ctr_y + src_heights * cube_2d_deltas[:, 1]
+        
+        cube_xy = torch.cat((cube_x.unsqueeze(1), cube_y.unsqueeze(1)), dim=1)
+
+        cube_dims_norm = cube_dims
+        
+        if self.dims_priors_enabled:
+            # gather prior dimensions
+            prior_dims = self.priors_dims_per_cat.detach().repeat([n, 1, 1, 1])[fg_inds, box_classes]
+            prior_dims_mean = prior_dims[:, 0, :]
+            prior_dims_std = prior_dims[:, 1, :]
+
+            if self.dims_priors_func == 'sigmoid':
+                prior_dims_min = (prior_dims_mean - 3*prior_dims_std).clip(0.0)
+                prior_dims_max = (prior_dims_mean + 3*prior_dims_std)
+                cube_dims = util.scaled_sigmoid(cube_dims_norm, min=prior_dims_min, max=prior_dims_max)
+            elif self.dims_priors_func == 'exp':
+                cube_dims = torch.exp(cube_dims_norm.clip(max=5)) * prior_dims_mean
+
+        else:
+            # no priors are used
+            cube_dims = torch.exp(cube_dims_norm.clip(max=5))
+        
+        if self.allocentric_pose:
+            # To compare with GTs, we need the pose to be egocentric, not allocentric
+            cube_pose_allocentric = cube_pose
+            cube_pose = util.R_from_allocentric(Ks_scaled_per_box, cube_pose, u=cube_x.detach(), v=cube_y.detach())
             
         cube_z = cube_z.squeeze()
         
@@ -1327,7 +1363,6 @@ class ROIHeads3DScore(StandardROIHeads):
             cube_z = torch.exp(cube_z)
 
         elif self.z_type == 'clusters':
-            
             # gather the mean depth, same operation as above, for a n x c result
             z_means = self.priors_z_stats[:, :, 0].T.unsqueeze(0).repeat([n, 1, 1])
             z_means = torch.gather(z_means, 1, assignments.unsqueeze(1)).squeeze(1)
@@ -1352,51 +1387,18 @@ class ROIHeads3DScore(StandardROIHeads):
         if self.virtual_depth:
             cube_z = (cube_z * virtual_to_real)
 
-        cube_dims_norm = cube_dims
-        
-        if self.dims_priors_enabled:
-            # gather prior dimensions
-            prior_dims = self.priors_dims_per_cat.detach().repeat([n, 1, 1, 1])[fg_inds, box_classes]
-            prior_dims_mean = prior_dims[:, 0, :]
-            prior_dims_std = prior_dims[:, 1, :]
-
-            if self.dims_priors_func == 'sigmoid':
-                prior_dims_min = (prior_dims_mean - 3*prior_dims_std).clip(0.0)
-                prior_dims_max = (prior_dims_mean + 3*prior_dims_std)
-                cube_dims = util.scaled_sigmoid(cube_dims_norm, min=prior_dims_min, max=prior_dims_max)
-            elif self.dims_priors_func == 'exp':
-                cube_dims = torch.exp(cube_dims_norm.clip(max=5)) * prior_dims_mean
-
-        else:
-            # no priors are used
-            cube_dims = torch.exp(cube_dims_norm.clip(max=5))
-
-        cube_xy = cube_xy[fg_inds, box_classes, :]
-
-        tmp_cubes = torch.cat((cube_xy,cube_z.unsqueeze(1),cube_dims,cube_pose.reshape(n,9)),axis=1).unsqueeze(1)
-        tmp_cubes = Cubes(tmp_cubes)
-        tmp_box = []
-        for i in range(tmp_cubes.num_instances):
-            tmp_box.append(cubes_to_box(tmp_cubes[i], Ks_scaled_per_box[i], im_sizes[i])[0].tensor[0])
-        tmp_box = torch.stack(tmp_box)
-        cube_x_px = tmp_box[:,0] + abs((tmp_box[:,2]-tmp_box[:,0])/2)
-        cube_y_px = tmp_box[:,1] + abs((tmp_box[:,3]-tmp_box[:,1])/2)
-
-        if self.allocentric_pose:
-            # To compare with GTs, we need the pose to be egocentric, not allocentric
-            cube_pose_allocentric = cube_pose
-            cube_pose = util.R_from_allocentric(Ks_scaled_per_box, cube_pose, u=cube_x_px.detach(), v=cube_y_px.detach())
-
         if self.training:
-
             prefix = 'Cube/'
             storage = get_event_storage()
 
             # Pull off necessary GT information
             gt_2d = gt_boxes3D[:, :2]
 
-            # Create cubes
-            cubes_tensor = torch.cat((cube_xy,cube_z.unsqueeze(1),cube_dims,cube_pose.reshape(n,9)),axis=1).unsqueeze(1)
+            # Get center in meters and create cubes
+            cube_x3d = cube_z * (cube_x - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
+            cube_y3d = cube_z * (cube_y - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
+
+            cubes_tensor = torch.cat((cube_x3d.unsqueeze(1),cube_y3d.unsqueeze(1),cube_z.unsqueeze(1),cube_dims,cube_pose.reshape(n,9)),axis=1).unsqueeze(1)
             cubes = Cubes(cubes_tensor)
 
             # Get bube corners
@@ -1415,23 +1417,41 @@ class ROIHeads3DScore(StandardROIHeads):
             proj_boxes = torch.stack(proj_boxes)
             
             ### Loss
+            loss_iou = None
+            loss_pose = None
+            loss_seg = None
+            loss_z = None
             # 2D IoU
             gt_boxes = [x.gt_boxes for x in proposals]
             gt_boxes_tensor = torch.cat([gt_boxes[i].tensor for i in range(len(gt_boxes))])
             pred_boxes_tensor = torch.cat([pred_boxes[i].tensor for i in range(len(pred_boxes))]) # TODO pred_boxes is wrong
             
+            a = time.time()
             loss_iou = generalized_box_iou_loss(gt_boxes_tensor, proj_boxes, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
+            b = time.time()
+            #print("Time loss_iou =", b-a)
 
+            """
             # Alignment
+            a = time.time()
             loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
-            
+            b = time.time()
+            print("Time loss_seg =", b-a)
+
             # Segment
+            a = time.time()
             loss_seg = torch.zeros(n, device=cubes.device)
             for i in range(n):
                 loss_seg[i] = self.segment_loss(masks_all_images[at_which_mask_idx[i]][0], bube_corners[i])
-
+            b = time.time()
+            print("Time loss_pose =", b-a)
+            
             # Z
+            a = time.time()
             loss_z = self.z_loss(pred_boxes_tensor, cubes, at_which_mask_idx, Ks_scaled_per_box, im_sizes)
+            b = time.time()
+            print("Time loss_z =", b-a)
+            """
 
             total_3D_loss_for_reporting = loss_iou*self.loss_w_iou
 
@@ -1514,8 +1534,8 @@ class ROIHeads3DScore(StandardROIHeads):
             cube_z = cube_z.unsqueeze(0)
 
         # inference
-        cube_x3d = cube_z * (cube_x_px - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
-        cube_y3d = cube_z * (cube_y_px - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
+        cube_x3d = cube_z * (cube_x - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
+        cube_y3d = cube_z * (cube_y - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
         cube_3D = torch.cat((torch.stack((cube_x3d, cube_y3d, cube_z)).T, cube_dims, cube_xy*im_ratios_per_box.unsqueeze(1)), dim=1)
 
         if self.use_confidence:
