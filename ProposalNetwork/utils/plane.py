@@ -92,7 +92,7 @@ class Plane:
         n_points = pts.shape[0]
 
         # Samples shape (maxIteration, 3) random points
-        id_samples = torch.stack([torch.randperm(n_points)[:3] for _ in range(maxIteration)])
+        id_samples = torch.tensor([random.sample(range(0, n_points), 3) for _ in range(maxIteration)],device=pts.device)
         pt_samples = pts[id_samples]
 
         # We have to find the plane equation described by those 3 points
