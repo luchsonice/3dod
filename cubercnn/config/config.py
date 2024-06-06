@@ -179,4 +179,4 @@ def get_cfg_defaults(cfg):
     cfg.TRAIN = CN(new_allowed=True)
     cfg.TRAIN.pseudo_gt = 'learn'
 
-    cfg.log = True
+    cfg.log = False

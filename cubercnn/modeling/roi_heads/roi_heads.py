@@ -1395,6 +1395,7 @@ class ROIHeads3DScore(StandardROIHeads):
             gt_2d = gt_boxes3D[:, :2]
 
             # Get center in meters and create cubes
+            #cube_z = gt_boxes3D[:,2]
             cube_x3d = cube_z * (cube_x - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
             cube_y3d = cube_z * (cube_y - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
 
