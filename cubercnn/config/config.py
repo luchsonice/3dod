@@ -124,7 +124,8 @@ def get_cfg_defaults(cfg):
 
     # ours
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_IOU = 1.0
-    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_SEG = 0.0
+    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_SEG = 0.033
+    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_Z = 0.05
 
     cfg.MODEL.DLA = CN()
 

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import logging
 
 import numpy as np
+import time
 
 from typing import Dict, List, Tuple
 import torch
@@ -486,29 +487,29 @@ class ROIHeads_Boxer(StandardROIHeads):
                 # scoring
                 bube_corners = pred_cubes[i].get_bube_corners(Ks_scaled_per_box, im_shape)
                 IoU2D_scores = score_iou(cubes_to_box(gt_cubes[i], Ks_scaled_per_box, im_shape)[0], pred_boxes[i])
-                #point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground).to(pred_cubes.device), pred_cubes[i])
-                #segment_scores = score_segmentation(mask_per_image_cpu[i][0], bube_corners)
+                point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground).to(pred_cubes.device), pred_cubes[i])
+                segment_scores = score_segmentation(mask_per_image_cpu[i][0], bube_corners)
                 dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0], gt_boxes[i], pred_boxes[i])
                 seg_mod_scores = score_mod_segmentation(mask_per_image_cpu[i][0], bube_corners)
-                #corners_scores = score_corners(mask_per_image_cpu[i][0], bube_corners)
+                corners_scores = score_corners(mask_per_image_cpu[i][0], bube_corners)
                 combined_score = np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu())#np.array(corners_scores.cpu())
-                #random_score = np.random.rand(number_of_proposals)
+                random_score = np.random.rand(number_of_proposals)
                 
-                #score_IoU2D[i,:] = self.accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)
-                #score_point_c[i,:] = self.accumulate_scores(point_cloud_scores.cpu().numpy(), IoU3D)
-                #score_seg[i,:] = self.accumulate_scores(segment_scores.numpy(), IoU3D)
-                #score_dim[i,:] = self.accumulate_scores(dim_scores.cpu().numpy(), IoU3D)
-                #score_seg_mod[i,:] = self.accumulate_scores(seg_mod_scores.cpu().numpy(), IoU3D)
-                #score_corner[i,:] = self.accumulate_scores(corners_scores.cpu().numpy(), IoU3D)
+                score_IoU2D[i,:] = self.accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)
+                score_point_c[i,:] = self.accumulate_scores(point_cloud_scores.cpu().numpy(), IoU3D)
+                score_seg[i,:] = self.accumulate_scores(segment_scores.numpy(), IoU3D)
+                score_dim[i,:] = self.accumulate_scores(dim_scores.cpu().numpy(), IoU3D)
+                score_seg_mod[i,:] = self.accumulate_scores(seg_mod_scores.cpu().numpy(), IoU3D)
+                score_corner[i,:] = self.accumulate_scores(corners_scores.cpu().numpy(), IoU3D)
                 score_combined[i,:] = self.accumulate_scores(combined_score, IoU3D)
-                #score_random[i,:] = self.accumulate_scores(random_score, IoU3D)
+                score_random[i,:] = self.accumulate_scores(random_score, IoU3D)
                 
                 score_to_use = combined_score
                 highest_score = np.argmax(score_to_use)
                 pred_cube = pred_cubes[i,highest_score]
                 
 
-
+                """
                 ### %%% Part TWO
                 highest_scores = np.argsort(score_to_use)[-10:][::-1]
                 cubes_tensor = pred_cubes[i].tensor[:,highest_scores.tolist()]
@@ -547,12 +548,13 @@ class ROIHeads_Boxer(StandardROIHeads):
                 score_to_use = combined_score
                 highest_score = np.argmax(score_to_use)
                 pred_cube = var_cubes[0,highest_score]
+                """
                 
                 gt_cube_meshes.append(gt_cubes[i].get_cubes().__getitem__(0).detach())
                 pred_cubes_out.scores[i] = torch.as_tensor(score_to_use[highest_score])
                 pred_cubes_out.tensor[i] = pred_cube.tensor[0]
-                #pred_boxes_out.append(pred_boxes[0][int(highest_score)])
-                pred_boxes_out.append(var_boxes[int(highest_score)])
+                pred_boxes_out.append(pred_boxes[0][int(highest_score)])
+                #pred_boxes_out.append(var_boxes[int(highest_score)])
 
                 # stats
                 sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
@@ -585,7 +587,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         
 
 @ROI_HEADS_REGISTRY.register()
-class ROIHeads_ScoreOLD(StandardROIHeads):
+class ROIHeads_Score(StandardROIHeads):
     '''The score prediction head.'''
 
     @configurable
@@ -764,6 +766,7 @@ class ROIHeads3DScore(StandardROIHeads):
         loss_w_pose: float,
         loss_w_dims: float,
         loss_w_normal_vec: float,
+        loss_w_z: float,
         use_confidence: float,
         inverse_z_weight: bool,
         z_type: str,
@@ -800,6 +803,7 @@ class ROIHeads3DScore(StandardROIHeads):
         self.loss_w_pose = loss_w_pose
         self.loss_w_dims = loss_w_dims
         self.loss_w_normal_vec = loss_w_normal_vec
+        self.loss_w_z = loss_w_z
 
         # loss modes
         self.disentangled_loss = disentangled_loss
@@ -900,6 +904,7 @@ class ROIHeads3DScore(StandardROIHeads):
             'loss_w_pose': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_POSE,
             'loss_w_dims': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS,
             'loss_w_normal_vec': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_NORMAL_VEC,
+            'loss_w_z': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_Z,
             'z_type': cfg.MODEL.ROI_CUBE_HEAD.Z_TYPE,
             'pose_type': cfg.MODEL.ROI_CUBE_HEAD.POSE_TYPE,
             'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED,
@@ -1169,6 +1174,67 @@ class ROIHeads3DScore(StandardROIHeads):
 
         return torch.stack(normal_vecs)
     
+    def z_loss(self, gt_boxes, cubes, idx_match, Ks, im_sizes):
+        max_count = 100
+        num_preds = cubes.num_instances
+
+        # Find original projection boxes
+        proj_boxes = []
+        for i in range(num_preds):
+            proj_boxes.append(cubes_to_box(cubes[i], Ks[i], im_sizes[i])[0].tensor[0])
+        proj_boxes = torch.stack(proj_boxes)
+
+        # Find losses
+        scores = torch.zeros((num_preds), device=cubes.device)
+        for i in range(num_preds):
+            gt_box = gt_boxes[idx_match[i]]
+            gt_area = torch.abs((gt_box[2]-gt_box[0])) * torch.abs((gt_box[3]-gt_box[1]))
+
+            pred_box = proj_boxes[i]
+            pred_center = [(pred_box[2]-pred_box[0])/2 + pred_box[0], (pred_box[3]-pred_box[1])/2 + pred_box[1]]
+            pred_area = torch.abs((pred_box[2]-pred_box[0])) * torch.abs((pred_box[3]-pred_box[1]))
+
+            # Check if pred center is within gt box
+            if gt_box[0] <= pred_center[0] <= gt_box[2] and gt_box[1] <= pred_center[1] <= gt_box[3]:
+                cube_tensor = cubes[i].tensor
+                # Check if too small or too big.
+                c = 1
+                if gt_area < pred_area: # NOTE has disadvantage when box has different shape, CAN FAIL TODO Change to checking each corner instead
+
+                    while c <= max_count and gt_area < pred_area: 
+                        # Decrease z
+                        mod_cube_tensor = cube_tensor[0,0].clone()
+                        mod_cube_tensor[2] += c/10
+                        mod_cube = Cubes(mod_cube_tensor)
+                        mod_box = cubes_to_box(mod_cube, Ks[i], im_sizes[i])[0].tensor[0]
+
+                        pred_area = torch.abs((mod_box[2]-mod_box[0])) * torch.abs((mod_box[3]-mod_box[1]))
+                        if pred_area == 0:
+                            c = 201
+                            break
+                        c += 1
+                else:
+                    while c <= max_count and gt_area > pred_area:
+                        # Increase z
+                        mod_cube_tensor = cube_tensor[0,0].clone()
+                        mod_cube_tensor[2] -= c/10
+                        mod_cube = Cubes(mod_cube_tensor)
+                        mod_box = cubes_to_box(mod_cube, Ks[i], im_sizes[i])[0].tensor[0]
+
+                        pred_area = torch.abs((mod_box[2]-mod_box[0])) * torch.abs((mod_box[3]-mod_box[1]))
+                        if pred_area == 0:
+                            c = 201
+                            break
+                        c += 1
+                
+                scores[i] = c-1
+                
+            else:
+                #If center is outside return something high?
+                scores[i] = 200
+        
+        return scores
+
     def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, masks_all_images, first_occurrence_indices, ground_maps, depth_maps):
         
         features = [features[f] for f in self.in_features]
@@ -1271,6 +1337,13 @@ class ROIHeads3DScore(StandardROIHeads):
         pred_heights = pred_src_boxes[:, 3] - pred_src_boxes[:, 1]
         pred_src_x = (pred_src_boxes[:, 2] + pred_src_boxes[:, 0]) * 0.5
         pred_src_y = (pred_src_boxes[:, 3] + pred_src_boxes[:, 1]) * 0.5
+
+        im_sizes = []
+        im_idx = []
+        for i,j in enumerate(num_boxes_per_image):
+            for _ in range(j):
+                im_sizes.append(list(im_current_dims[i]))
+                im_idx.append(i)
         
         # forward predictions
         cube_2d_deltas, cube_z, cube_dims, cube_pose, cube_uncert = self.cube_head(cube_features)
@@ -1315,7 +1388,6 @@ class ROIHeads3DScore(StandardROIHeads):
         cube_dims_norm = cube_dims
         
         if self.dims_priors_enabled:
-
             # gather prior dimensions
             prior_dims = self.priors_dims_per_cat.detach().repeat([n, 1, 1, 1])[fg_inds, box_classes]
             prior_dims_mean = prior_dims[:, 0, :]
@@ -1333,7 +1405,6 @@ class ROIHeads3DScore(StandardROIHeads):
             cube_dims = torch.exp(cube_dims_norm.clip(max=5))
         
         if self.allocentric_pose:
-            
             # To compare with GTs, we need the pose to be egocentric, not allocentric
             cube_pose_allocentric = cube_pose
             cube_pose = util.R_from_allocentric(Ks_scaled_per_box, cube_pose, u=cube_x.detach(), v=cube_y.detach())
@@ -1349,7 +1420,6 @@ class ROIHeads3DScore(StandardROIHeads):
             cube_z = torch.exp(cube_z)
 
         elif self.z_type == 'clusters':
-            
             # gather the mean depth, same operation as above, for a n x c result
             z_means = self.priors_z_stats[:, :, 0].T.unsqueeze(0).repeat([n, 1, 1])
             z_means = torch.gather(z_means, 1, assignments.unsqueeze(1)).squeeze(1)
@@ -1375,25 +1445,21 @@ class ROIHeads3DScore(StandardROIHeads):
             cube_z = (cube_z * virtual_to_real)
 
         if self.training:
-
             prefix = 'Cube/'
             storage = get_event_storage()
 
             # Pull off necessary GT information
             gt_2d = gt_boxes3D[:, :2]
-            
-            # Create cubes
-            cubes_tensor = torch.cat((cube_xy,cube_z.unsqueeze(1),cube_dims,cube_pose.reshape(n,9)),axis=1).unsqueeze(1)
+
+            # Get center in meters and create cubes
+            #cube_z = gt_boxes3D[:,2]
+            cube_x3d = cube_z * (cube_x - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
+            cube_y3d = cube_z * (cube_y - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
+
+            cubes_tensor = torch.cat((cube_x3d.unsqueeze(1),cube_y3d.unsqueeze(1),cube_z.unsqueeze(1),cube_dims,cube_pose.reshape(n,9)),axis=1).unsqueeze(1)
             cubes = Cubes(cubes_tensor)
 
             # Get bube corners
-            im_sizes = []
-            im_idx = []
-            for i,j in enumerate(num_boxes_per_image):
-                for _ in range(j):
-                    im_sizes.append(list(im_current_dims[i]))
-                    im_idx.append(i)
-
             bube_corners = torch.zeros((n,8,2))
             for i in range(n):
                 bube_corner = cubes[i].get_bube_corners(Ks_scaled_per_box[i], im_sizes[i]) 
@@ -1401,14 +1467,27 @@ class ROIHeads3DScore(StandardROIHeads):
                 y = torch.clamp(bube_corner[..., 1], 0, int(im_sizes[i][1]-1))
                 bube_corner = torch.stack((x, y), dim=-1)
                 bube_corners[i] = bube_corner
+
+            # Project to 2D
+            proj_boxes = []
+            for i in range(cubes.num_instances):
+                proj_boxes.append(cubes_to_box(cubes[i], Ks_scaled_per_box[i], im_sizes[i])[0].tensor[0])
+            proj_boxes = torch.stack(proj_boxes)
             
             ### Loss
+            loss_iou = None
+            loss_pose = None
+            loss_seg = None
+            loss_z = None
             # 2D IoU
             gt_boxes = [x.gt_boxes for x in proposals]
             gt_boxes_tensor = torch.cat([gt_boxes[i].tensor for i in range(len(gt_boxes))])
-            pred_boxes_tensor = torch.cat([pred_boxes[i].tensor for i in range(len(pred_boxes))])
+            pred_boxes_tensor = torch.cat([pred_boxes[i].tensor for i in range(len(pred_boxes))]) # TODO pred_boxes is wrong
             
-            loss_iou = generalized_box_iou_loss(gt_boxes_tensor, pred_boxes_tensor, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
+            # a = time.time()
+            loss_iou = generalized_box_iou_loss(gt_boxes_tensor, proj_boxes, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
+            # b = time.time()
+            #print("Time loss_iou =", b-a)
 
             # Pose
             loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
@@ -1420,10 +1499,27 @@ class ROIHeads3DScore(StandardROIHeads):
             ground_rot_loss = 1-F.cosine_similarity(normal_vectors, pred_normal, dim=1).abs()
             ground_rot_loss_confidence = 0.1 if ground_maps is None else 1.0
             
+            """
+            # Alignment
+            a = time.time()
+            loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
+            b = time.time()
+            print("Time loss_seg =", b-a)
+
             # Segment
+            a = time.time()
             loss_seg = torch.zeros(n, device=cubes.device)
             for i in range(n):
                 loss_seg[i] = self.segment_loss(masks_all_images[at_which_mask_idx[i]][0], bube_corners[i])
+            b = time.time()
+            print("Time loss_pose =", b-a)
+            
+            # Z
+            a = time.time()
+            loss_z = self.z_loss(pred_boxes_tensor, cubes, at_which_mask_idx, Ks_scaled_per_box, im_sizes)
+            b = time.time()
+            print("Time loss_z =", b-a)
+            """
 
             total_3D_loss_for_reporting = loss_iou*self.loss_w_iou
 
@@ -1435,11 +1531,12 @@ class ROIHeads3DScore(StandardROIHeads):
 
             if ground_rot_loss is not None:
                 total_3D_loss_for_reporting += ground_rot_loss * self.loss_w_normal_vec *  ground_rot_loss_confidence
+            if loss_z is not None:
+                total_3D_loss_for_reporting += loss_z*self.loss_w_z
             
             # reporting does not need gradients
             total_3D_loss_for_reporting = total_3D_loss_for_reporting.detach()
             
-
             # compute errors for tracking purposes
             xy_error = (cube_xy - gt_2d).detach().abs()
 
@@ -1496,6 +1593,11 @@ class ROIHeads3DScore(StandardROIHeads):
             if loss_seg is not None:
                 losses.update({
                     prefix + 'loss_seg': self.safely_reduce_losses(loss_seg) * self.loss_w_seg * self.loss_w_3d,
+                })
+
+            if loss_z is not None:
+                losses.update({
+                    prefix + 'loss_z': self.safely_reduce_losses(loss_z) * self.loss_w_z * self.loss_w_3d,
                 })
 
             

@@ -140,7 +140,7 @@ class CubeHead(nn.Module):
         # Z 
         self.bbox_3D_center_depth = nn.Linear(self._output_size, self.num_classes*cluster_bins)
         nn.init.normal_(self.bbox_3D_center_depth.weight, std=0.001)
-        nn.init.constant_(self.bbox_3D_center_depth.bias, 0)
+        nn.init.constant_(self.bbox_3D_center_depth.bias, 1) # NOTE Changed second input from 0 to 1
 
         # Optionally, box confidence
         if self.use_conf:

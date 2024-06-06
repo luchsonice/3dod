@@ -348,7 +348,7 @@ class RCNN3D_combined_features(nn.Module):
             features[layer] = torch.cat((img_feature, d_feature), dim=1)
         return features
 
-    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor=None):
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor):
         
         if not self.training:
             return self.inference(batched_inputs, segmentor) # segmentor is just none in inference because we dont need the loss
@@ -433,6 +433,7 @@ class RCNN3D_combined_features(nn.Module):
         else:
             proposals, _ = self.proposal_generator(images, features, None)
             features = self.cat_depth_features(features, images_raw)
+            # pred boxes are proposals
             results, _ = self.roi_heads(images, images_raw, ground_maps, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, None)
             
         if do_postprocess:

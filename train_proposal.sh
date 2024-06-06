@@ -5,8 +5,8 @@
 #BSUB -n 4
 #BSUB -q gpua100
 #BSUB -gpu 'num=1:mode=exclusive_process'
-#BSUB -W 12:00
-#BSUB -R 'rusage[mem=30GB]'
+#BSUB -W 10:00
+#BSUB -R 'rusage[mem=24GB]'
 #BSUB -R 'span[hosts=1]'
 #BSUB -B
 
