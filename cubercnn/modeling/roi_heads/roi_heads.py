@@ -36,7 +36,7 @@ from cubercnn import util
 
 from torchvision.ops import generalized_box_iou_loss
 
-from cubercnn.util.math_util import mat2euler_torch, so3_relative_angle_batched
+from cubercnn.util.math_util import so3_relative_angle_batched
 
 logger = logging.getLogger(__name__)
 
@@ -1115,48 +1115,59 @@ class ROIHeads3DScore(StandardROIHeads):
         '''compute a normal vector corresponding to the ground from a point ground generated from a depth map'''
         # ### point cloud
         dvc = depth_maps.device
-        z = depth_maps.tensor.squeeze()[:, ::use_nth,::use_nth]
-        focal_length_x, focal_length_y = z.shape[1], z.shape[0]
-        FINAL_WIDTH, FINAL_HEIGHT = z.shape[1], z.shape[0]
-        u, v = torch.meshgrid(torch.arange(FINAL_WIDTH, device=dvc), torch.arange(FINAL_HEIGHT,device=dvc), indexing='xy')
-        cx, cy = FINAL_WIDTH / 2, FINAL_HEIGHT / 2 # principal point of camera
-        # https://www.open3d.org/docs/0.7.0/python_api/open3d.geometry.create_point_cloud_from_depth_image.html
-        x = (u - cx) * z / focal_length_x
-        y = (v - cy) * z / focal_length_y
-        if ground_maps is not None:
-        # select only the points in x,y,z that are part of the ground map
-            ground = ground_maps.tensor.squeeze()[::use_nth,::use_nth]
-            zg = z[ground > 0]
-            xg = x[ground > 0]
-            yg = y[ground > 0]
-        else:
-            zg = z; xg = x; yg = y
+        normal_vecs = []
+        # i cannot really see any other options than to loop over the them because the images have different sizes
+        if ground_maps is None:
+            ground_maps = [None] * len(depth_maps)
+        for ground_map, depth_map, org_image_size in zip(ground_maps, depth_maps, depth_maps.image_sizes):
+            z = depth_map[::use_nth,::use_nth]
+            focal_length_x, focal_length_y = z.shape[1], z.shape[0]
+            u, v = torch.meshgrid(torch.arange(focal_length_x, device=dvc), torch.arange(focal_length_y,device=dvc), indexing='xy')
+            cx, cy = focal_length_x / 2, focal_length_y / 2 # principal point of camera
+            # https://www.open3d.org/docs/0.7.0/python_api/open3d.geometry.create_point_cloud_from_depth_image.html
+            x = (u - cx) * z / focal_length_x
+            y = (v - cy) * z / focal_length_y
+            if ground_map is not None:
+                # select only the points in x,y,z that are part of the ground map
+                ground = ground_map[::use_nth,::use_nth]
+                zg = z[ground > 0]
+                xg = x[ground > 0]
+                yg = y[ground > 0]
+            else:
+                # the ground map also works to remove the padded 0's to the depth maps
+                # so in the case the ground map is not available we must ensure to only select the valid part of the image
+                mask = torch.ones(org_image_size, device=dvc)
+                image_without_pad = mask[::use_nth,::use_nth]
+                zg = z[image_without_pad > 0]
+                xg = x[image_without_pad > 0]
+                yg = y[image_without_pad > 0]
 
-        # normalise the points
-        points = torch.stack((xg, yg, zg), axis=-1)#.reshape(-1, 3)
-        plane = Plane_cuda()
-        # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
-        best_eq, best_inliers = plane.fit_parallel(points, thresh=0.05, maxIteration=1000)
-        normal_vec = best_eq[:-1]
+            # normalise the points
+            points = torch.stack((xg, yg, zg), axis=-1)
+            plane = Plane_cuda()
+            # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
+            best_eq, best_inliers = plane.fit_parallel(points, thresh=0.05, maxIteration=1000)
+            normal_vec = best_eq[:-1]
 
-        x_up = torch.tensor([1.0, 0.0, 0.0], device=dvc)
-        y_up = torch.tensor([0.0, 1.0, 0.0], device=dvc)
-        z_up = torch.tensor([0.0, 0.0, 1.0], device=dvc)
-        # make sure normal vector is consistent with y-up
-        if (normal_vec @ z_up).abs() > (normal_vec @ y_up).abs():
-            # this means the plane has been found as the back wall
-            # to rectify this we can turn the vector 90 degrees around the local x-axis
-            # note that this assumes that the walls are perpendicular to the floor
-            normal_vec = normal_vec.permute(0, 2, 1) * torch.tensor([1, 1, -1], device=dvc)
-        if (normal_vec @ x_up).abs() > (normal_vec @ y_up).abs():
-            # this means the plane has been found as the side wall
-            # to rectify this we can turn the vector 90 degrees around the local y-axis
-            # note that this assumes that the walls are perpendicular to the floor
-            normal_vec = normal_vec.permute(2, 0, 1) * torch.tensor([-1, 1, 1], device=dvc)
-        if normal_vec @ y_up < 0:
-            normal_vec *= -1
+            x_up = torch.tensor([1.0, 0.0, 0.0], device=dvc)
+            y_up = torch.tensor([0.0, 1.0, 0.0], device=dvc)
+            z_up = torch.tensor([0.0, 0.0, 1.0], device=dvc)
+            # make sure normal vector is consistent with y-up
+            if (normal_vec @ z_up).abs() > (normal_vec @ y_up).abs():
+                # this means the plane has been found as the back wall
+                # to rectify this we can turn the vector 90 degrees around the local x-axis
+                # note that this assumes that the walls are perpendicular to the floor
+                normal_vec = normal_vec[torch.tensor([0,2,1], device=dvc)] * torch.tensor([1, 1, -1], device=dvc)
+            if (normal_vec @ x_up).abs() > (normal_vec @ y_up).abs():
+                # this means the plane has been found as the side wall
+                # to rectify this we can turn the vector 90 degrees around the local y-axis
+                # note that this assumes that the walls are perpendicular to the floor
+                normal_vec = normal_vec[torch.tensor([2,0,1], device=dvc)] * torch.tensor([-1, 1, 1], device=dvc)
+            if normal_vec @ y_up < 0:
+                normal_vec *= -1
+            normal_vecs.append(normal_vec)
 
-        return normal_vec
+        return torch.stack(normal_vecs)
     
     def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, masks_all_images, first_occurrence_indices, ground_maps, depth_maps):
         
@@ -1370,10 +1381,6 @@ class ROIHeads3DScore(StandardROIHeads):
 
             # Pull off necessary GT information
             gt_2d = gt_boxes3D[:, :2]
-
-            normal_vector = self.normal_vector_from_maps(ground_maps, depth_maps).repeat(len(cube_pose), 1)
-            pred_normal = cube_pose[:, 1, :]
-            ground_rot_loss = 1-F.cosine_similarity(normal_vector, pred_normal, dim=1).abs()#.mean()
             
             # Create cubes
             cubes_tensor = torch.cat((cube_xy,cube_z.unsqueeze(1),cube_dims,cube_pose.reshape(n,9)),axis=1).unsqueeze(1)
@@ -1405,6 +1412,13 @@ class ROIHeads3DScore(StandardROIHeads):
 
             # Pose
             loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
+
+            # normal vector to ground stuff
+            normal_vectors = self.normal_vector_from_maps(ground_maps, depth_maps)
+            normal_vectors = normal_vectors.repeat_interleave(torch.tensor(num_boxes_per_image,device=normal_vectors.device),0)
+            pred_normal = cube_pose[:, 1, :]
+            ground_rot_loss = 1-F.cosine_similarity(normal_vectors, pred_normal, dim=1).abs()
+            ground_rot_loss_confidence = 0.1 if ground_maps is None else 1.0
             
             # Segment
             loss_seg = torch.zeros(n, device=cubes.device)
@@ -1420,7 +1434,7 @@ class ROIHeads3DScore(StandardROIHeads):
                 total_3D_loss_for_reporting += loss_pose*self.loss_w_pose
 
             if ground_rot_loss is not None:
-                total_3D_loss_for_reporting += ground_rot_loss*self.loss_w_normal_vec
+                total_3D_loss_for_reporting += ground_rot_loss * self.loss_w_normal_vec *  ground_rot_loss_confidence
             
             # reporting does not need gradients
             total_3D_loss_for_reporting = total_3D_loss_for_reporting.detach()
@@ -1476,7 +1490,7 @@ class ROIHeads3DScore(StandardROIHeads):
             
             if ground_rot_loss is not None:
                 losses.update({
-                    prefix + 'loss_normal_vec': self.safely_reduce_losses(ground_rot_loss) * self.loss_w_normal_vec * self.loss_w_3d,
+                    prefix + 'loss_normal_vec': self.safely_reduce_losses(ground_rot_loss) * self.loss_w_normal_vec * self.loss_w_3d * ground_rot_loss_confidence,
                 })
 
             if loss_seg is not None:

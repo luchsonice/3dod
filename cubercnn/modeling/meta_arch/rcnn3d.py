@@ -312,15 +312,14 @@ class RCNN3D_combined_features(nn.Module):
         images = [self._move_to_current_device(x[img_type]) for x in batched_inputs]
         if normalise:
             images = [(x - self.pixel_mean) / self.pixel_std for x in images]
-        else:
-            if convert:
-                # convert from BGR to RGB
-                images = [x[[2,1,0],:,:] for x in images]
-            if to_float:
-                images = [x.float()/255.0 for x in images]
-            if NoOp:
-                images = ImageList.from_tensors(images,0,)
-                return images
+        if convert:
+            # convert from BGR to RGB
+            images = [x[[2,1,0],:,:] for x in images]
+        if to_float:
+            images = [x.float()/255.0 for x in images]
+        if NoOp:
+            images = ImageList.from_tensors(images)
+            return images
         images = ImageList.from_tensors(
             images,
             self.backbone.size_divisibility,
@@ -355,10 +354,13 @@ class RCNN3D_combined_features(nn.Module):
             return self.inference(batched_inputs, segmentor) # segmentor is just none in inference because we dont need the loss
 
         images = self.preprocess_image(batched_inputs)
+        # NOTE: images_raw are scaled to be padded to the same size as the largest. 
+        # This is necessary because the images are of different sizes, so to batch them they must each be the same size.
         images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
         # if we want depth maps they are there
         depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False, NoOp=True)
-        if batched_inputs[0]['ground_map'] is not None:
+        # Note if a single ground map in a batch is missing, we skip the ground map for the entire batch 
+        if not None in [i['ground_map'] for i in batched_inputs]:
             ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
             if not torch.count_nonzero(ground_maps.tensor): # for some reason there is a single ground map causing problems
                 print('no_ground for', batched_inputs[0]['image_id'])
