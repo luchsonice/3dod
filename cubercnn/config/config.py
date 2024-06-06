@@ -122,7 +122,8 @@ def get_cfg_defaults(cfg):
 
     # ours
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_IOU = 1.0
-    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_SEG = 0.0
+    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_SEG = 0.033
+    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_Z = 0.05
 
     cfg.MODEL.DLA = CN()
 
@@ -178,4 +179,4 @@ def get_cfg_defaults(cfg):
     cfg.TRAIN = CN(new_allowed=True)
     cfg.TRAIN.pseudo_gt = 'learn'
 
-    cfg.log = False
+    cfg.log = True
