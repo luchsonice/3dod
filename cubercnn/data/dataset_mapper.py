@@ -1,8 +1,8 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates
 import copy
 import logging
-import pickle
 from detectron2.config.config import configurable
+from detectron2.data.transforms.augmentation import AugmentationList
 import torch
 import numpy as np
 from detectron2.structures import BoxMode, Keypoints
@@ -113,6 +113,7 @@ class DatasetMapper3D(DatasetMapper):
         detection_utils.check_image_size(dataset_dict, image)
 
         aug_input = T.AugInput(image)
+        # state = torch.get_rng_state()
         transforms = self.augmentations(aug_input)
         image = aug_input.image
         image_shape = image.shape[:2]  # h, w
@@ -120,15 +121,24 @@ class DatasetMapper3D(DatasetMapper):
         # dont load ground map and depth map when 
         dp_img = Image.fromarray(np.load(dataset_dict["depth_image_path"])['depth'])
         dp_img = np.array(dp_img.resize(image.shape[:2][::-1], Image.NEAREST))
-        dataset_dict["depth_map"] = torch.as_tensor(np.ascontiguousarray(dp_img))
+        aug_input_dp = T.AugInput(dp_img)
+        aug_only_flip = AugmentationList(transforms[-1:])
+        # torch.set_rng_state(state)
+        transforms_dp = aug_only_flip(aug_input_dp)
+        dp_image = aug_input_dp.image
+        dataset_dict["depth_map"] = torch.as_tensor(np.ascontiguousarray(dp_image))
+
         #  ground image
         if 'ground_image_path' in dataset_dict:
             ground_img = Image.fromarray(np.load(dataset_dict["ground_image_path"])['mask'])
             ground_img = np.array(ground_img.resize(image.shape[:2][::-1], Image.NEAREST))
-            dataset_dict["ground_map"] = torch.as_tensor(np.ascontiguousarray(ground_img))
+            aug_input_gr = T.AugInput(ground_img)
+            transforms_gr = aug_only_flip(aug_input_gr)
+            gr_image = aug_input_gr.image
+            dataset_dict["ground_map"] = torch.as_tensor(np.ascontiguousarray(gr_image))
         else:
             dataset_dict["ground_map"] = None
-                                            
+
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
         # Therefore it's important to use torch.Tensor.
