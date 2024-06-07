@@ -1236,11 +1236,14 @@ class ROIHeads3DScore(StandardROIHeads):
             gt_z.append(depth_map[xy[:,1].long(), xy[:,0].long()])
         gt_z_o = torch.cat(gt_z)
         pred_z_o = torch.cat(pred_z_in)
-        l1loss = self.l1_loss(pred_z_o, gt_z_o)
+        # if object center outside frame assign a depth equal to the max depth in the image
+        value = depth_maps.tensor.max()
+        pred_z_o2 = F.pad(pred_z_o, (0, len(pred_xy)-len(pred_z_o)), value=value)
+        gt_z_o = F.pad(gt_z_o, (0, len(pred_xy)-len(pred_z_o)), value=value)
+        l1loss = self.l1_loss(pred_z_o2, gt_z_o)
         # value = (depth_maps.tensor.mean() - pred_z.mean()).abs().item() if pred_z_o.numel() == 0 else l1loss.max().item()
         # value = 10.0
-        value = depth_maps.tensor.max()
-        return F.pad(l1loss, (0, len(pred_xy) - len(l1loss)), value=value)
+        return l1loss
 
     def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, masks_all_images, first_occurrence_indices, ground_maps, depth_maps):
         
