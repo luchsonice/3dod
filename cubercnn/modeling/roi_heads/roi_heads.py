@@ -1174,15 +1174,9 @@ class ROIHeads3DScore(StandardROIHeads):
 
         return torch.stack(normal_vecs)
     
-    def z_loss(self, gt_boxes, cubes, idx_match, Ks, im_sizes):
-        max_count = 100
+    def z_loss(self, gt_boxes, cubes, idx_match, Ks, im_sizes, proj_boxes):
+        max_count = 50
         num_preds = cubes.num_instances
-
-        # Find original projection boxes
-        proj_boxes = []
-        for i in range(num_preds):
-            proj_boxes.append(cubes_to_box(cubes[i], Ks[i], im_sizes[i])[0].tensor[0])
-        proj_boxes = torch.stack(proj_boxes)
 
         # Find losses
         scores = torch.zeros((num_preds), device=cubes.device)
@@ -1465,13 +1459,12 @@ class ROIHeads3DScore(StandardROIHeads):
             loss_pose = None
             loss_seg = None
             loss_z = None
-            # 2D IoU
+            
             gt_boxes = [x.gt_boxes for x in proposals]
             gt_boxes_tensor = torch.cat([gt_boxes[i].tensor for i in range(len(gt_boxes))])
             pred_boxes_tensor = torch.cat([pred_boxes[i].tensor for i in range(len(pred_boxes))]) # TODO pred_boxes is wrong
             
-            
-            
+            # 2D IoU
             a = time.time()
             loss_iou = generalized_box_iou_loss(gt_boxes_tensor, proj_boxes, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
             b = time.time()
@@ -1486,13 +1479,6 @@ class ROIHeads3DScore(StandardROIHeads):
             pred_normal = cube_pose[:, 1, :]
             ground_rot_loss = 1-F.cosine_similarity(normal_vectors, pred_normal, dim=1).abs()
             ground_rot_loss_confidence = 0.1 if ground_maps is None else 1.0
-            
-            
-            # Alignment
-            a = time.time()
-            loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
-            b = time.time()
-            #print("Time loss_pose =", b-a)
 
             """
             # Segment
@@ -1509,7 +1495,7 @@ class ROIHeads3DScore(StandardROIHeads):
             loss_z = self.z_loss(pred_boxes_tensor, cubes, at_which_mask_idx, Ks_scaled_per_box, im_sizes, proj_boxes)
             b = time.time()
             #print("Time loss_z =", b-a)
-            #print('loss_z',loss_z)
+            print('loss_z',loss_z)
 
             total_3D_loss_for_reporting = loss_iou*self.loss_w_iou
 
