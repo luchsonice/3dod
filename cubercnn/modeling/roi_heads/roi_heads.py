@@ -1199,6 +1199,7 @@ class ROIHeads3DScore(StandardROIHeads):
                     mod_cube_tensor[:, 2] += values_tensor
                 else:
                     mod_cube_tensor[:, 2] -= values_tensor
+                    mod_cube_tensor[:, 2].clamp(min=0.6)
                 mod_cube = Cubes(mod_cube_tensor)
                 mod_box = cubes_to_box(mod_cube, Ks[i], im_sizes[i])[0].tensor
 
