@@ -1214,6 +1214,10 @@ class ROIHeads3DScore(StandardROIHeads):
                 scores[i] = torch.tensor(1.0 * max_count, requires_grad=True)
         
         return scores
+    
+    def pseudo_gt_z_loss(self, depth_maps, pred_xy, pred_z):
+        
+        return self.l1_loss()
 
     def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, masks_all_images, first_occurrence_indices, ground_maps, depth_maps):
         
