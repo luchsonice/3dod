@@ -1215,9 +1215,32 @@ class ROIHeads3DScore(StandardROIHeads):
         
         return scores
     
-    def pseudo_gt_z_loss(self, depth_maps, pred_xy, pred_z):
-        
-        return self.l1_loss()
+    def pseudo_gt_z_loss(self, depth_maps, pred_xy, pred_z, num_boxes_per_image):
+        '''Compute the pseudo ground truth z loss based on the depth map
+            for now, use the point in depth map corresponding to the center point of the pred box as the pseudo ground truth
+        Args:
+            depth_maps: detectron2 Imagelist
+            pred_xy: predicted centre. torch.Tensor of shape (N, 2)
+            pred_z: predicted z. torch.Tensor of shape (N, 1)
+        Returns:
+            z_loss: torch.Tensor of shape (N, 1)'''
+        gt_z = []
+        pred_z_in = []
+        for depth_map, xy, pred_z_i in zip(depth_maps, pred_xy.split(num_boxes_per_image), pred_z.split(num_boxes_per_image)):
+            h, w = depth_map.shape
+            y, x = xy[:,1], xy[:,0]
+            # remove points outside the image
+            mask = (x >= 0) & (x < w) & (y >= 0) & (y < h)
+            xy = xy[mask].long()
+            pred_z_in.append(pred_z_i[mask])
+            gt_z.append(depth_map[xy[:,1].long(), xy[:,0].long()])
+        gt_z_o = torch.cat(gt_z)
+        pred_z_o = torch.cat(pred_z_in)
+        l1loss = self.l1_loss(pred_z_o, gt_z_o)
+        # value = (depth_maps.tensor.mean() - pred_z.mean()).abs().item() if pred_z_o.numel() == 0 else l1loss.max().item()
+        # value = 10.0
+        value = depth_maps.tensor.max()
+        return F.pad(l1loss, (0, len(pred_xy) - len(l1loss)), value=value)
 
     def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, masks_all_images, first_occurrence_indices, ground_maps, depth_maps):
         
@@ -1463,26 +1486,28 @@ class ROIHeads3DScore(StandardROIHeads):
             loss_pose = None
             loss_seg = None
             loss_z = None
+            pseudo_gt_z_loss = None
             
             gt_boxes = [x.gt_boxes for x in proposals]
             gt_boxes_tensor = torch.cat([gt_boxes[i].tensor for i in range(len(gt_boxes))])
-            pred_boxes_tensor = torch.cat([pred_boxes[i].tensor for i in range(len(pred_boxes))]) # TODO pred_boxes is wrong
+            pred_boxes_tensor = torch.cat([pred_boxes[i].tensor for i in range(len(pred_boxes))])
             
             # 2D IoU
-            a = time.time()
             loss_iou = generalized_box_iou_loss(gt_boxes_tensor, proj_boxes, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
-            b = time.time()
-            #print("Time loss_iou =", b-a)
 
             # Pose
             loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
 
-            # normal vector to ground stuff
+            # normal vector to ground loss
+            num_boxes_per_image_tensor = torch.tensor(num_boxes_per_image,device=Ks_scaled_per_box.device)
             normal_vectors = self.normal_vector_from_maps(ground_maps, depth_maps)
-            normal_vectors = normal_vectors.repeat_interleave(torch.tensor(num_boxes_per_image,device=normal_vectors.device),0)
+            normal_vectors = normal_vectors.repeat_interleave(num_boxes_per_image_tensor, 0)
             pred_normal = cube_pose[:, 1, :]
             ground_rot_loss = 1-F.cosine_similarity(normal_vectors, pred_normal, dim=1).abs()
             ground_rot_loss_confidence = 0.1 if ground_maps is None else 1.0
+
+            # pseudo ground truth z loss
+            pseudo_gt_z_loss = self.pseudo_gt_z_loss(depth_maps, cube_xy, cube_z, num_boxes_per_image)
 
             """
             # Segment
@@ -1495,11 +1520,7 @@ class ROIHeads3DScore(StandardROIHeads):
             #print(loss_seg.requires_grad)
             """
             # Z
-            a = time.time()
-            loss_z = self.z_loss(pred_boxes_tensor, cubes, at_which_mask_idx, Ks_scaled_per_box, im_sizes, proj_boxes)
-            b = time.time()
-            #print("Time loss_z =", b-a)
-            print('loss_z',loss_z)
+            # loss_z = self.z_loss(pred_boxes_tensor, cubes, at_which_mask_idx, Ks_scaled_per_box, im_sizes, proj_boxes)
 
             total_3D_loss_for_reporting = loss_iou*self.loss_w_iou
 
@@ -1513,6 +1534,8 @@ class ROIHeads3DScore(StandardROIHeads):
                 total_3D_loss_for_reporting += ground_rot_loss * self.loss_w_normal_vec *  ground_rot_loss_confidence
             if loss_z is not None:
                 total_3D_loss_for_reporting += loss_z*self.loss_w_z
+            if pseudo_gt_z_loss is not None:
+                total_3D_loss_for_reporting += pseudo_gt_z_loss*self.loss_w_z
             
             # reporting does not need gradients
             total_3D_loss_for_reporting = total_3D_loss_for_reporting.detach()
@@ -1579,9 +1602,11 @@ class ROIHeads3DScore(StandardROIHeads):
                 losses.update({
                     prefix + 'loss_z': self.safely_reduce_losses(loss_z) * self.loss_w_z * self.loss_w_3d,
                 })
-
-            
-            
+            if pseudo_gt_z_loss is not None:
+                losses.update({
+                    prefix + 'pseudo_gt_z_loss': self.safely_reduce_losses(pseudo_gt_z_loss) * self.loss_w_z * self.loss_w_3d,
+                })
+ 
         '''
         Inference
         '''
