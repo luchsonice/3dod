@@ -312,15 +312,14 @@ class RCNN3D_combined_features(nn.Module):
         images = [self._move_to_current_device(x[img_type]) for x in batched_inputs]
         if normalise:
             images = [(x - self.pixel_mean) / self.pixel_std for x in images]
-        else:
-            if convert:
-                # convert from BGR to RGB
-                images = [x[[2,1,0],:,:] for x in images]
-            if to_float:
-                images = [x.float()/255.0 for x in images]
-            if NoOp:
-                images = ImageList.from_tensors(images,0,)
-                return images
+        if convert:
+            # convert from BGR to RGB
+            images = [x[[2,1,0],:,:] for x in images]
+        if to_float:
+            images = [x.float()/255.0 for x in images]
+        if NoOp:
+            images = ImageList.from_tensors(images)
+            return images
         images = ImageList.from_tensors(
             images,
             self.backbone.size_divisibility,
@@ -355,7 +354,19 @@ class RCNN3D_combined_features(nn.Module):
             return self.inference(batched_inputs, segmentor) # segmentor is just none in inference because we dont need the loss
 
         images = self.preprocess_image(batched_inputs)
+        # NOTE: images_raw are scaled to be padded to the same size as the largest. 
+        # This is necessary because the images are of different sizes, so to batch them they must each be the same size.
         images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
+        # if we want depth maps they are there
+        depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False, NoOp=True)
+        # Note if a single ground map in a batch is missing, we skip the ground map for the entire batch 
+        if not None in [i['ground_map'] for i in batched_inputs]:
+            ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
+            if not torch.count_nonzero(ground_maps.tensor): # for some reason there is a single ground map causing problems
+                print('no_ground for', batched_inputs[0]['image_id'])
+                ground_maps = None
+        else:
+            ground_maps = None
 
         # scaling factor for the sample relative to its original scale
         # e.g., how much has the image been upsampled by? or downsampled?
@@ -373,7 +384,7 @@ class RCNN3D_combined_features(nn.Module):
         features = self.cat_depth_features(features, images_raw)
         
         instances, detector_losses = self.roi_heads(
-            images, images_raw, features, proposals, 
+            images, images_raw, ground_maps, depth_maps, features, proposals, 
             Ks, im_scales_ratio, 
             segmentor, 
             gt_instances
@@ -400,6 +411,9 @@ class RCNN3D_combined_features(nn.Module):
 
         images = self.preprocess_image(batched_inputs)
         images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
+        # do we assume no access to ground maps in inference?
+        ground_maps = None
+        depth_maps = None
 
         # scaling factor for the sample relative to its original scale
         # e.g., how much has the image been upsampled by? or downsampled?
@@ -413,13 +427,14 @@ class RCNN3D_combined_features(nn.Module):
         # Pass oracle 2D boxes into the RoI heads
         if type(batched_inputs == list) and np.any(['oracle2D' in b for b in batched_inputs]):
             oracles = [b['oracle2D'] for b in batched_inputs]
-            results, _ = self.roi_heads(images, images_raw, features, oracles, Ks, im_scales_ratio, segmentor, None)
+            results, _ = self.roi_heads(images, images_raw, ground_maps, depth_maps, features, oracles, Ks, im_scales_ratio, segmentor, None)
         
         # normal inference
         else:
             proposals, _ = self.proposal_generator(images, features, None)
             features = self.cat_depth_features(features, images_raw)
-            results, _ = self.roi_heads(images, images_raw, features, proposals, Ks, im_scales_ratio, segmentor, None) # pred_boxes instead of None
+            # pred boxes are proposals
+            results, _ = self.roi_heads(images, images_raw, ground_maps, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, None)
             
         if do_postprocess:
             assert not torch.jit.is_scripting(), "Scripting is not supported for postprocess."
@@ -663,11 +678,10 @@ class BoxNet(nn.Module):
             depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False, NoOp=True)
             if batched_inputs[0]['ground_map'] is not None:
                 ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
-                if not torch.count_nonzero(ground_maps.tensor):
+                if not torch.count_nonzero(ground_maps.tensor): # for some reason there is a single ground map causing problems
                     print('no_ground for', batched_inputs[0]['image_id'])
                     ground_maps = None
             else:
-                #logger.info("ground map file not found, setting to None")
                 ground_maps = None
             # scaling factor for the sample relative to its original scale
             # e.g., how much has the image been upsampled by? or downsampled?
@@ -719,8 +733,8 @@ class BoxNet(nn.Module):
                 gt_instances = None
             features, proposals = None, gt_instances
 
-        combined_features = self.scorenet_base.forward_features(images, images_raw)
-
+        # combined_features = self.scorenet_base.forward_features(images, images_raw)
+        combined_features = None
         # is it necessary to resize images back???
 
         # use the mask and the 2D box to predict the 3D box

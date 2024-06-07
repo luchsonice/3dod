@@ -119,6 +119,8 @@ def get_cfg_defaults(cfg):
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_Z = 1.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS = 1.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_POSE = 1.0
+    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_NORMAL_VEC = 1.0
+
 
     # ours
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_IOU = 1.0
