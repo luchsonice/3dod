@@ -1199,7 +1199,6 @@ class ROIHeads3DScore(StandardROIHeads):
                     mod_cube_tensor[:, 2] += values_tensor
                 else:
                     mod_cube_tensor[:, 2] -= values_tensor
-                    mod_cube_tensor[:, 2].clamp(min=0.6)
                 mod_cube = Cubes(mod_cube_tensor)
                 mod_box = cubes_to_box(mod_cube, Ks[i], im_sizes[i])[0].tensor
 
@@ -1214,7 +1213,7 @@ class ROIHeads3DScore(StandardROIHeads):
                 #If center is outside return something high?
                 scores[i] = torch.tensor(0.1 * max_count, requires_grad=True)
         
-        return scores
+        return scores/2
     
     def pseudo_gt_z_loss(self, depth_maps, pred_xy, pred_z):
         
@@ -1498,6 +1497,8 @@ class ROIHeads3DScore(StandardROIHeads):
             #b = time.time()
             #print("Time loss_z =", b-a)
             #print('loss_z',loss_z)
+
+            
 
             total_3D_loss_for_reporting = loss_iou*self.loss_w_iou
 
