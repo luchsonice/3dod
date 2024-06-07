@@ -1174,14 +1174,14 @@ class ROIHeads3DScore(StandardROIHeads):
 
         return torch.stack(normal_vecs)
     
-    def z_loss(self, gt_boxes, cubes, idx_match, Ks, im_sizes, proj_boxes):
+    def z_loss(self, gt_boxes, cubes, Ks, im_sizes, proj_boxes):
         max_count = 50
         num_preds = cubes.num_instances
 
         # Find losses
         scores = torch.zeros((num_preds), device=cubes.device)
         for i in range(num_preds):
-            gt_box = gt_boxes[idx_match[i]]
+            gt_box = gt_boxes[i]
             gt_area = torch.abs((gt_box[2]-gt_box[0])) * torch.abs((gt_box[3]-gt_box[1]))
 
             pred_box = proj_boxes[i]
@@ -1189,29 +1189,30 @@ class ROIHeads3DScore(StandardROIHeads):
             pred_area = torch.abs((pred_box[2]-pred_box[0])) * torch.abs((pred_box[3]-pred_box[1]))
 
             # Check if pred center is within gt box
-            if gt_box[0] <= pred_center[0] <= gt_box[2] and gt_box[1] <= pred_center[1] <= gt_box[3]:
+            if gt_box[0]-max_count <= pred_center[0] <= gt_box[2]+max_count and gt_box[1]-max_count <= pred_center[1] <= gt_box[3]+max_count:
                 cube_tensor = cubes[i].tensor
                 mod_cube_tensor = cube_tensor[0,0].clone().unsqueeze(0).repeat((max_count,1))
-                values_tensor = torch.linspace(1/10, max_count/10, max_count, device=cubes.device)
+                values_tensor = torch.linspace(0.0, (max_count-1)/10, max_count, device=cubes.device)
                 
                 # Check if too small or too big.
                 if gt_area < pred_area: # NOTE has disadvantage when box has different shape, CAN FAIL TODO Change to checking each corner instead
                     mod_cube_tensor[:, 2] += values_tensor
                 else:
                     mod_cube_tensor[:, 2] -= values_tensor
-
+                    mod_cube_tensor[:, 2].clamp(min=0.6)
                 mod_cube = Cubes(mod_cube_tensor)
                 mod_box = cubes_to_box(mod_cube, Ks[i], im_sizes[i])[0].tensor
 
                 pred_areas = torch.abs((mod_box[:,2]-mod_box[:,0])) * torch.abs((mod_box[:,3]-mod_box[:,1]))
-                mask_zero_area = (pred_areas == 0) * 1000000
+                mask_zero_area = (pred_areas == 0) * 10000000
                 pred_areas = pred_areas + mask_zero_area
-                scaler = torch.argmin(self.l1_loss(gt_area.repeat(max_count), pred_areas)) + torch.tensor(0.01)
-                scores[i] = self.l1_loss(gt_area, pred_areas[0]) * scaler/gt_area
+                idx = torch.argmin(self.l1_loss(gt_area.repeat(max_count), pred_areas))
+                #print(mod_cube_tensor[0,2].detach().item(), (gt_area < pred_area).item(), idx.detach().item()/10,idx_match[i])
+                scores[i] = self.l1_loss(cubes[i].tensor[0,0,2], mod_cube_tensor[idx,2])
                 
             else:
                 #If center is outside return something high?
-                scores[i] = torch.tensor(1.0 * max_count, requires_grad=True)
+                scores[i] = torch.tensor(0.1 * max_count, requires_grad=True)
         
         return scores
     
@@ -1523,9 +1524,9 @@ class ROIHeads3DScore(StandardROIHeads):
             loss_z = None
             pseudo_gt_z_loss = None
             
+            # 2D IoU
             gt_boxes = [x.gt_boxes for x in proposals]
             gt_boxes_tensor = torch.cat([gt_boxes[i].tensor for i in range(len(gt_boxes))])
-            pred_boxes_tensor = torch.cat([pred_boxes[i].tensor for i in range(len(pred_boxes))])
             
             # 2D IoU
             loss_iou = generalized_box_iou_loss(gt_boxes_tensor, proj_boxes, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
@@ -1547,6 +1548,7 @@ class ROIHeads3DScore(StandardROIHeads):
 
             """
             # Segment
+            
             a = time.time()
             loss_seg = torch.zeros(n, device=cubes.device)
             for i in range(n):
@@ -1555,8 +1557,13 @@ class ROIHeads3DScore(StandardROIHeads):
             #print("Time loss_seg =", b-a)
             #print(loss_seg.requires_grad)
             """
+            
             # Z
-            # loss_z = self.z_loss(pred_boxes_tensor, cubes, at_which_mask_idx, Ks_scaled_per_box, im_sizes, proj_boxes)
+            #a = time.time()
+            loss_z = self.z_loss(gt_boxes_tensor, cubes, Ks_scaled_per_box, im_sizes, proj_boxes)
+            #b = time.time()
+            #print("Time loss_z =", b-a)
+            #print('loss_z',loss_z)
 
             total_3D_loss_for_reporting = loss_iou*self.loss_w_iou
 
