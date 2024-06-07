@@ -1215,7 +1215,7 @@ class ROIHeads3DScore(StandardROIHeads):
         
         return scores
     
-    def pseudo_gt_z_loss(self, depth_maps, pred_xy, pred_z, num_boxes_per_image):
+    def pseudo_gt_z_loss(self, depth_maps, proposal_boxes:Boxes, pred_z, num_boxes_per_image):
         '''Compute the pseudo ground truth z loss based on the depth map
             for now, use the point in depth map corresponding to the center point of the pred box as the pseudo ground truth
         Args:
@@ -1226,23 +1226,26 @@ class ROIHeads3DScore(StandardROIHeads):
             z_loss: torch.Tensor of shape (N, 1)'''
         gt_z = []
         pred_z_in = []
-        for depth_map, xy, pred_z_i in zip(depth_maps, pred_xy.split(num_boxes_per_image), pred_z.split(num_boxes_per_image)):
+        for depth_map, boxes, pred_z_i in zip(depth_maps, proposal_boxes, pred_z.split(num_boxes_per_image)):
             h, w = depth_map.shape
-            y, x = xy[:,1], xy[:,0]
-            # remove points outside the image
-            mask = (x >= 0) & (x < w) & (y >= 0) & (y < h)
-            xy = xy[mask].long()
+            # x1, y1, x2, y2 = box
+            # clamp boxes extending the image
+            boxes.clip((h, w))
+            # remove boxes fully outside the image
+            mask = boxes.area() > 0
+            boxes = boxes[mask]
             pred_z_in.append(pred_z_i[mask])
-            gt_z.append(depth_map[xy[:,1].long(), xy[:,0].long()])
-        gt_z_o = torch.cat(gt_z)
+            # median of each of the depth maps corresponding each box
+            for box in boxes:
+                # TODO: this could be way more efficiently, but I don't know how to slice many boxes at once
+                gt_z.append(torch.median((depth_map[box[1].long():box[3].long(), box[0].long():box[2].long()])))
+        gt_z_o = torch.stack(gt_z)
         pred_z_o = torch.cat(pred_z_in)
         # if object center outside frame assign a depth equal to the max depth in the image
         value = depth_maps.tensor.max()
-        pred_z_o2 = F.pad(pred_z_o, (0, len(pred_xy)-len(pred_z_o)), value=value)
-        gt_z_o = F.pad(gt_z_o, (0, len(pred_xy)-len(pred_z_o)), value=value)
+        pred_z_o2 = F.pad(pred_z_o, (0, len(pred_z)-len(pred_z_o)), value=value)
+        gt_z_o = F.pad(gt_z_o, (0, len(pred_z)-len(pred_z_o)), value=value)
         l1loss = self.l1_loss(pred_z_o2, gt_z_o)
-        # value = (depth_maps.tensor.mean() - pred_z.mean()).abs().item() if pred_z_o.numel() == 0 else l1loss.max().item()
-        # value = 10.0
         return l1loss
 
     def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, masks_all_images, first_occurrence_indices, ground_maps, depth_maps):
@@ -1510,7 +1513,7 @@ class ROIHeads3DScore(StandardROIHeads):
             ground_rot_loss_confidence = 0.1 if ground_maps is None else 1.0
 
             # pseudo ground truth z loss
-            pseudo_gt_z_loss = self.pseudo_gt_z_loss(depth_maps, cube_xy, cube_z, num_boxes_per_image)
+            pseudo_gt_z_loss = self.pseudo_gt_z_loss(depth_maps, proposal_boxes_scaled, cube_z, num_boxes_per_image)
 
             """
             # Segment
