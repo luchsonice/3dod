@@ -1215,13 +1215,14 @@ class ROIHeads3DScore(StandardROIHeads):
         
         return scores
     
-    def pseudo_gt_z_loss(self, depth_maps, proposal_boxes:Boxes, pred_z, num_boxes_per_image):
+    def pseudo_gt_z_loss_box(self, depth_maps, proposal_boxes:Boxes, pred_z, num_boxes_per_image):
         '''Compute the pseudo ground truth z loss based on the depth map
-            for now, use the point in depth map corresponding to the center point of the pred box as the pseudo ground truth
+            for now, use the median value depth constrained of the proposal box as the ground truth depth
         Args:
             depth_maps: detectron2 Imagelist
-            pred_xy: predicted centre. torch.Tensor of shape (N, 2)
+            proposal_boxes: predicted 2d box. detectron2 Boxes of shape (N, 4)
             pred_z: predicted z. torch.Tensor of shape (N, 1)
+            num_boxes_per_image: list of number of boxes per image
         Returns:
             z_loss: torch.Tensor of shape (N, 1)'''
         gt_z = []
@@ -1245,6 +1246,34 @@ class ROIHeads3DScore(StandardROIHeads):
         value = depth_maps.tensor.max()
         pred_z_o2 = F.pad(pred_z_o, (0, len(pred_z)-len(pred_z_o)), value=value)
         gt_z_o = F.pad(gt_z_o, (0, len(pred_z)-len(pred_z_o)), value=value)
+        l1loss = self.l1_loss(pred_z_o2, gt_z_o)
+        return l1loss
+    
+    def pseudo_gt_z_loss_point(self, depth_maps, pred_xy, pred_z, num_boxes_per_image):
+        '''Compute the pseudo ground truth z loss based on the depth map
+            for now, use the point in depth map corresponding to the center point of the pred box as the pseudo ground truth
+        Args:
+            depth_maps: detectron2 Imagelist
+            pred_xy: predicted centre. torch.Tensor of shape (N, 2)
+            pred_z: predicted z. torch.Tensor of shape (N, 1)
+        Returns:
+            z_loss: torch.Tensor of shape (N, 1)'''
+        gt_z = []
+        pred_z_in = []
+        for depth_map, xy, pred_z_i in zip(depth_maps, pred_xy.split(num_boxes_per_image), pred_z.split(num_boxes_per_image)):
+            h, w = depth_map.shape
+            y, x = xy[:,1], xy[:,0]
+            # remove points outside the image
+            mask = (x >= 0) & (x < w) & (y >= 0) & (y < h)
+            xy = xy[mask].long()
+            pred_z_in.append(pred_z_i[mask])
+            gt_z.append(depth_map[xy[:,1].long(), xy[:,0].long()])
+        gt_z_o = torch.cat(gt_z)
+        pred_z_o = torch.cat(pred_z_in)
+        # if object center outside frame assign a depth equal to the max depth in the image
+        value = depth_maps.tensor.max()
+        pred_z_o2 = F.pad(pred_z_o, (0, len(pred_xy)-len(pred_z_o)), value=value)
+        gt_z_o = F.pad(gt_z_o, (0, len(pred_xy)-len(pred_z_o)), value=value)
         l1loss = self.l1_loss(pred_z_o2, gt_z_o)
         return l1loss
 
@@ -1513,7 +1542,8 @@ class ROIHeads3DScore(StandardROIHeads):
             ground_rot_loss_confidence = 0.1 if ground_maps is None else 1.0
 
             # pseudo ground truth z loss
-            pseudo_gt_z_loss = self.pseudo_gt_z_loss(depth_maps, proposal_boxes_scaled, cube_z, num_boxes_per_image)
+            pseudo_gt_z_loss = self.pseudo_gt_z_loss_box(depth_maps, proposal_boxes_scaled, cube_z, num_boxes_per_image)
+            # pseudo_gt_z_loss_point = self.pseudo_gt_z_loss_point(depth_maps, cube_xy, cube_z, num_boxes_per_image)
 
             """
             # Segment
