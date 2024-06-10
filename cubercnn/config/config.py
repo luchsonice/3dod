@@ -117,15 +117,12 @@ def get_cfg_defaults(cfg):
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_3D = 1.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_XY = 1.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_Z = 1.0
-    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS = 1.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_POSE = 1.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_NORMAL_VEC = 1.0
-
-
-    # ours
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_IOU = 1.0
-    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_SEG = 0.033
+    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_SEG = 1.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_Z = 1.0
+    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIM = 1.0
 
     cfg.MODEL.DLA = CN()
 
@@ -181,4 +178,4 @@ def get_cfg_defaults(cfg):
     cfg.TRAIN = CN(new_allowed=True)
     cfg.TRAIN.pseudo_gt = 'learn'
 
-    cfg.log = False
+    cfg.log = True
