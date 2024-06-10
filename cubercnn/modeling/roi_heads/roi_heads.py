@@ -764,9 +764,9 @@ class ROIHeads3DScore(StandardROIHeads):
         loss_w_iou: float,
         loss_w_seg: float,
         loss_w_pose: float,
-        loss_w_dims: float,
         loss_w_normal_vec: float,
         loss_w_z: float,
+        loss_w_dim: float,
         use_confidence: float,
         inverse_z_weight: bool,
         z_type: str,
@@ -801,9 +801,9 @@ class ROIHeads3DScore(StandardROIHeads):
         self.loss_w_iou = loss_w_iou
         self.loss_w_seg = loss_w_seg
         self.loss_w_pose = loss_w_pose
-        self.loss_w_dims = loss_w_dims
         self.loss_w_normal_vec = loss_w_normal_vec
         self.loss_w_z = loss_w_z
+        self.loss_w_dim = loss_w_dim
 
         # loss modes
         self.disentangled_loss = disentangled_loss
@@ -902,7 +902,7 @@ class ROIHeads3DScore(StandardROIHeads):
             'loss_w_iou': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_IOU,
             'loss_w_seg': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_SEG,
             'loss_w_pose': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_POSE,
-            'loss_w_dims': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS,
+            'loss_w_dim': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIM,
             'loss_w_normal_vec': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_NORMAL_VEC,
             'loss_w_z': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_Z,
             'z_type': cfg.MODEL.ROI_CUBE_HEAD.Z_TYPE,
@@ -1206,7 +1206,7 @@ class ROIHeads3DScore(StandardROIHeads):
                 mask_zero_area = (pred_areas == 0) * 10000000
                 pred_areas = pred_areas + mask_zero_area
                 idx = torch.argmin(self.l1_loss(gt_area.repeat(max_count), pred_areas))
-                #print(mod_cube_tensor[0,2].detach().item(), (gt_area < pred_area).item(), idx.detach().item()/10,idx_match[i])
+                
                 scores[i] = self.l1_loss(cubes[i].tensor[0,0,2], mod_cube_tensor[idx,2])
                 
             else:
@@ -1248,6 +1248,23 @@ class ROIHeads3DScore(StandardROIHeads):
         gt_z_o = F.pad(gt_z_o, (0, len(pred_z)-len(pred_z_o)), value=value)
         l1loss = self.l1_loss(pred_z_o2, gt_z_o)
         return l1loss
+    
+    def dim_loss(self, priors, dimensions, gt_boxes, pred_boxes):
+        '''
+        priors   : List
+        dimensions : List of Lists
+        P(dim|priors)
+        '''
+        [prior_mean, prior_std] = priors
+        dimensions_scores = torch.exp(-1/2 * ((dimensions - prior_mean)/prior_std)**2)
+        scores = dimensions_scores.mean(1)
+
+        gt_ratio = (gt_boxes[0,2]-gt_boxes[0,0])/(gt_boxes[0,3]-gt_boxes[0,1])
+        pred_ratios = (pred_boxes[:,2]-pred_boxes[:,0])/(pred_boxes[:,3]-pred_boxes[:,1])
+        differences = torch.abs(gt_ratio-pred_ratios)
+        max_difference = torch.max(differences)
+        
+        return (1 - differences / max_difference) * scores
     
     def pseudo_gt_z_loss_point(self, depth_maps, pred_xy, pred_z, num_boxes_per_image):
         '''Compute the pseudo ground truth z loss based on the depth map
@@ -1521,7 +1538,9 @@ class ROIHeads3DScore(StandardROIHeads):
             loss_pose = None
             loss_seg = None
             loss_z = None
+            ground_rot_loss = None
             pseudo_gt_z_loss = None
+            loss_dim = None
             
             # 2D IoU
             gt_boxes = [x.gt_boxes for x in proposals]
@@ -1532,7 +1551,8 @@ class ROIHeads3DScore(StandardROIHeads):
 
             # Pose
             loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
-
+            if loss_pose is not None:
+                loss_pose = loss_pose.repeat(n)
             # normal vector to ground loss
             num_boxes_per_image_tensor = torch.tensor(num_boxes_per_image,device=Ks_scaled_per_box.device)
             normal_vectors = self.normal_vector_from_maps(ground_maps, depth_maps)
@@ -1558,13 +1578,12 @@ class ROIHeads3DScore(StandardROIHeads):
             """
             
             # Z
-            #a = time.time()
             loss_z = self.z_loss(gt_boxes_tensor, cubes, Ks_scaled_per_box, im_sizes, proj_boxes)
-            #b = time.time()
-            #print("Time loss_z =", b-a)
-            #print('loss_z',loss_z)
 
-            
+            # Dimensions
+            loss_dim = self.dim_loss((prior_dims_mean, prior_dims_std), cubes.dimensions.squeeze(1), gt_boxes_tensor, proj_boxes)
+            if torch.isnan(loss_dim).any():
+                loss_dim = None
 
             total_3D_loss_for_reporting = loss_iou*self.loss_w_iou
 
@@ -1576,10 +1595,15 @@ class ROIHeads3DScore(StandardROIHeads):
 
             if ground_rot_loss is not None:
                 total_3D_loss_for_reporting += ground_rot_loss * self.loss_w_normal_vec *  ground_rot_loss_confidence
+            
             if loss_z is not None:
                 total_3D_loss_for_reporting += loss_z*self.loss_w_z
+            
             if pseudo_gt_z_loss is not None:
                 total_3D_loss_for_reporting += pseudo_gt_z_loss*self.loss_w_z
+
+            if loss_dim is not None:
+                total_3D_loss_for_reporting += loss_dim*self.loss_w_dim
             
             # reporting does not need gradients
             total_3D_loss_for_reporting = total_3D_loss_for_reporting.detach()
@@ -1590,6 +1614,7 @@ class ROIHeads3DScore(StandardROIHeads):
             storage.put_scalar(prefix + 'xy_error', xy_error.mean().item(), smoothing_hint=False)
             storage.put_scalar(prefix + 'total_3D_loss', self.loss_w_3d * self.safely_reduce_losses(total_3D_loss_for_reporting), smoothing_hint=False)
 
+            """
             if self.inverse_z_weight:
                 '''
                 Weights all losses to prioritize close up boxes.
@@ -1608,13 +1633,35 @@ class ROIHeads3DScore(StandardROIHeads):
                 if loss_pose is not None:
                     loss_pose *= inverse_z_w
 
+                if loss_dim is not None:
+                    loss_dim *= inverse_z_w
+
+                if loss_z is not None:
+                    loss_z *= inverse_z_w
+            """
+
             if self.use_confidence > 0:
                 
                 uncert_sf = SQRT_2_CONSTANT * torch.exp(-cube_uncert)
                 loss_iou *= uncert_sf
 
-                #if not cube_2d_deltas is None:
-                #    loss_segment *= uncert_sf
+                if loss_seg is not None:
+                    loss_seg *= uncert_sf
+    
+                if loss_pose is not None:
+                    loss_pose *= uncert_sf
+
+                if ground_rot_loss is not None:
+                    ground_rot_loss *= uncert_sf
+                
+                if loss_z is not None:
+                    loss_z *= uncert_sf
+                
+                if pseudo_gt_z_loss is not None:
+                    pseudo_gt_z_loss *= uncert_sf
+
+                if loss_dim is not None:
+                    loss_dim *= uncert_sf
 
                 losses.update({prefix + 'uncert': self.use_confidence*self.safely_reduce_losses(cube_uncert.clone())})
                 storage.put_scalar(prefix + 'conf', torch.exp(-cube_uncert).mean().item(), smoothing_hint=False)
@@ -1646,9 +1693,15 @@ class ROIHeads3DScore(StandardROIHeads):
                 losses.update({
                     prefix + 'loss_z': self.safely_reduce_losses(loss_z) * self.loss_w_z * self.loss_w_3d,
                 })
+            
             if pseudo_gt_z_loss is not None:
                 losses.update({
                     prefix + 'pseudo_gt_z_loss': self.safely_reduce_losses(pseudo_gt_z_loss) * self.loss_w_z * self.loss_w_3d,
+                })
+
+            if loss_dim is not None:
+                losses.update({
+                    prefix + 'dim_loss': self.safely_reduce_losses(loss_dim) * self.loss_w_dim * self.loss_w_3d,
                 })
  
         '''
