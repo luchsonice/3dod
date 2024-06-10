@@ -1,11 +1,12 @@
 # load a recent gcc version (>12.3) first
+# and cuda matching pytorch installation
 torch==2.1.2 
 torchvision==0.16.2 
 torchaudio==2.1.2 
 --index-url https://download.pytorch.org/whl/cu121
 
 scipy
-fvore
+fvcore
 iopath
 opencv-python
 wheel
