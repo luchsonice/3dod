@@ -117,15 +117,15 @@ def get_cfg_defaults(cfg):
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_3D = 1.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_XY = 1.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_Z = 1.0
-    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS = 1.0
-    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_POSE = 1.0
-    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_NORMAL_VEC = 1.0
 
 
     # ours
+    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS = 1.0
+    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_POSE = 1.0
+    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_NORMAL_VEC = 1.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_IOU = 1.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_SEG = 0.033
-    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_Z = 1.0
+    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_Z = 1.0 #### this is duplicated
 
     cfg.MODEL.DLA = CN()
 
@@ -181,4 +181,7 @@ def get_cfg_defaults(cfg):
     cfg.TRAIN = CN(new_allowed=True)
     cfg.TRAIN.pseudo_gt = 'learn'
 
+    # these are meant to be overwritten as an argument
     cfg.log = False
+    # (these 2 are mutually exclusive) z_pseudo_gt_patch or z_pseudo_gt_center 
+    cfg.loss_functions = ['dims', 'pose_alignment', 'pose_ground', 'iou', 'segmentation', 'z', 'z_pseudo_gt_patch']

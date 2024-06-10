@@ -782,6 +782,7 @@ class ROIHeads3DScore(StandardROIHeads):
         allocentric_pose=None,
         chamfer_pose=None,
         scale_roi_boxes=None,
+        loss_functions=['dims', 'pose_alignment', 'pose_ground', 'iou', 'segmentation', 'z', 'z_pseudo_gt_patch'],
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -804,6 +805,9 @@ class ROIHeads3DScore(StandardROIHeads):
         self.loss_w_dims = loss_w_dims
         self.loss_w_normal_vec = loss_w_normal_vec
         self.loss_w_z = loss_w_z
+
+        # loss functions
+        self.loss_functions = loss_functions
 
         # loss modes
         self.disentangled_loss = disentangled_loss
@@ -892,6 +896,9 @@ class ROIHeads3DScore(StandardROIHeads):
         )
 
         cube_head = build_cube_head(cfg, shape)
+        logger.info('Loss functions: %s', cfg.loss_functions)
+        possible_losses = ['dims', 'pose_alignment', 'pose_ground', 'iou', 'segmentation', 'z', 'z_pseudo_gt_patch', 'z_pseudo_gt_center']
+        assert all([x in possible_losses for x in cfg.loss_functions]), f'loss functions must be in {possible_losses}'
 
         return {
             'cube_head': cube_head,
@@ -918,6 +925,7 @@ class ROIHeads3DScore(StandardROIHeads):
             'cluster_bins': cfg.MODEL.ROI_CUBE_HEAD.CLUSTER_BINS,
             'ignore_thresh': cfg.MODEL.RPN.IGNORE_THRESHOLD,
             'scale_roi_boxes': cfg.MODEL.ROI_CUBE_HEAD.SCALE_ROI_BOXES,
+            'loss_functions': cfg.loss_functions,
         }
 
 
@@ -1083,18 +1091,20 @@ class ROIHeads3DScore(StandardROIHeads):
         mask_per_image = [i['masks'] for i in seg_out]
         return mask_per_image
     
-    def segment_loss(self, gt_mask, bube_corners):
-        bube_corners = bube_corners.to(device=gt_mask.device)
-        build_mask = torch.zeros(gt_mask.shape, device=gt_mask.device)
-        build_mask[bube_corners[:,0].long(),bube_corners[:,1].long()] = 1
-        bube_mask = convex_hull(build_mask)
+    def segment_loss(self, gt_mask, bube_corners, at_which_mask_idx):
+        n = len(bube_corners)
+        for i in range(n):
+            gt_mask_i = gt_mask[at_which_mask_idx[i]][0]
+            bube_corners_i = bube_corners[i]
+            build_mask = torch.zeros(gt_mask_i.shape, device=gt_mask_i.device)
+            build_mask[bube_corners_i[:,0].long(), bube_corners_i[:,1].long()] = 1
+            bube_mask = convex_hull(build_mask)
 
-        bube_mask = (bube_mask > 0.5).float()
-        gt_mask = (gt_mask > 0.5).float()
-        score = F.binary_cross_entropy(gt_mask,bube_mask) #mask_iou_loss(gt_mask[::4,::4], bube_mask[::4,::4])
+            bube_mask = (bube_mask > 0.5).float()
+            gt_mask_i = (gt_mask_i > 0.5).float()
+            score = F.binary_cross_entropy(gt_mask_i,bube_mask)
 
         return score
-        #return 1 - scores.mean()
 
     def pose_loss(self, cube_pose:torch.Tensor, num_boxes_per_image:list[int]):
         '''
@@ -1521,65 +1531,64 @@ class ROIHeads3DScore(StandardROIHeads):
             loss_pose = None
             loss_seg = None
             loss_z = None
-            pseudo_gt_z_loss = None
+            loss_dims = None
+            loss_pseudo_gt_z = None
+            loss_ground_rot = None
             
             # 2D IoU
             gt_boxes = [x.gt_boxes for x in proposals]
             gt_boxes_tensor = torch.cat([gt_boxes[i].tensor for i in range(len(gt_boxes))])
             
             # 2D IoU
-            loss_iou = generalized_box_iou_loss(gt_boxes_tensor, proj_boxes, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
+            if 'iou' in self.loss_functions:
+                loss_iou = generalized_box_iou_loss(gt_boxes_tensor, proj_boxes, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
 
             # Pose
-            loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
+            if 'pose_alignment' in self.loss_functions:
+                loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
 
             # normal vector to ground loss
-            num_boxes_per_image_tensor = torch.tensor(num_boxes_per_image,device=Ks_scaled_per_box.device)
-            normal_vectors = self.normal_vector_from_maps(ground_maps, depth_maps)
-            normal_vectors = normal_vectors.repeat_interleave(num_boxes_per_image_tensor, 0)
-            pred_normal = cube_pose[:, 1, :]
-            ground_rot_loss = 1-F.cosine_similarity(normal_vectors, pred_normal, dim=1).abs()
-            ground_rot_loss_confidence = 0.1 if ground_maps is None else 1.0
+            if 'pose_ground' in self.loss_functions:
+                num_boxes_per_image_tensor = torch.tensor(num_boxes_per_image,device=Ks_scaled_per_box.device)
+                normal_vectors = self.normal_vector_from_maps(ground_maps, depth_maps)
+                normal_vectors = normal_vectors.repeat_interleave(num_boxes_per_image_tensor, 0)
+                pred_normal = cube_pose[:, 1, :]
+                loss_ground_rot = 1-F.cosine_similarity(normal_vectors, pred_normal, dim=1).abs()
+                ground_rot_loss_confidence = 0.1 if ground_maps is None else 1.0
 
             # pseudo ground truth z loss
-            pseudo_gt_z_loss = self.pseudo_gt_z_loss_box(depth_maps, proposal_boxes_scaled, cube_z, num_boxes_per_image)
-            # pseudo_gt_z_loss_point = self.pseudo_gt_z_loss_point(depth_maps, cube_xy, cube_z, num_boxes_per_image)
+            if 'z_pseudo_gt_patch' in self.loss_functions:
+                loss_pseudo_gt_z = self.pseudo_gt_z_loss_box(depth_maps, proposal_boxes_scaled, cube_z, num_boxes_per_image)
+            elif 'z_pseudo_gt_center' in self.loss_functions:
+                loss_pseudo_gt_z = self.pseudo_gt_z_loss_point(depth_maps, cube_xy, cube_z, num_boxes_per_image)
 
-            """
-            # Segment
-            
-            a = time.time()
-            loss_seg = torch.zeros(n, device=cubes.device)
-            for i in range(n):
-                loss_seg[i] = self.segment_loss(masks_all_images[at_which_mask_idx[i]][0], bube_corners[i])
-            b = time.time()
-            #print("Time loss_seg =", b-a)
-            #print(loss_seg.requires_grad)
-            """
+            # segment
+            if 'segmentation' in self.loss_functions:
+                loss_seg = self.segment_loss(masks_all_images, bube_corners, at_which_mask_idx)
             
             # Z
-            #a = time.time()
-            loss_z = self.z_loss(gt_boxes_tensor, cubes, Ks_scaled_per_box, im_sizes, proj_boxes)
-            #b = time.time()
-            #print("Time loss_z =", b-a)
-            #print('loss_z',loss_z)
+            if 'z' in self.loss_functions:
+                loss_z = self.z_loss(gt_boxes_tensor, cubes, Ks_scaled_per_box, im_sizes, proj_boxes)
 
+            # Dimensions
+            if 'dims' in self.loss_functions:
+                loss_dims = 0 ## dummy
             
-
-            total_3D_loss_for_reporting = loss_iou*self.loss_w_iou
-
+            total_3D_loss_for_reporting = 0
+            if loss_iou is not None:
+                total_3D_loss_for_reporting += loss_iou*self.loss_w_iou
             if loss_seg is not None:
                 total_3D_loss_for_reporting += loss_seg*self.loss_w_seg
- 
             if loss_pose is not None:
                 total_3D_loss_for_reporting += loss_pose*self.loss_w_pose
-
-            if ground_rot_loss is not None:
-                total_3D_loss_for_reporting += ground_rot_loss * self.loss_w_normal_vec *  ground_rot_loss_confidence
+            if loss_ground_rot is not None:
+                total_3D_loss_for_reporting += loss_ground_rot * self.loss_w_normal_vec *  ground_rot_loss_confidence
             if loss_z is not None:
                 total_3D_loss_for_reporting += loss_z*self.loss_w_z
-            if pseudo_gt_z_loss is not None:
-                total_3D_loss_for_reporting += pseudo_gt_z_loss*self.loss_w_z
+            if loss_pseudo_gt_z is not None:
+                total_3D_loss_for_reporting += loss_pseudo_gt_z*self.loss_w_z
+            if loss_dims is not None:
+                total_3D_loss_for_reporting += loss_dims*self.loss_w_dims
             
             # reporting does not need gradients
             total_3D_loss_for_reporting = total_3D_loss_for_reporting.detach()
@@ -1626,29 +1635,29 @@ class ROIHeads3DScore(StandardROIHeads):
                 losses.update({
                     prefix + 'loss_iou': self.safely_reduce_losses(loss_iou) * self.loss_w_iou * self.loss_w_3d,
                 })
-
             if loss_pose is not None:
                 losses.update({
                     prefix + 'loss_pose': self.safely_reduce_losses(loss_pose) * self.loss_w_pose * self.loss_w_3d, 
                 })
-            
-            if ground_rot_loss is not None:
+            if loss_ground_rot is not None:
                 losses.update({
-                    prefix + 'loss_normal_vec': self.safely_reduce_losses(ground_rot_loss) * self.loss_w_normal_vec * self.loss_w_3d * ground_rot_loss_confidence,
+                    prefix + 'loss_normal_vec': self.safely_reduce_losses(loss_ground_rot) * self.loss_w_normal_vec * self.loss_w_3d * ground_rot_loss_confidence,
                 })
-
             if loss_seg is not None:
                 losses.update({
                     prefix + 'loss_seg': self.safely_reduce_losses(loss_seg) * self.loss_w_seg * self.loss_w_3d,
                 })
-
             if loss_z is not None:
                 losses.update({
                     prefix + 'loss_z': self.safely_reduce_losses(loss_z) * self.loss_w_z * self.loss_w_3d,
                 })
-            if pseudo_gt_z_loss is not None:
+            if loss_pseudo_gt_z is not None:
                 losses.update({
-                    prefix + 'pseudo_gt_z_loss': self.safely_reduce_losses(pseudo_gt_z_loss) * self.loss_w_z * self.loss_w_3d,
+                    prefix + 'loss_pseudo_gt_z': self.safely_reduce_losses(loss_pseudo_gt_z) * self.loss_w_z * self.loss_w_3d,
+                })
+            if loss_dims is not None:
+                losses.update({
+                    prefix + 'loss_dims': self.safely_reduce_losses(loss_dims) * self.loss_w_dims * self.loss_w_3d,
                 })
  
         '''
