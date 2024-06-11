@@ -124,7 +124,7 @@ class DatasetMapper3D(DatasetMapper):
         aug_input_dp = T.AugInput(dp_img)
         aug_only_flip = AugmentationList(transforms[-1:])
         # torch.set_rng_state(state)
-        transforms_dp = aug_only_flip(aug_input_dp)
+        #transforms_dp = aug_only_flip(aug_input_dp)
         dp_image = aug_input_dp.image
         dataset_dict["depth_map"] = torch.as_tensor(np.ascontiguousarray(dp_image))
 
@@ -133,7 +133,7 @@ class DatasetMapper3D(DatasetMapper):
             ground_img = Image.fromarray(np.load(dataset_dict["ground_image_path"])['mask'])
             ground_img = np.array(ground_img.resize(image.shape[:2][::-1], Image.NEAREST))
             aug_input_gr = T.AugInput(ground_img)
-            transforms_gr = aug_only_flip(aug_input_gr)
+            #transforms_gr = aug_only_flip(aug_input_gr)
             gr_image = aug_input_gr.image
             dataset_dict["ground_map"] = torch.as_tensor(np.ascontiguousarray(gr_image))
         else:

@@ -4,6 +4,7 @@ from ProposalNetwork.utils.utils import gt_in_norm_range, sample_normal_in_range
 from ProposalNetwork.utils.conversions import pixel_to_normalised_space
 import torch
 import numpy as np
+from cubercnn import util
 
 # 0.0x meters is the minimum edge length
 MIN_PROP_S = 0.05
@@ -16,7 +17,7 @@ def lin_fun(x,coef):
     '''used for finishing the center of the cube proposal. The center is calculated as a linear function (typically of the depth image).'''
     return coef[0] * x + coef[1]
 
-def propose_random(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal:torch.Tensor=None):
+def propose_random(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cubes=None, ground_normal:torch.Tensor=None):
     number_of_instances = len(reference_box)
     # Center
     x = torch.rand(number_of_instances,number_of_proposals, device=reference_box.device) * 4 - 2
@@ -35,9 +36,15 @@ def propose_random(reference_box, depth_image, priors, im_shape, K, number_of_pr
 
     cubes = Cubes(torch.cat((xyzwhl, rotation_matrices.flatten(start_dim=2)), dim=2))
 
-    return cubes, torch.zeros(9), np.ones(9)
+    # Statistics
+    if gt_cubes is None:
+        return cubes, None, None
+    
+    stats = statistics(gt_cubes,x,y,z,w,h,l)
 
-def propose_z(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal:torch.Tensor=None):
+    return cubes, stats, torch.ones(9)
+
+def propose_z(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cubes=None, ground_normal:torch.Tensor=None):
     '''
     picke a random x and y spot anywhere on the image and grab the z-value from that spot'''
     number_of_instances = len(reference_box)
@@ -66,10 +73,16 @@ def propose_z(reference_box, depth_image, priors, im_shape, K, number_of_proposa
 
     cubes = Cubes(torch.cat((xyzwhl, rotation_matrices.flatten(start_dim=2)), dim=2))
 
-    return cubes, torch.zeros(9), np.ones(9)
+    # Statistics
+    if gt_cubes is None:
+        return cubes, None, None
+    
+    stats = statistics(gt_cubes,x,y,z,w,h,l)
+
+    return cubes, stats, torch.ones(9)
 
 
-def propose_xy_patch(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal:torch.Tensor=None):
+def propose_xy_patch(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cubes=None, ground_normal:torch.Tensor=None):
     '''
     only propose x and y values that are within the reference box'''
     number_of_instances = len(reference_box)
@@ -112,10 +125,16 @@ def propose_xy_patch(reference_box, depth_image, priors, im_shape, K, number_of_
 
     cubes = Cubes(torch.cat((xyzwhl, rotation_matrices.flatten(start_dim=2)), dim=2))
 
-    return cubes, torch.zeros(9), np.ones(9)
+    # Statistics
+    if gt_cubes is None:
+        return cubes, None, None
+    
+    stats = statistics(gt_cubes,x,y,z,w,h,l)
+
+    return cubes, stats, torch.ones(9)
 
 
-def propose_random_dim(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal:torch.Tensor=None):
+def propose_random_dim(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cubes=None, ground_normal:torch.Tensor=None):
     number_of_instances = len(reference_box)
 
     ####### Center
@@ -149,7 +168,6 @@ def propose_random_dim(reference_box, depth_image, priors, im_shape, K, number_o
     l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=reference_box.device), MIN_PROP_S, 2)
 
     # Finish center
-
     # x
     x_coefficients = torch.tensor([1.15, 0])
     x = sample_normal_in_range(lin_fun(torch.median(x,dim=1).values,x_coefficients), torch.std(x,dim=1)*0.7, torch.tensor(number_of_proposals))
@@ -170,9 +188,15 @@ def propose_random_dim(reference_box, depth_image, priors, im_shape, K, number_o
 
     cubes = Cubes(torch.cat((xyzwhl, rotation_matrices.flatten(start_dim=2)), dim=2))
 
-    return cubes, torch.zeros(9), np.ones(9)
+    # Statistics
+    if gt_cubes is None:
+        return cubes, None, None
+    
+    stats = statistics(gt_cubes,x,y,z,w,h,l)
 
-def propose_aspect_ratio(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal:torch.Tensor=None):
+    return cubes, stats, torch.ones(9)
+
+def propose_aspect_ratio(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cubes=None, ground_normal:torch.Tensor=None):
     '''    
     sample width from the prior and then apply a set of ratios on h. Then take a random shuffled version of the set and apply it to L.
     '''
@@ -236,10 +260,16 @@ def propose_aspect_ratio(reference_box, depth_image, priors, im_shape, K, number
 
     cubes = Cubes(torch.cat((xyzwhl, rotation_matrices.flatten(start_dim=2)), dim=2))
 
-    return cubes, torch.zeros(9), np.ones(9)
+    r# Statistics
+    if gt_cubes is None:
+        return cubes, None, None
+    
+    stats = statistics(gt_cubes,x,y,z,w,h,l)
+
+    return cubes, stats, torch.ones(9)
 
 
-def propose_random_rotation(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal:torch.Tensor=None):
+def propose_random_rotation(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cubes=None, ground_normal:torch.Tensor=None):
     number_of_instances = len(reference_box)
 
     ####### Center
@@ -294,9 +324,18 @@ def propose_random_rotation(reference_box, depth_image, priors, im_shape, K, num
     rotation_matrices = utils.randn_orthobasis_torch(number_of_proposals, number_of_instances).to(device=reference_box.device)
     cubes = Cubes(torch.cat((xyzwhl, rotation_matrices.flatten(start_dim=2)), dim=2))
 
-    return cubes, torch.zeros(9), np.ones(9)
+    # Statistics
+    if gt_cubes is None:
+        return cubes, None, None
+    
+    stats = statistics(gt_cubes,x,y,z,w,h,l)
 
-def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cube=None, ground_normal:torch.Tensor=None):
+    n = gt_cubes.num_instances
+    ranges = torch.stack([torch.std(x,dim=1)*0.8, torch.std(y,dim=1)*0.8, torch.std(z,dim=1)*1.2, w_prior[1], h_prior[1]*1.1, l_prior[1], torch.tensor(torch.pi,device=reference_box.device).repeat(n),torch.tensor(torch.pi,device=reference_box.device).repeat(n),torch.tensor(torch.pi,device=reference_box.device).repeat(n)],dim=1).cpu().numpy()
+
+    return cubes, stats, ranges
+
+def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cubes=None, ground_normal:torch.Tensor=None):
     '''
     Proposes a cube. The ranges are largely random, except for that the center needs to be inside the reference box.
     Also, objects have a length, width and height according to priors.
@@ -355,7 +394,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     z = z_tmp+l/2
     z_coefficients = torch.tensor([0.85, 0.35], device=reference_box.device)
     z = sample_normal_in_range(lin_fun(torch.median(z,dim=1).values,z_coefficients), torch.std(z,dim=1) * 1.2, number_of_proposals)
-    #z = gt_cube.tensor[:,0,2].view(-1,1).repeat(1,number_of_proposals)
+    #z = gt_cubes.tensor[:,0,2].view(-1,1).repeat(1,number_of_proposals)
     xyzwhl = torch.stack([x, y, z, w, h, l], 2)
     
     # Pose
@@ -374,24 +413,33 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     cubes = Cubes(torch.cat((xyzwhl, rotation_matrices.flatten(start_dim=2)), dim=2))
 
     # Statistics
-    if gt_cube is None:
+    if gt_cubes is None:
         return cubes, None, None
-    """
-    stat_x = gt_in_norm_range([torch.min(x,dim=1),torch.max(x,dim=1)],gt_cube.center[0])
-    stat_y = gt_in_norm_range([torch.min(y,dim=1),torch.max(y,dim=1)],gt_cube.center[1])
-    stat_z = gt_in_norm_range([torch.min(z,dim=1),torch.max(z,dim=1)],gt_cube.center[2])
-    stat_w = gt_in_norm_range([torch.min(w,dim=1),torch.max(w,dim=1)],gt_cube.dimensions[0])
-    stat_h = gt_in_norm_range([torch.min(h,dim=1),torch.max(h,dim=1)],gt_cube.dimensions[1])
-    stat_l = gt_in_norm_range([torch.min(l,dim=1),torch.max(l,dim=1)],gt_cube.dimensions[2])
-    angles = util.mat2euler(gt_cube.rotation)
-    stat_rx = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[0]))
-    stat_ry = gt_in_norm_range(torch.tensor([0,np.pi/2]),torch.tensor(angles[1]))
-    stat_rz = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[2]))
-
-    stats = torch.tensor([stat_x,stat_y,stat_z,stat_w,stat_h,stat_l,stat_rx,stat_ry,stat_rz])
     
-    ranges = np.array([torch.std(x,dim=1)*0.8, torch.std(y,dim=1)*0.8, torch.std(z,dim=1)*1.2, w_prior[1], h_prior[1]*1.1, l_prior[1], np.pi,np.pi,np.pi])
+    stats = statistics(gt_cubes,x,y,z,w,h,l)
+
+    n = gt_cubes.num_instances
+    ranges = torch.stack([torch.std(x,dim=1)*0.8, torch.std(y,dim=1)*0.8, torch.std(z,dim=1)*1.2, w_prior[1], h_prior[1]*1.1, l_prior[1], torch.tensor(torch.pi,device=reference_box.device).repeat(n),torch.tensor(torch.pi,device=reference_box.device).repeat(n),torch.tensor(torch.pi,device=reference_box.device).repeat(n)],dim=1).cpu().numpy()
 
     return cubes, stats, ranges
-    """
-    return cubes, torch.zeros(9), np.ones(9)
+
+
+def statistics(gt_cubes,x,y,z,w,h,l):    
+    n = gt_cubes.num_instances
+    stats = torch.zeros((n,9))
+    for i in range(n):
+        gt_cube = gt_cubes[i].tensor[0,0]
+        stat_x = gt_in_norm_range([torch.min(x[i]),torch.max(x[i])],gt_cube[0])
+        stat_y = gt_in_norm_range([torch.min(y[i]),torch.max(y[i])],gt_cube[1])
+        stat_z = gt_in_norm_range([torch.min(z[i]),torch.max(z[i])],gt_cube[2])
+        stat_w = gt_in_norm_range([torch.min(w[i]),torch.max(w[i])],gt_cube[3])
+        stat_h = gt_in_norm_range([torch.min(h[i]),torch.max(h[i])],gt_cube[4])
+        stat_l = gt_in_norm_range([torch.min(l[i]),torch.max(l[i])],gt_cube[5])
+        angles = util.mat2euler(gt_cube[-9:].reshape((3,3)))
+        stat_rx = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[0]))
+        stat_ry = gt_in_norm_range(torch.tensor([0,np.pi/2]),torch.tensor(angles[1]))
+        stat_rz = gt_in_norm_range(torch.tensor([0,np.pi]),torch.tensor(angles[2]))
+
+        stats[i] = torch.tensor([stat_x,stat_y,stat_z,stat_w,stat_h,stat_l,stat_rx,stat_ry,stat_rz])
+
+    return stats

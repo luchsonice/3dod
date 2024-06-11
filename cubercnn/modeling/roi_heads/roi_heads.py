@@ -280,22 +280,22 @@ class ROIHeads_Boxer(StandardROIHeads):
         '''wrap propose'''
         reference_box = gt_boxes
         if proposal_function == 'random':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_random(reference_box, None, None, None, None, number_of_proposals=number_of_proposals)
+            pred_cubes, stats_image, stats_ranges = proposals.propose_random(reference_box, None, None, None, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'z':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_z(reference_box, depth_maps_tensor.squeeze(), None, None, None, number_of_proposals=number_of_proposals)
+            pred_cubes, stats_image, stats_ranges = proposals.propose_z(reference_box, depth_maps_tensor.squeeze(), None, None, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'xy':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_xy_patch(reference_box, depth_maps_tensor.squeeze(), None, im_shape, None, number_of_proposals=number_of_proposals)
+            pred_cubes, stats_image, stats_ranges = proposals.propose_xy_patch(reference_box, depth_maps_tensor.squeeze(), None, im_shape, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'dim':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_random_dim(reference_box, depth_maps_tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals)
+            pred_cubes, stats_image, stats_ranges = proposals.propose_random_dim(reference_box, depth_maps_tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'rotation':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_random_rotation(reference_box, depth_maps_tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals)
+            pred_cubes, stats_image, stats_ranges = proposals.propose_random_rotation(reference_box, depth_maps_tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'aspect':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_aspect_ratio(reference_box, depth_maps_tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals)
+            pred_cubes, stats_image, stats_ranges = proposals.propose_aspect_ratio(reference_box, depth_maps_tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         else:
-            pred_cubes, stats_instance, stats_ranges = proposals.propose(reference_box, depth_maps_tensor.squeeze(), priors, im_shape, K, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+            pred_cubes, stats_image, stats_ranges = proposals.propose(reference_box, depth_maps_tensor.squeeze(), priors, im_shape, K, number_of_proposals=number_of_proposals, gt_cubes=gt_3d, ground_normal=normal_vec)
         
         pred_boxes = cubes_to_box(pred_cubes, K, im_shape)
-        return pred_cubes, pred_boxes, stats_instance, stats_ranges
+        return pred_cubes, pred_boxes, stats_image, stats_ranges
     
     def _forward_cube(self, images, images_raw, combined_features, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type, proposal_function):
 
@@ -362,7 +362,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         # normalise the points
         points = np.stack((xg, yg, zg), axis=-1).reshape(-1, 3)
         # colors = im.reshape(-1, 3) / 255.0
-        colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu())[ground].reshape(-1, 3) / 255.0
+        # colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu())[ground].reshape(-1, 3) / 255.0
         plane = pyrsc.Plane()
         # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
         best_eq, best_inliers = plane.fit(points, thresh=0.05, maxIteration=1000)
@@ -474,7 +474,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                         IoU3Ds[j, i, :] = IoU3D
                 return IoU3Ds
             else: 
-                pred_cubes, pred_boxes, stats_instance, stats_ranges = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps.tensor, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec, gt_cubes)
+                pred_cubes, pred_boxes, stats_image, stats_ranges = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps.tensor, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec, gt_cubes)
 
             for i in range(n_gt):
                 # iou
@@ -558,8 +558,7 @@ class ROIHeads_Boxer(StandardROIHeads):
 
                 # stats
                 sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
-                stats_image[i] = stats_instance
-                nested_list = [[IoU3D.max()],abs(gt_cubes[i].centers.cpu().numpy()-pred_cube.centers.cpu().numpy())[0][0]/stats_ranges[:3],abs(gt_cubes[i].dimensions.cpu().numpy()-pred_cube.dimensions.cpu().numpy())[0][0]/stats_ranges[3:6],abs(util.mat2euler(gt_cubes[i].rotations[0][0])-util.mat2euler(pred_cube.rotations[0][0]))/stats_ranges[6:]]
+                nested_list = [[IoU3D.max()],abs(gt_cubes[i].centers.cpu().numpy()-pred_cube.centers.cpu().numpy())[0][0]/stats_ranges[i,:3],abs(gt_cubes[i].dimensions.cpu().numpy()-pred_cube.dimensions.cpu().numpy())[0][0]/stats_ranges[i,3:6],abs(util.mat2euler(gt_cubes[i].rotations[0][0])-util.mat2euler(pred_cube.rotations[0][0]))/stats_ranges[i,6:]]
                 stats_off[i] = [item for sublist in nested_list for item in sublist]
             stat_empty_boxes = sum_percentage_empty_boxes/n_gt
             pred_boxes_out = Boxes.cat(pred_boxes_out)
@@ -1584,7 +1583,9 @@ class ROIHeads3DScore(StandardROIHeads):
             # segment
             if 'segmentation' in self.loss_functions:
                 loss_seg = self.segment_loss(masks_all_images, bube_corners, at_which_mask_idx)
-            
+            if loss_seg is not None:
+                loss_seg = loss_seg.repeat(n)
+
             # Z
             if 'z' in self.loss_functions:
                 loss_z = self.z_loss(gt_boxes_tensor, cubes, Ks_scaled_per_box, im_sizes, proj_boxes)

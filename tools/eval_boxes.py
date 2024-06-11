@@ -201,7 +201,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         outputs = []
         for i, inputs in tqdm(enumerate(data_loader), desc="Mean average best overlap plots", total=total):
             output = model(inputs, segmentor, experiment_type, proposal_function)
-            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off, stats_off_impro
+            # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off
             if output is not None:
                 outputs.append(output)
 
@@ -246,7 +246,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.grid(True)
         plt.xscale('log')
         plt.xticks([1, 10, 100, 1000], ['1', '10', '100', '1000'])
-        plt.xlim(left=1)
+        plt.xlim(left=1, right=len(Iou2D))
         plt.xlabel('Number of Proposals')
         plt.ylabel('3D IoU')
         plt.legend()
@@ -265,9 +265,9 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
         for i,title in enumerate(titles):
             plt.subplot(3, 3, 1+i)
-            plt.hist(stats[:,i].numpy(), bins=num_bins, color=color_palette[-1],density=True)
-            plt.axvline(x=0, color='red')
-            plt.axvline(x=1, color='red')
+            plt.hist(stats[:,i].numpy(), bins=num_bins, color=color_palette[6],density=True)
+            plt.axvline(x=0, color=color_palette[-1])
+            plt.axvline(x=1, color=color_palette[-1])
             plt.title(title)
         f_name = os.path.join('ProposalNetwork/output/MABO', 'stats.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
@@ -279,7 +279,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.figure(figsize=(15, 15))
         for i,title in enumerate(titles):
             plt.subplot(3, 3, 1+i)
-            plt.scatter(stats_off[:,1+i],stats_off[:,0])
+            plt.scatter(stats_off[:,1+i],stats_off[:,0], color=color_palette[6])
             plt.title(title)
         f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_off.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
@@ -290,7 +290,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.figure(figsize=(15, 15))
         for i,title in enumerate(titles):
             plt.subplot(3, 3, 1+i)
-            plt.scatter(stats_off[:,1+i],stats_off[:,0])
+            plt.scatter(stats_off[:,1+i],stats_off[:,0], color=color_palette[6])
             plt.title(title)
             plt.xlim([0,2])
             plt.ylim([0,1])
