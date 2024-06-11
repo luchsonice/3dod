@@ -42,7 +42,7 @@ def propose_random(reference_box, depth_image, priors, im_shape, K, number_of_pr
     
     stats = statistics(gt_cubes,x,y,z,w,h,l)
 
-    return cubes, stats, torch.ones(9)
+    return cubes, stats, torch.ones(cubes.num_instances,9)
 
 def propose_z(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cubes=None, ground_normal:torch.Tensor=None):
     '''
@@ -79,7 +79,7 @@ def propose_z(reference_box, depth_image, priors, im_shape, K, number_of_proposa
     
     stats = statistics(gt_cubes,x,y,z,w,h,l)
 
-    return cubes, stats, torch.ones(9)
+    return cubes, stats, torch.ones(cubes.num_instances,9)
 
 
 def propose_xy_patch(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cubes=None, ground_normal:torch.Tensor=None):
@@ -131,7 +131,7 @@ def propose_xy_patch(reference_box, depth_image, priors, im_shape, K, number_of_
     
     stats = statistics(gt_cubes,x,y,z,w,h,l)
 
-    return cubes, stats, torch.ones(9)
+    return cubes, stats, torch.ones(cubes.num_instances,9)
 
 
 def propose_random_dim(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cubes=None, ground_normal:torch.Tensor=None):
@@ -194,7 +194,7 @@ def propose_random_dim(reference_box, depth_image, priors, im_shape, K, number_o
     
     stats = statistics(gt_cubes,x,y,z,w,h,l)
 
-    return cubes, stats, torch.ones(9)
+    return cubes, stats, torch.ones(cubes.num_instances,9)
 
 def propose_aspect_ratio(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cubes=None, ground_normal:torch.Tensor=None):
     '''    
@@ -260,13 +260,13 @@ def propose_aspect_ratio(reference_box, depth_image, priors, im_shape, K, number
 
     cubes = Cubes(torch.cat((xyzwhl, rotation_matrices.flatten(start_dim=2)), dim=2))
 
-    r# Statistics
+    # Statistics
     if gt_cubes is None:
         return cubes, None, None
     
     stats = statistics(gt_cubes,x,y,z,w,h,l)
 
-    return cubes, stats, torch.ones(9)
+    return cubes, stats, torch.ones(cubes.num_instances,9)
 
 
 def propose_random_rotation(reference_box, depth_image, priors, im_shape, K, number_of_proposals=1, gt_cubes=None, ground_normal:torch.Tensor=None):
