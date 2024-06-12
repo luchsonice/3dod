@@ -269,7 +269,6 @@ class RCNN3D_combined_features(nn.Module):
         self.vis_period = vis_period
         self.depth_model = depth_model
 
-
         self.register_buffer("pixel_mean", torch.tensor(pixel_mean).view(-1, 1, 1), False)
         self.register_buffer("pixel_std", torch.tensor(pixel_std).view(-1, 1, 1), False)
         assert (
@@ -279,11 +278,15 @@ class RCNN3D_combined_features(nn.Module):
     @classmethod
     def from_config(cls, cfg, priors=None):
         backbone = build_backbone(cfg, priors=priors)
-        depth_model = 'zoedepth'
-        pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
-        d_model = setup_depth_model(depth_model, pretrained_resource) #NOTE maybe make the depth model be learnable as well
-       
-        shape_modified = {key:ShapeSpec(i.channels*2,stride=i.stride) for key, i in backbone.output_shape().items()}
+        if cfg.MODEL.DEPTH_ON:
+            depth_model = 'zoedepth'
+            pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
+            d_model = setup_depth_model(depth_model, pretrained_resource) #NOTE maybe make the depth model be learnable as well
+        
+            shape_modified = {key:ShapeSpec(i.channels*2,stride=i.stride) for key, i in backbone.output_shape().items()}
+        else:
+            d_model = None
+            shape_modified = backbone.output_shape()
 
         return {
             "backbone": backbone,
@@ -348,10 +351,10 @@ class RCNN3D_combined_features(nn.Module):
             features[layer] = torch.cat((img_feature, d_feature), dim=1)
         return features
 
-    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor):
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]]):
         
         if not self.training:
-            return self.inference(batched_inputs, segmentor) # segmentor is just none in inference because we dont need the loss
+            return self.inference(batched_inputs) # segmentor is just none in inference because we dont need the loss
 
         images = self.preprocess_image(batched_inputs)
         # NOTE: images_raw are scaled to be padded to the same size as the largest. 
@@ -381,12 +384,12 @@ class RCNN3D_combined_features(nn.Module):
         features = self.backbone(images.tensor)
         proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
 
-        features = self.cat_depth_features(features, images_raw)
+        if self.depth_model is not None:
+            features = self.cat_depth_features(features, images_raw)
         
         instances, detector_losses = self.roi_heads(
             images, images_raw, ground_maps, depth_maps, features, proposals, 
-            Ks, im_scales_ratio, 
-            segmentor, 
+            Ks, im_scales_ratio,
             gt_instances
         )
 
@@ -403,7 +406,6 @@ class RCNN3D_combined_features(nn.Module):
     def inference(
         self,
         batched_inputs: List[Dict[str, torch.Tensor]], 
-        segmentor,
         detected_instances: Optional[List[Instances]] = None,
         do_postprocess: bool = True,
     ):
@@ -427,14 +429,15 @@ class RCNN3D_combined_features(nn.Module):
         # Pass oracle 2D boxes into the RoI heads
         if type(batched_inputs == list) and np.any(['oracle2D' in b for b in batched_inputs]):
             oracles = [b['oracle2D'] for b in batched_inputs]
-            results, _ = self.roi_heads(images, images_raw, ground_maps, depth_maps, features, oracles, Ks, im_scales_ratio, segmentor, None)
+            results, _ = self.roi_heads(images, images_raw, ground_maps, depth_maps, features, oracles, Ks, im_scales_ratio, None)
         
         # normal inference
         else:
             proposals, _ = self.proposal_generator(images, features, None)
-            features = self.cat_depth_features(features, images_raw)
+            if self.depth_model is not None:
+                features = self.cat_depth_features(features, images_raw)
             # pred boxes are proposals
-            results, _ = self.roi_heads(images, images_raw, ground_maps, depth_maps, features, proposals, Ks, im_scales_ratio, segmentor, None)
+            results, _ = self.roi_heads(images, images_raw, ground_maps, depth_maps, features, proposals, Ks, im_scales_ratio, None)
             
         if do_postprocess:
             assert not torch.jit.is_scripting(), "Scripting is not supported for postprocess."

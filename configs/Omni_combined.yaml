@@ -3,9 +3,9 @@ SOLVER:
   TYPE: "sgd"
   IMS_PER_BATCH: 8
   BASE_LR: 0.001
-  STEPS: (5000, 12000)
-  MAX_ITER: 100000
-  WARMUP_ITERS: 100
+  STEPS: (5000, 8000)
+  MAX_ITER: 10000 #4972
+  WARMUP_ITERS: 0
   CHECKPOINT_PERIOD: 1000
 TEST:
   EVAL_PERIOD: 100000
@@ -15,15 +15,16 @@ DATASETS:
   TEST: ('SUNRGBD_test_mini',) 
   CATEGORY_NAMES: ('chair', 'table', 'cabinet', 'car', 'lamp', 'books', 'sofa', 'pedestrian', 'picture', 'window', 'pillow', 'truck', 'door', 'blinds', 'sink', 'shelves', 'television', 'shoes', 'cup', 'bottle', 'bookcase', 'laptop', 'desk', 'cereal box', 'floor mat', 'traffic cone', 'mirror', 'barrier', 'counter', 'camera', 'bicycle', 'toilet', 'bus', 'bed', 'refrigerator', 'trailer', 'box', 'oven', 'clothes', 'van', 'towel', 'motorcycle', 'night stand', 'stove', 'machine', 'stationery', 'bathtub', 'cyclist', 'curtain', 'bin')
 MODEL:
+  DEPTH_ON: False #whether to use the depth anything concated features # if do not use this, then we can use ["p2", "p3", "p4", "p5", "p6"], [[32], [64], [128], [256], [512]], otherwise only ["p2", "p3", "p4", "p5"], [[32], [64], [128], [256]]
   FPN:
-    IN_FEATURES: ['p2', 'p3', 'p4', 'p5']
+    IN_FEATURES: ["p2", "p3", "p4", "p5", "p6"]
   RPN:
-    IN_FEATURES: ['p2', 'p3', 'p4', 'p5']
+    IN_FEATURES: ["p2", "p3", "p4", "p5", "p6"]
   ANCHOR_GENERATOR:
-    SIZES: [[32], [64], [128], [256]]  # One size for each in feature map
+    SIZES: [[32], [64], [128], [256], [512]]  # One size for each in feature map
   ROI_HEADS:
     NAME: 'ROIHeads3DScore' # name of the class that is the 3d predictor
-    IN_FEATURES: ["p2", "p3", "p4", "p5"]
+    IN_FEATURES: ["p2", "p3", "p4", "p5", "p6"]
     NUM_CLASSES: 50
     POSITIVE_FRACTION: 0.25 # we can use this to control the ratio of positive to negative sampled cubes in
   ROI_CUBE_HEAD:
