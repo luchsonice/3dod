@@ -178,6 +178,6 @@ def get_cfg_defaults(cfg):
     cfg.TRAIN.pseudo_gt = 'learn'
 
     # these are meant to be overwritten as an argument
-    cfg.log = False
+    cfg.log = True
     # (these 2 are mutually exclusive) z_pseudo_gt_patch or z_pseudo_gt_center 
     cfg.loss_functions = ['dims', 'pose_alignment', 'pose_ground', 'iou', 'segmentation', 'z', 'z_pseudo_gt_patch']

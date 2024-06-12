@@ -3,13 +3,13 @@ SOLVER:
   TYPE: "sgd"
   IMS_PER_BATCH: 8
   BASE_LR: 0.001
-  STEPS: (5000, 8000)
-  MAX_ITER: 100000 #4972
-  WARMUP_ITERS: 0
+  STEPS: (5000, 12000)
+  MAX_ITER: 100000
+  WARMUP_ITERS: 100
   CHECKPOINT_PERIOD: 1000
 TEST:
-  EVAL_PERIOD: 5000
-VIS_PERIOD: 40
+  EVAL_PERIOD: 100000
+VIS_PERIOD: 100
 DATASETS:
   TRAIN: ('SUNRGBD_train_mini', 'SUNRGBD_val_mini')
   TEST: ('SUNRGBD_test_mini',) 
@@ -28,7 +28,7 @@ MODEL:
     POSITIVE_FRACTION: 0.25 # we can use this to control the ratio of positive to negative sampled cubes in
   ROI_CUBE_HEAD:
     NAME: 'CubeHead' # name of the 3d head
-    DIMS_PRIORS_ENABLED: False
+    DIMS_PRIORS_ENABLED: True
     POOLER_TYPE: 'ROIAlignV2'
     POOLER_RESOLUTION: 7
   META_ARCHITECTURE: 'RCNN3D_combined_features' # name of the overall arch that calls the ROI_HEADS.NAME and ROI_CUBE_HEAD.NAME
