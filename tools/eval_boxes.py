@@ -200,6 +200,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
 
         outputs = []
         for i, inputs in tqdm(enumerate(data_loader), desc="Mean average best overlap plots", total=total):
+            logger.info('iteration',i)
             output = model(inputs, segmentor, experiment_type, proposal_function)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off
             if output is not None:
