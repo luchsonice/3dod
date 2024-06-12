@@ -1650,32 +1650,6 @@ class ROIHeads3DScore(StandardROIHeads):
             storage.put_scalar(prefix + 'xy_error', xy_error.mean().item(), smoothing_hint=False)
             storage.put_scalar(prefix + 'total_3D_loss', self.loss_w_3d * self.safely_reduce_losses(total_3D_loss_for_reporting), smoothing_hint=False)
 
-            """
-            if self.inverse_z_weight:
-                '''
-                Weights all losses to prioritize close up boxes.
-                '''
-
-                gt_z = gt_boxes3D[:, 2]
-
-                inverse_z_w = 1/torch.log(gt_z.clip(E_CONSTANT))
-                
-                loss_iou *= inverse_z_w
-
-                # scale based on log, but clip at e
-                if loss_seg is not None:
-                    loss_seg *= inverse_z_w
-
-                if loss_pose is not None:
-                    loss_pose *= inverse_z_w
-
-                if loss_dim is not None:
-                    loss_dim *= inverse_z_w
-
-                if loss_z is not None:
-                    loss_z *= inverse_z_w
-            """
-
             if self.use_confidence > 0:
                 
                 uncert_sf = SQRT_2_CONSTANT * torch.exp(-cube_uncert)
