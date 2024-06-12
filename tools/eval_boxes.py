@@ -212,11 +212,14 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         score_combined    = np.concatenate([np.array(sublist) for sublist in (x[4] for x in outputs)])
         score_random      = np.concatenate([np.array(sublist) for sublist in (x[5] for x in outputs)])
         score_point_cloud = np.concatenate([np.array(sublist) for sublist in (x[6] for x in outputs)])
-        score_seg_mod      = np.concatenate([np.array(sublist) for sublist in (x[10] for x in outputs)])
+        score_seg_mod     = np.concatenate([np.array(sublist) for sublist in (x[10] for x in outputs)])
         score_corners     = np.concatenate([np.array(sublist) for sublist in (x[11] for x in outputs)])
         stat_empty_boxes  = np.array([x[7] for x in outputs])
+        combinations      = np.mean(np.concatenate([np.array(sublist) for sublist in (x[12] for x in outputs)]),axis=0)
         #logger.info('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
         print('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
+        print('combination scores:',combinations)
+        print('best combination is C'+str(np.argmax(combinations)+1))
 
         
 

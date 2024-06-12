@@ -411,6 +411,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_corner   = np.zeros((n_gt, number_of_proposals))
         stats_image    = torch.zeros(n_gt, 9)
         stats_off      = np.zeros((n_gt, 10))
+        combinations   = np.zeros((n_gt, 26))
                 
         pred_cubes_out = Cubes(torch.zeros(len(gt_boxes), 1, 15, device=images_raw.device), scores=torch.zeros(len(gt_boxes), 1, device=images_raw.device),labels=gt_box_classes)
         pred_boxes_out = []
@@ -504,6 +505,34 @@ class ROIHeads_Boxer(StandardROIHeads):
                 score_combined[i,:] = self.accumulate_scores(combined_score, IoU3D)
                 score_random[i,:] = self.accumulate_scores(random_score, IoU3D)
                 
+                # This will not be pretty
+                combinations[i,0] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu()), IoU3D)[0]
+                combinations[i,1] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu()), IoU3D)[0]
+                combinations[i,2] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(corners_scores.cpu()), IoU3D)[0]
+                combinations[i,3] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,4] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu()), IoU3D)[0]
+                combinations[i,5] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(corners_scores.cpu()), IoU3D)[0]
+                combinations[i,6] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,7] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu())*np.array(corners_scores.cpu()), IoU3D)[0]
+                combinations[i,8] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,9] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,10] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,11] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,12] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,13] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu())*np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,14] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu())*np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,15] = self.accumulate_scores(np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu()), IoU3D)[0]
+                combinations[i,16] = self.accumulate_scores(np.array(seg_mod_scores.cpu())*np.array(corners_scores.cpu()), IoU3D)[0]
+                combinations[i,17] = self.accumulate_scores(np.array(seg_mod_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,18] = self.accumulate_scores(np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu())*np.array(corners_scores.cpu()), IoU3D)[0]
+                combinations[i,19] = self.accumulate_scores(np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,20] = self.accumulate_scores(np.array(seg_mod_scores.cpu())*np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,21] = self.accumulate_scores(np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu())*np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,22] = self.accumulate_scores(np.array(dim_scores.cpu())*np.array(corners_scores.cpu()), IoU3D)[0]
+                combinations[i,23] = self.accumulate_scores(np.array(dim_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,24] = self.accumulate_scores(np.array(dim_scores.cpu())*np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,25] = self.accumulate_scores(np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                
                 score_to_use = combined_score
                 highest_score = np.argmax(score_to_use)
                 pred_cube = pred_cubes[i,highest_score]
@@ -565,7 +594,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             p_info = Plotinfo(pred_cubes_out, gt_cube_meshes, gt_boxes3D, gt_boxes, pred_boxes_out, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
 
         if experiment_type['output_recall_scores']: # MABO
-            return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off, score_seg_mod, score_corner
+            return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off, score_seg_mod, score_corner, combinations
         
         elif not experiment_type['output_recall_scores']: # AP
             # list of Instances with the fields: pred_boxes, scores, pred_classes, pred_bbox3D, pred_center_cam, pred_center_2D, pred_dimensions, pred_pose
