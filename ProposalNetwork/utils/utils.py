@@ -453,7 +453,8 @@ def findDuplicates(arr):
 
 
 def jarvis_march(points):
-    '''https://algorithmtutor.com/Computational-Geometry/Convex-Hull-Algorithms-Jarvis-s-March/'''
+    '''https://algorithmtutor.com/Computational-Geometry/Convex-Hull-Algorithms-Jarvis-s-March/
+    https://algorithmtutor.com/Computational-Geometry/Determining-if-two-consecutive-segments-turn-left-or-right/ '''
     # remove duplicates
     duplicates = findDuplicates(points)
     # this is necessary if there are > 2 duplicates of the same element

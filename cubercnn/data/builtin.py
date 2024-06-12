@@ -18,7 +18,7 @@ def get_omni3d_categories(dataset="omni3d"):
     elif dataset == "omni3d_out":
         cats = set({'cyclist', 'pedestrian', 'trailer', 'bus', 'motorcycle', 'car', 'barrier', 'truck', 'van', 'traffic cone', 'bicycle'})
         assert len(cats) == 11
-    elif dataset in ["SUNRGBD_train", "SUNRGBD_val", "SUNRGBD_test", "SUNRGBD_train_mini", "SUNRGBD_val_mini", "SUNRGBD_test_mini"]:
+    elif dataset in ["SUNRGBD_train", "SUNRGBD_val", "SUNRGBD_test", "SUNRGBD_train_mini", "SUNRGBD_val_mini", "SUNRGBD_test_mini", "SUNRGBD_test_mini2", "SUNRGBD_test_mini500"]:
         cats = set({'bicycle', 'books', 'bottle', 'chair', 'cup', 'laptop', 'shoes', 'towel', 'blinds', 'window', 'lamp', 'shelves', 'mirror', 'sink', 'cabinet', 'bathtub', 'door', 'toilet', 'desk', 'box', 'bookcase', 'picture', 'table', 'counter', 'bed', 'night stand', 'pillow', 'sofa', 'television', 'floor mat', 'curtain', 'clothes', 'stationery', 'refrigerator', 'bin', 'stove', 'oven', 'machine'})
         assert len(cats) == 38
     elif dataset in ["Hypersim_train", "Hypersim_val"]:
