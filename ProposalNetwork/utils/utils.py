@@ -147,6 +147,11 @@ def rotate_vector_t(v, k, theta):
 
 # ########### End rotations
 def gt_in_norm_range(range,gt):
+    tmp = gt-range[0]
+    res = tmp / abs(range[1] - range[0])
+
+    return res
+
     if range[0] > 0: # both positive
         tmp = gt-range[0]
         res = tmp / abs(range[1] - range[0])

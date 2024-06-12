@@ -280,22 +280,22 @@ class ROIHeads_Boxer(StandardROIHeads):
         '''wrap propose'''
         reference_box = gt_boxes
         if proposal_function == 'random':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_random(reference_box, None, None, None, None, number_of_proposals=number_of_proposals)
+            pred_cubes, stats_image, stats_ranges = proposals.propose_random(reference_box, None, None, None, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'z':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_z(reference_box, depth_maps_tensor.squeeze(), None, None, None, number_of_proposals=number_of_proposals)
+            pred_cubes, stats_image, stats_ranges = proposals.propose_z(reference_box, depth_maps_tensor.squeeze(), None, None, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'xy':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_xy_patch(reference_box, depth_maps_tensor.squeeze(), None, im_shape, None, number_of_proposals=number_of_proposals)
+            pred_cubes, stats_image, stats_ranges = proposals.propose_xy_patch(reference_box, depth_maps_tensor.squeeze(), None, im_shape, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'dim':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_random_dim(reference_box, depth_maps_tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals)
+            pred_cubes, stats_image, stats_ranges = proposals.propose_random_dim(reference_box, depth_maps_tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'rotation':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_random_rotation(reference_box, depth_maps_tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals)
+            pred_cubes, stats_image, stats_ranges = proposals.propose_random_rotation(reference_box, depth_maps_tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'aspect':
-            pred_cubes, stats_instance, stats_ranges = proposals.propose_aspect_ratio(reference_box, depth_maps_tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals)
+            pred_cubes, stats_image, stats_ranges = proposals.propose_aspect_ratio(reference_box, depth_maps_tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         else:
-            pred_cubes, stats_instance, stats_ranges = proposals.propose(reference_box, depth_maps_tensor.squeeze(), priors, im_shape, K, number_of_proposals=number_of_proposals, gt_cube=gt_3d, ground_normal=normal_vec)
+            pred_cubes, stats_image, stats_ranges = proposals.propose(reference_box, depth_maps_tensor.squeeze(), priors, im_shape, K, number_of_proposals=number_of_proposals, gt_cubes=gt_3d, ground_normal=normal_vec)
         
         pred_boxes = cubes_to_box(pred_cubes, K, im_shape)
-        return pred_cubes, pred_boxes, stats_instance, stats_ranges
+        return pred_cubes, pred_boxes, stats_image, stats_ranges
     
     def _forward_cube(self, images, images_raw, combined_features, mask_per_image, depth_maps, ground_maps, features, instances, Ks, im_current_dims, im_scales_ratio, experiment_type, proposal_function):
 
@@ -362,7 +362,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         # normalise the points
         points = np.stack((xg, yg, zg), axis=-1).reshape(-1, 3)
         # colors = im.reshape(-1, 3) / 255.0
-        colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu())[ground].reshape(-1, 3) / 255.0
+        # colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu())[ground].reshape(-1, 3) / 255.0
         plane = pyrsc.Plane()
         # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
         best_eq, best_inliers = plane.fit(points, thresh=0.05, maxIteration=1000)
@@ -411,6 +411,7 @@ class ROIHeads_Boxer(StandardROIHeads):
         score_corner   = np.zeros((n_gt, number_of_proposals))
         stats_image    = torch.zeros(n_gt, 9)
         stats_off      = np.zeros((n_gt, 10))
+        combinations   = np.zeros((n_gt, 26))
                 
         pred_cubes_out = Cubes(torch.zeros(len(gt_boxes), 1, 15, device=images_raw.device), scores=torch.zeros(len(gt_boxes), 1, device=images_raw.device),labels=gt_box_classes)
         pred_boxes_out = []
@@ -474,7 +475,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                         IoU3Ds[j, i, :] = IoU3D
                 return IoU3Ds
             else: 
-                pred_cubes, pred_boxes, stats_instance, stats_ranges = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps.tensor, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec, gt_cubes)
+                pred_cubes, pred_boxes, stats_image, stats_ranges = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps.tensor, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec, gt_cubes)
 
             for i in range(n_gt):
                 # iou
@@ -503,6 +504,34 @@ class ROIHeads_Boxer(StandardROIHeads):
                 score_corner[i,:] = self.accumulate_scores(corners_scores.cpu().numpy(), IoU3D)
                 score_combined[i,:] = self.accumulate_scores(combined_score, IoU3D)
                 score_random[i,:] = self.accumulate_scores(random_score, IoU3D)
+                
+                # This will not be pretty
+                combinations[i,0] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu()), IoU3D)[0]
+                combinations[i,1] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu()), IoU3D)[0]
+                combinations[i,2] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(corners_scores.cpu()), IoU3D)[0]
+                combinations[i,3] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,4] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu()), IoU3D)[0]
+                combinations[i,5] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(corners_scores.cpu()), IoU3D)[0]
+                combinations[i,6] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,7] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu())*np.array(corners_scores.cpu()), IoU3D)[0]
+                combinations[i,8] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,9] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,10] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,11] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,12] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,13] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu())*np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,14] = self.accumulate_scores(np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu())*np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,15] = self.accumulate_scores(np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu()), IoU3D)[0]
+                combinations[i,16] = self.accumulate_scores(np.array(seg_mod_scores.cpu())*np.array(corners_scores.cpu()), IoU3D)[0]
+                combinations[i,17] = self.accumulate_scores(np.array(seg_mod_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,18] = self.accumulate_scores(np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu())*np.array(corners_scores.cpu()), IoU3D)[0]
+                combinations[i,19] = self.accumulate_scores(np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,20] = self.accumulate_scores(np.array(seg_mod_scores.cpu())*np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,21] = self.accumulate_scores(np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu())*np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,22] = self.accumulate_scores(np.array(dim_scores.cpu())*np.array(corners_scores.cpu()), IoU3D)[0]
+                combinations[i,23] = self.accumulate_scores(np.array(dim_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,24] = self.accumulate_scores(np.array(dim_scores.cpu())*np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
+                combinations[i,25] = self.accumulate_scores(np.array(corners_scores.cpu())*np.array(point_cloud_scores.cpu()), IoU3D)[0]
                 
                 score_to_use = combined_score
                 highest_score = np.argmax(score_to_use)
@@ -558,15 +587,14 @@ class ROIHeads_Boxer(StandardROIHeads):
 
                 # stats
                 sum_percentage_empty_boxes += int(np.count_nonzero(IoU3D == 0.0)/IoU3D.size*100)
-                stats_image[i] = stats_instance
-                nested_list = [[IoU3D.max()],abs(gt_cubes[i].centers.cpu().numpy()-pred_cube.centers.cpu().numpy())[0][0]/stats_ranges[:3],abs(gt_cubes[i].dimensions.cpu().numpy()-pred_cube.dimensions.cpu().numpy())[0][0]/stats_ranges[3:6],abs(util.mat2euler(gt_cubes[i].rotations[0][0])-util.mat2euler(pred_cube.rotations[0][0]))/stats_ranges[6:]]
+                nested_list = [[IoU3D.max()],abs(gt_cubes[i].centers.cpu().numpy()-pred_cube.centers.cpu().numpy())[0][0]/stats_ranges[i,:3],abs(gt_cubes[i].dimensions.cpu().numpy()-pred_cube.dimensions.cpu().numpy())[0][0]/stats_ranges[i,3:6],abs(util.mat2euler(gt_cubes[i].rotations[0][0])-util.mat2euler(pred_cube.rotations[0][0]))/stats_ranges[i,6:]]
                 stats_off[i] = [item for sublist in nested_list for item in sublist]
             stat_empty_boxes = sum_percentage_empty_boxes/n_gt
             pred_boxes_out = Boxes.cat(pred_boxes_out)
             p_info = Plotinfo(pred_cubes_out, gt_cube_meshes, gt_boxes3D, gt_boxes, pred_boxes_out, gt_box_classes, mask_per_image, Ks_scaled_per_box.cpu().numpy())
 
         if experiment_type['output_recall_scores']: # MABO
-            return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off, score_seg_mod, score_corner
+            return p_info, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_c, stat_empty_boxes, stats_image, stats_off, score_seg_mod, score_corner, combinations
         
         elif not experiment_type['output_recall_scores']: # AP
             # list of Instances with the fields: pred_boxes, scores, pred_classes, pred_bbox3D, pred_center_cam, pred_center_2D, pred_dimensions, pred_pose
@@ -764,9 +792,9 @@ class ROIHeads3DScore(StandardROIHeads):
         loss_w_iou: float,
         loss_w_seg: float,
         loss_w_pose: float,
-        loss_w_dims: float,
         loss_w_normal_vec: float,
         loss_w_z: float,
+        loss_w_dims: float,
         use_confidence: float,
         inverse_z_weight: bool,
         z_type: str,
@@ -802,9 +830,9 @@ class ROIHeads3DScore(StandardROIHeads):
         self.loss_w_iou = loss_w_iou
         self.loss_w_seg = loss_w_seg
         self.loss_w_pose = loss_w_pose
-        self.loss_w_dims = loss_w_dims
         self.loss_w_normal_vec = loss_w_normal_vec
         self.loss_w_z = loss_w_z
+        self.loss_w_dims = loss_w_dims
 
         # loss functions
         self.loss_functions = loss_functions
@@ -1244,7 +1272,7 @@ class ROIHeads3DScore(StandardROIHeads):
                 mask_zero_area = (pred_areas == 0) * 10000000
                 pred_areas = pred_areas + mask_zero_area
                 idx = torch.argmin(self.l1_loss(gt_area.repeat(max_count), pred_areas))
-                #print(mod_cube_tensor[0,2].detach().item(), (gt_area < pred_area).item(), idx.detach().item()/10,idx_match[i])
+                
                 scores[i] = self.l1_loss(cubes[i].tensor[0,0,2], mod_cube_tensor[idx,2])
                 
             else:
@@ -1286,6 +1314,23 @@ class ROIHeads3DScore(StandardROIHeads):
         gt_z_o = F.pad(gt_z_o, (0, len(pred_z)-len(pred_z_o)), value=value)
         l1loss = self.l1_loss(pred_z_o2, gt_z_o)
         return l1loss
+    
+    def dim_loss(self, priors, dimensions, gt_boxes, pred_boxes):
+        '''
+        priors   : List
+        dimensions : List of Lists
+        P(dim|priors)
+        '''
+        [prior_mean, prior_std] = priors
+        dimensions_scores = torch.exp(-1/2 * ((dimensions - prior_mean)/prior_std)**2)
+        scores = dimensions_scores.mean(1)
+
+        gt_ratio = (gt_boxes[0,2]-gt_boxes[0,0])/(gt_boxes[0,3]-gt_boxes[0,1])
+        pred_ratios = (pred_boxes[:,2]-pred_boxes[:,0])/(pred_boxes[:,3]-pred_boxes[:,1])
+        differences = torch.abs(gt_ratio-pred_ratios)
+        max_difference = torch.max(differences)
+        
+        return (1 - differences / max_difference) * scores
     
     def pseudo_gt_z_loss_point(self, depth_maps, pred_xy, pred_z, num_boxes_per_image):
         '''Compute the pseudo ground truth z loss based on the depth map
@@ -1569,11 +1614,13 @@ class ROIHeads3DScore(StandardROIHeads):
             
             # 2D IoU
             if 'iou' in self.loss_functions:
-                loss_iou = generalized_box_iou_loss(gt_boxes_tensor, proj_boxes, reduction='none').view(n, -1).mean(dim=1) #TODO Check if these are the correct boxes to use
+                loss_iou = generalized_box_iou_loss(gt_boxes_tensor, proj_boxes, reduction='none').view(n, -1).mean(dim=1)
 
             # Pose
             if 'pose_alignment' in self.loss_functions:
                 loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
+            if loss_pose is not None:
+                loss_pose = loss_pose.repeat(n)
 
             # normal vector to ground loss
             if 'pose_ground' in self.loss_functions:
@@ -1593,14 +1640,18 @@ class ROIHeads3DScore(StandardROIHeads):
             # segment
             if 'segmentation' in self.loss_functions:
                 loss_seg = self.segment_loss(masks_all_images, bube_corners, at_which_mask_idx)
-            
+            if loss_seg is not None:
+                loss_seg = loss_seg.repeat(n)
+
             # Z
             if 'z' in self.loss_functions:
                 loss_z = self.z_loss(gt_boxes_tensor, cubes, Ks_scaled_per_box, im_sizes, proj_boxes)
 
             # Dimensions
             if 'dims' in self.loss_functions:
-                loss_dims = None ## dummy
+                loss_dims = self.dim_loss((prior_dims_mean, prior_dims_std), cubes.dimensions.squeeze(1), gt_boxes_tensor, proj_boxes)
+                if torch.isnan(loss_dims).any():
+                    loss_dims = None
             
             total_3D_loss_for_reporting = 0
             if loss_iou is not None:
@@ -1628,32 +1679,29 @@ class ROIHeads3DScore(StandardROIHeads):
             storage.put_scalar(prefix + 'xy_error', xy_error.mean().item(), smoothing_hint=False)
             storage.put_scalar(prefix + 'total_3D_loss', self.loss_w_3d * self.safely_reduce_losses(total_3D_loss_for_reporting), smoothing_hint=False)
 
-            if self.inverse_z_weight:
-                '''
-                Weights all losses to prioritize close up boxes.
-                '''
-
-                gt_z = gt_boxes3D[:, 2]
-
-                inverse_z_w = 1/torch.log(gt_z.clip(E_CONSTANT))
-                if loss_iou is not None:
-                    loss_iou *= inverse_z_w
-
-                # scale based on log, but clip at e
-                if loss_seg is not None:
-                    loss_seg *= inverse_z_w
-
-                if loss_pose is not None:
-                    loss_pose *= inverse_z_w
-
             if self.use_confidence > 0:
                 
                 uncert_sf = SQRT_2_CONSTANT * torch.exp(-cube_uncert)
                 if loss_iou is not None:
                     loss_iou *= uncert_sf
 
-                #if not cube_2d_deltas is None:
-                #    loss_segment *= uncert_sf
+                if loss_seg is not None:
+                    loss_seg *= uncert_sf
+    
+                if loss_pose is not None:
+                    loss_pose *= uncert_sf
+
+                if loss_ground_rot is not None:
+                    loss_ground_rot *= uncert_sf
+                
+                if loss_z is not None:
+                    loss_z *= uncert_sf
+                
+                if loss_pseudo_gt_z is not None:
+                    loss_pseudo_gt_z *= uncert_sf
+
+                if loss_dims is not None:
+                    loss_dims *= uncert_sf
 
                 losses.update({prefix + 'uncert': self.use_confidence*self.safely_reduce_losses(cube_uncert.clone())})
                 storage.put_scalar(prefix + 'conf', torch.exp(-cube_uncert).mean().item(), smoothing_hint=False)
