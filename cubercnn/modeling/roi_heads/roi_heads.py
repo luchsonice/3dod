@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import logging
 
 import numpy as np
-import time
+from torchvision.ops import sigmoid_focal_loss
 
 from typing import Dict, List, Tuple
 import torch
@@ -1091,19 +1091,46 @@ class ROIHeads3DScore(StandardROIHeads):
         mask_per_image = [i['masks'] for i in seg_out]
         return mask_per_image
     
-    def segment_loss(self, gt_mask, bube_corners, at_which_mask_idx):
+    def dice_loss(self, y, y_hat):
+        '''Andreas: i am extremely unconfident in the correctness of this implementation
+        
+        taken from my implementation in the DLCV course
+
+        see also:  https://gist.github.com/weiliu620/52d140b22685cf9552da4899e2160183'''
+
+        smooth = 1
+        y_hat = F.sigmoid(y_hat)
+
+        y_hat = y_hat.view(-1)
+        y = y.view(-1)
+
+        intersection = (y_hat * y).sum()
+        dice = (2.*intersection + smooth)/(y_hat.sum() + y.sum() + smooth)
+        return 1 - dice
+    
+    def segment_loss(self, gt_mask, bube_corners, at_which_mask_idx, loss='bce'):
         n = len(bube_corners)
+        y_hat = []
+        y = []
         for i in range(n):
             gt_mask_i = gt_mask[at_which_mask_idx[i]][0]
             bube_corners_i = bube_corners[i]
-            build_mask = torch.zeros(gt_mask_i.shape, device=gt_mask_i.device)
-            build_mask[bube_corners_i[:,0].long(), bube_corners_i[:,1].long()] = 1
-            bube_mask = convex_hull(build_mask)
+            # just need the shape of the gt_mask
+            bube_mask = convex_hull(gt_mask[0].squeeze(), bube_corners_i)
 
-            bube_mask = (bube_mask > 0.5).float()
-            gt_mask_i = (gt_mask_i > 0.5).float()
-            score = F.binary_cross_entropy(gt_mask_i,bube_mask)
+            gt_mask_i = (gt_mask_i * 1.0).float()
+            y.append(gt_mask_i)
+            y_hat.append(bube_mask)
 
+        y = torch.stack(y)
+        y_hat = torch.stack(y_hat)
+        
+        if loss == 'bce':
+            score = F.binary_cross_entropy_with_logits(y, y_hat, reduction='none').mean((1,2)) # mean over h,w
+        elif loss == 'dice':
+            score = self.dice_loss(y, y_hat)
+        elif loss == 'focal':
+            score = sigmoid_focal_loss(y, y_hat, reduction='none').mean((1,2))
         return score
 
     def pose_loss(self, cube_pose:torch.Tensor, num_boxes_per_image:list[int]):
@@ -1117,6 +1144,7 @@ class ROIHeads3DScore(StandardROIHeads):
         for cube_pose_ in cube_pose.split(num_boxes_per_image):
             # normalise with the number of elements in the lower triangle to make the loss more fair between images with different number of boxes
             # we don't really care about the eps
+            # we cannot use this when there is only one cube in an image, so skip it
             if len(cube_pose_) == 1:
                 fail_count += 1
                 continue
@@ -1572,7 +1600,7 @@ class ROIHeads3DScore(StandardROIHeads):
 
             # Dimensions
             if 'dims' in self.loss_functions:
-                loss_dims = 0 ## dummy
+                loss_dims = None ## dummy
             
             total_3D_loss_for_reporting = 0
             if loss_iou is not None:
@@ -1580,6 +1608,7 @@ class ROIHeads3DScore(StandardROIHeads):
             if loss_seg is not None:
                 total_3D_loss_for_reporting += loss_seg*self.loss_w_seg
             if loss_pose is not None:
+                # this loss is a bit weird when adding, because it is a single number, which is broadcasted. instead of a number per instance
                 total_3D_loss_for_reporting += loss_pose*self.loss_w_pose
             if loss_ground_rot is not None:
                 total_3D_loss_for_reporting += loss_ground_rot * self.loss_w_normal_vec *  ground_rot_loss_confidence
@@ -1607,8 +1636,8 @@ class ROIHeads3DScore(StandardROIHeads):
                 gt_z = gt_boxes3D[:, 2]
 
                 inverse_z_w = 1/torch.log(gt_z.clip(E_CONSTANT))
-                
-                loss_iou *= inverse_z_w
+                if loss_iou is not None:
+                    loss_iou *= inverse_z_w
 
                 # scale based on log, but clip at e
                 if loss_seg is not None:
@@ -1620,7 +1649,8 @@ class ROIHeads3DScore(StandardROIHeads):
             if self.use_confidence > 0:
                 
                 uncert_sf = SQRT_2_CONSTANT * torch.exp(-cube_uncert)
-                loss_iou *= uncert_sf
+                if loss_iou is not None:
+                    loss_iou *= uncert_sf
 
                 #if not cube_2d_deltas is None:
                 #    loss_segment *= uncert_sf
@@ -1631,7 +1661,7 @@ class ROIHeads3DScore(StandardROIHeads):
             # store per batch loss stats temporarily
             self.batch_losses = [batch_losses.mean().item() for batch_losses in total_3D_loss_for_reporting.split(num_boxes_per_image)]
             
-            if self.loss_w_iou > 0:
+            if loss_iou is not None:
                 losses.update({
                     prefix + 'loss_iou': self.safely_reduce_losses(loss_iou) * self.loss_w_iou * self.loss_w_3d,
                 })

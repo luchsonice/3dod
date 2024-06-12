@@ -383,7 +383,7 @@ def show_box(box, ax):
 # Convex Hull
 import torch
 
-def jarvis_march(points):
+def jarvis_march11(points):
     # Number of points
     n = points.size(0)
     # List to store the convex hull vertices
@@ -392,7 +392,6 @@ def jarvis_march(points):
     # Find the leftmost point
     leftmost = points[torch.argmin(points[:, 0])]
     point_on_hull = leftmost
-    
     while True:
         hull.append(point_on_hull)
         endpoint = points[0]
@@ -400,7 +399,6 @@ def jarvis_march(points):
         for j in range(1, n):
             if torch.equal(endpoint, point_on_hull) or is_left_turn(point_on_hull, endpoint, points[j]):
                 endpoint = points[j]
-        
         point_on_hull = endpoint
         
         if torch.equal(endpoint, leftmost):
@@ -411,13 +409,139 @@ def jarvis_march(points):
 def is_left_turn(p1, p2, p3):
     return (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0]) > 0
 
+def direction(p1, p2, p3):
+    return (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0])
+
+def distance_sq(p1, p2):
+    return (p2[0] - p1[0])**2 + (p2[1] - p1[1])**2
+
+def distance_2d(p1, p2):
+    return (p2[:,0] - p1[:,0])**2 + (p2[:,1] - p1[:,1])**2
+
+def findDuplicates(arr): 
+    Len = len(arr)
+    ifPresent = False
+    a1 = []
+    idx = []
+    for i in range(Len - 1): 
+        for j in range(i + 1, Len): 
+            # Checking if element is present in the ArrayList or not if present then break 
+            if torch.all(arr[i] == arr[j]): 
+                # if len(a1) == 0:
+                #     a1 arr[i]
+                #     idx.append(i)
+                #     ifPresent = True
+                # else:
+                #     # if arr[i] in a1: 
+                #     #     break
+                #     # # If element is not present in the ArrayList then add it to ArrayList and make ifPresent true 
+                #     # else: 
+                a1.append(arr[i])
+                idx.append(i)
+                ifPresent = True
+                    
+    if ifPresent: 
+        return set(idx) # lazi inefficient implementation
+    else:
+        return None
+        
+
+
+def jarvis_march(points):
+    '''https://algorithmtutor.com/Computational-Geometry/Convex-Hull-Algorithms-Jarvis-s-March/'''
+    # remove duplicates
+    duplicates = findDuplicates(points)
+    # this is necessary if there are > 2 duplicates of the same element
+    if duplicates is not None:
+        plusone = torch.zeros_like(points)
+        for i, d in enumerate(duplicates):
+            plusone[d] += i + 1
+        points = points + plusone
+
+    # find the lower left point
+    index = torch.argmin(distance_2d(points, torch.tensor([[0,0]], device=points.device)))
+    # index = torch.argmin(points[:,0])
+
+    a = points[index]
+    
+    # selection sort
+    l = index
+    result = []
+    result.append(a)
+    while (True):
+        q = (l + 1) % len(points)
+        for i in range(len(points)):
+            if i == l:
+                continue
+            # find the greatest left turn
+            # in case of collinearity, consider the farthest point
+            d = direction(points[l], points[i], points[q])
+            if d > 0 or (d == 0 and distance_sq(points[i], points[l]) > distance_sq(points[q], points[l])):
+                q = i
+        l = q
+        if l == index:
+            break
+        result.append(points[q])
+
+    return torch.flip(torch.stack(result), [0,])
+
+
+def cross(o, a, b):
+    """
+    Calculates cross between two vectors.
+
+    :param o, a: vector
+    :param o, b: vector
+    :return: cross product
+    """
+    ox, oy = o
+    ax, ay = a
+    bx, by = b
+
+    return (ax - ox) * (by - oy) - (ay - oy) * (bx - ox)
+
+def convex(points):
+    """
+    Calculates the concave hull for a list of points. Each point is a tuple
+    containing the x- and y-coordinate.
+
+    :param points: list of points
+    :return: convex hull
+    """
+    dataset = points  # Remove duplicates
+    if len(dataset) <= 1:
+        return dataset
+
+    # Build lower hull
+    lower = []
+    for p in dataset:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+
+    # Build upper hull
+    upper = []
+    for p in reversed(dataset):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+
+    a = lower[:-1] + upper[:-1]
+    return torch.flip(torch.stack(a), [0,])
+
 def fill_polygon(mask, polygon):
+    '''
+    inspired by https://web.archive.org/web/20120323102807/http://local.wasp.uwa.edu.au/~pbourke/geometry/insidepoly/
+    '''
     h, w = mask.shape
-    Y, X = torch.meshgrid(torch.arange(h), torch.arange(w), indexing='ij')
+    Y, X = torch.meshgrid(torch.arange(h), torch.arange(w), indexing='ij') # or xy??? xy is the numpy was
     grid_coords = torch.stack([X.flatten(), Y.flatten()], dim=1).float().to(mask.device)
     
-    new_mask = torch.zeros_like(mask, dtype=torch.bool)
+    new_mask = torch.ones(h, w, device=mask.device)
+    zeros = torch.zeros(h, w, device=mask.device)
+    ones = torch.ones(h, w, device=mask.device)
     
+    # For some reason it is easier for me to comprehend the algorithm if we iterate counter-clockwise
     for i in range(len(polygon)):
         v1 = polygon[i]
         v2 = polygon[(i + 1) % len(polygon)]
@@ -425,20 +549,93 @@ def fill_polygon(mask, polygon):
         # Determine the direction of the edge
         edge_direction = v2 - v1
         
+        # Given a line segment between P0 (x0,y0) and P1 (x1,y1), another point P (x,y) has the following relationship to the line segment.
+        # Compute
+        # (y - y0) (x1 - x0) - (x - x0) (y1 - y0)
         # Check if the point is to the left of the edge
-        is_left = (grid_coords[:, 0] - v1[0]) * edge_direction[1] - (grid_coords[:, 1] - v1[1]) * edge_direction[0] > 0
+        points = (grid_coords[:, 0] - v1[0]) * edge_direction[1] - (grid_coords[:, 1] - v1[1]) * edge_direction[0]
+        # we can do the threshold in a clever differentiable way
+        # this sets all values to be between 0 and 1
+        is_left = torch.min(torch.max(points.view(h, w), zeros), ones)
         
-        # Count the number of times the ray from the point intersects the edge
-        num_intersections = is_left.view(h, w).sum(dim=0) % 2
-        
-        # If the number of intersections is odd, the point is inside the polygon
-        new_mask |= num_intersections.bool()
-    
+        # do the intersection of the 2 masks, this progressily builds op the polygon
+        new_mask = new_mask * is_left
+
     return new_mask
 
-def convex_hull(mask):
-    coords = torch.nonzero(mask).float()
+def convex_hull(mask, coords):
     hull = jarvis_march(coords)
+    # hull = convex(coords)
     new_mask = fill_polygon(mask, hull)
-
     return new_mask
+
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    mask = torch.zeros(700, 700, dtype=torch.bool)
+    # p = torch.tensor([[5,6],[21.0,7],[21,20],[10,20],[15,20],[5,20],[11,8],[15,15],[17,6],[11,15]])
+
+    p = torch.tensor([[271.0000, 356.0000],
+                    [ 25.3744, 356.0000],
+                    [  0.0000, 356.0000],
+                    [  0.0000,  89.5266],
+                    [271.0000, 159.3112],
+                    [ 95.5653, 201.7484],
+                    [  0.0000,   0.0000],
+                    [271.0000,   0.0000]])
+    
+    p2 = torch.tensor([[150.3456,   0.0000],
+                    [479.0000,   0.0000],
+                    [ 11.8427,   0.0000],
+                    [  0.0000,   0.0000],
+                    [121.4681, 232.5976],
+                    [375.6230, 383.9329],
+                    [ 12.8765, 630.0000],
+                    [  0.0000, 344.7250]])
+    
+    p3 = torch.tensor([[290.9577, 171.1176],
+                    [197.7348, 483.7612],
+                    [383.0000, 504.0000],
+                    [383.0000,  27.6211],
+                    [  2.2419,  52.6505],
+                    [  0.0000, 399.6908],
+                    [  0.0000, 504.0000],
+                    [  0.0000,   0.0000]])
+    
+    p4 = torch.tensor([[271.0000,  19.5241],
+                    [271.0000, 356.0000],
+                    [  0.0000,   0.0000],
+                    [271.0000,   0.0000],
+                    [  0.0000,   0.0000],
+                    [163.0264,  77.9408],
+                    [164.2467, 321.0222],
+                    [  0.0000, 356.0000],
+                    [  0.0000,   0.0000]])
+    
+    p5 = torch.tensor([[272.0000,   1.0000],
+                    [  0.0000, 173.5156],
+                    [ 74.8860, 141.3913],
+                    [253.8221,   0.0000],
+                    [271.0000,   0.0000],
+                    [271.0000, 356.0000],
+                    [262.5294, 327.9978],
+                    [271.0000, 120.8048]])
+
+    # mask5 = convex_hull(mask, p5)
+    mask4 = convex_hull(mask, p4)
+    mask1 = convex_hull(mask, p)
+    mask2 = convex_hull(mask, p2)
+    mask3 = convex_hull(mask, p3)
+    fig, ax = plt.subplots(1,5, figsize=(20,5))
+    ax[0].scatter(p[:,0], p[:,1], c='r')
+    ax[1].scatter(p2[:,0], p2[:,1], c='b')
+    ax[2].scatter(p3[:,0], p3[:,1], c='g')
+    ax[3].scatter(p4[:,0], p4[:,1], c='y')
+    ax[4].scatter(p5[:,0], p5[:,1], c='m')
+
+    ax[0].imshow(mask1)
+    ax[1].imshow(mask2)
+    ax[2].imshow(mask3)
+    ax[3].imshow(mask4)
+    # ax[4].imshow(mask5)
+    plt.show()
+    a = 2
