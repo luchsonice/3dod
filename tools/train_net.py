@@ -59,8 +59,6 @@ from cubercnn import util, vis, data
 import cubercnn.vis.logperf as utils_logperf
 
 
-from cubercnn.data.generate_ground_segmentations import init_segmentation
-
 MAX_TRAINING_ATTEMPTS = 10
 
 
@@ -182,8 +180,6 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     # model.parameters() is surprisingly expensive at 150ms, so cache it
     named_params = list(model.named_parameters())
 
-    segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
-
     with EventStorage(start_iter) as storage:
         
         while True:
@@ -192,7 +188,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             storage.iter = iteration
 
             # forward
-            loss_dict = model(data, segmentor)
+            loss_dict = model(data)
             losses = sum(loss_dict.values())
 
             # reduce
