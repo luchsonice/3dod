@@ -279,11 +279,15 @@ class RCNN3D_combined_features(nn.Module):
     @classmethod
     def from_config(cls, cfg, priors=None):
         backbone = build_backbone(cfg, priors=priors)
-        depth_model = 'zoedepth'
-        pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
-        d_model = setup_depth_model(depth_model, pretrained_resource) #NOTE maybe make the depth model be learnable as well
-       
-        shape_modified = {key:ShapeSpec(i.channels*2,stride=i.stride) for key, i in backbone.output_shape().items()}
+        if cfg.MODEL.DEPTH_ON:
+            depth_model = 'zoedepth'
+            pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
+            d_model = setup_depth_model(depth_model, pretrained_resource) #NOTE maybe make the depth model be learnable as well
+        
+            shape_modified = {key:ShapeSpec(i.channels*2,stride=i.stride) for key, i in backbone.output_shape().items()}
+        else:
+            d_model = None
+            shape_modified = backbone.output_shape()
 
         return {
             "backbone": backbone,
@@ -381,7 +385,8 @@ class RCNN3D_combined_features(nn.Module):
         features = self.backbone(images.tensor)
         proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
 
-        features = self.cat_depth_features(features, images_raw)
+        if self.depth_model is not None:
+            features = self.cat_depth_features(features, images_raw)
         
         instances, detector_losses = self.roi_heads(
             images, images_raw, ground_maps, depth_maps, features, proposals, 
