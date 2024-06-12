@@ -6,7 +6,7 @@ from ProposalNetwork.utils.utils import iou_3d
 center = torch.tensor([0,0,0])
 dim = torch.tensor([1,1,1])
 unit_rotation = util.euler2mat([0,0,0]).flatten()
-grid_rotation = util.euler2mat([0,2.5,0]).flatten()
+grid_rotation = util.euler2mat([0,2.5 *0.0174533,0]).flatten()
 
 unit_cube = torch.cat([center,dim,torch.tensor(unit_rotation)])
 grid_cube = torch.cat([center,dim,torch.tensor(grid_rotation)])
