@@ -519,7 +519,7 @@ class Omni3DEvaluationHelper:
         utils_logperf.print_ap_omni_histogram(self.results_omni3d)
 
 
-def inference_on_dataset(model, data_loader, segmentor=None):
+def inference_on_dataset(model, data_loader):
     """
     Run model on the data_loader. 
     Also benchmark the inference speed of `model.__call__` accurately.
@@ -568,7 +568,7 @@ def inference_on_dataset(model, data_loader, segmentor=None):
                 total_eval_time = 0
 
             start_compute_time = time.perf_counter()
-            outputs = model(inputs, segmentor)
+            outputs = model(inputs)
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
             total_compute_time += time.perf_counter() - start_compute_time

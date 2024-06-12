@@ -62,7 +62,7 @@ import cubercnn.vis.logperf as utils_logperf
 MAX_TRAINING_ATTEMPTS = 10
 
 
-def do_test(cfg, model, segmentor, iteration='final', storage=None):
+def do_test(cfg, model, iteration='final', storage=None):
         
     filter_settings = data.get_filter_settings_from_cfg(cfg)    
     filter_settings['visibility_thres'] = cfg.TEST.VISIBILITY_THRES
@@ -93,7 +93,7 @@ def do_test(cfg, model, segmentor, iteration='final', storage=None):
         Distributed Cube R-CNN inference
         '''
         data_loader = build_detection_test_loader(cfg, dataset_name,batch_size=cfg.SOLVER.IMS_PER_BATCH, num_workers=4)
-        results_json = inference_on_dataset(model, data_loader, segmentor)
+        results_json = inference_on_dataset(model, data_loader)
 
         if comm.is_main_process():
             
@@ -306,7 +306,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
                 (do_eval and ((iteration + 1) % cfg.TEST.EVAL_PERIOD) == 0 and iteration != (max_iter - 1)):
 
                 logger.info('Starting test for iteration {}'.format(iteration+1))
-                do_test(cfg, model, segmentor, iteration=iteration+1, storage=storage)
+                do_test(cfg, model, iteration=iteration+1, storage=storage)
                 comm.synchronize()
                 
                 if not cfg.MODEL.USE_BN: 
