@@ -265,19 +265,44 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         # Statistics
         stats = torch.cat([x[8] for x in outputs],dim=0)
         num_bins = 40
-        titles = ['x','y','z','w','h','l','rx','ry','rz']
+        titles = ['x','y','z']
         plt.figure(figsize=(15, 15))
         plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
         for i,title in enumerate(titles):
-            plt.subplot(3, 3, 1+i)
+            plt.subplot(3, 1, 1+i)
             plt.hist(stats[:,i].numpy(), bins=num_bins, color=color_palette[6],density=True)
             plt.axvline(x=0, color=color_palette[-1])
             plt.axvline(x=1, color=color_palette[-1])
             plt.title(title)
-        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats.png')
+        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_center.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
-        #logger.info('saved to ', f_name
+        print('saved to ', f_name)
+        titles = ['w','h','l']
+        plt.figure(figsize=(15, 15))
+        plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
+        for i,title in enumerate(titles):
+            plt.subplot(3, 1, 1+i)
+            plt.hist(stats[:,3+i].numpy(), bins=num_bins, color=color_palette[6],density=True)
+            plt.axvline(x=0, color=color_palette[-1])
+            plt.axvline(x=1, color=color_palette[-1])
+            plt.title(title)
+        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_dim.png')
+        plt.savefig(f_name, dpi=300, bbox_inches='tight')
+        plt.close()
+        print('saved to ', f_name)
+        titles = ['rx','ry','rz']
+        plt.figure(figsize=(15, 15))
+        plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
+        for i,title in enumerate(titles):
+            plt.subplot(3, 1, 1+i)
+            plt.hist(stats[:,6+i].numpy(), bins=num_bins, color=color_palette[6],density=True)
+            plt.axvline(x=0, color=color_palette[-1])
+            plt.axvline(x=1, color=color_palette[-1])
+            plt.title(title)
+        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_rot.png')
+        plt.savefig(f_name, dpi=300, bbox_inches='tight')
+        plt.close()
         print('saved to ', f_name)
 
         stats_off = np.concatenate([np.array(sublist) for sublist in (x[9] for x in outputs)])
