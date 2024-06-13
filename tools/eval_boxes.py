@@ -200,7 +200,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
 
         outputs = []
         for i, inputs in tqdm(enumerate(data_loader), desc="Mean average best overlap plots", total=total):
-            logger.info('iteration',i)
+            logger.info('iteration %s',i)
             output = model(inputs, segmentor, experiment_type, proposal_function)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off
             if output is not None:
@@ -219,7 +219,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         combinations      = np.mean(np.concatenate([np.array(sublist) for sublist in (x[12] for x in outputs)]),axis=0)
         #logger.info('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
         print('Percentage of cubes with no intersection:',np.mean(stat_empty_boxes))
-        print('combination scores:',combinations)
+        logger.info('combination scores:%s',combinations)
+        #print('combination scores:',combinations)
         print('best combination is C'+str(np.argmax(combinations)+1))
 
         
@@ -243,10 +244,10 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.plot(x_range,score_dim, linestyle='-',c=color_palette[5],label='dim') 
         plt.plot(x_range,score_seg, linestyle='-',c=color_palette[2],label='segment')
         plt.plot(x_range,Iou2D, linestyle='-',c=color_palette[4],label='2D IoU') 
-        plt.plot(x_range,score_corners, linestyle='-',c=color_palette[7],label='Corner dist')
+        plt.plot(x_range,score_corners, linestyle='-',c=color_palette[7],label='corner dist')
         plt.plot(x_range,score_random, linestyle='-',c='grey',label='random') 
         plt.plot(x_range,score_point_cloud, linestyle='-',c=color_palette[3],label='point cloud')
-        plt.plot(x_range,score_seg_mod, linestyle='-',c=color_palette[0],label='segment mod')
+        plt.plot(x_range,score_seg_mod, linestyle='-',c=color_palette[0],label='mod segment')
         plt.grid(True)
         plt.xscale('log')
         plt.xticks([1, 10, 100, 1000], ['1', '10', '100', '1000'])
@@ -254,7 +255,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.xlabel('Number of Proposals')
         plt.ylabel('3D IoU')
         plt.legend()
-        plt.title('Mean Average Best Overlap vs Number of Proposals ({} images, {} instances)'.format(1+i,total_num_instances))
+        plt.title('Average Best Overlap vs Number of Proposals ({} images, {} instances)'.format(1+i,total_num_instances))
         f_name = os.path.join('ProposalNetwork/output/MABO', 'MABO.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
