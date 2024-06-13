@@ -494,7 +494,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                 dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0], gt_boxes[i], pred_boxes[i])
                 seg_mod_scores = score_mod_segmentation(mask_per_image_cpu[i][0], bube_corners)
                 corners_scores = score_corners(mask_per_image_cpu[i][0], bube_corners)
-                combined_score = np.array(IoU2D_scores.cpu())*np.array(seg_mod_scores.cpu())*np.array(dim_scores.cpu())#np.array(corners_scores.cpu())
+                combined_score = np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu())*np.array(corners_scores.cpu())#*np.array(seg_mod_scores.cpu())
                 random_score = np.random.rand(number_of_proposals)
                 
                 score_IoU2D[i,:] = self.accumulate_scores(IoU2D_scores.cpu().numpy(), IoU3D)
