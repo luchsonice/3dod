@@ -73,6 +73,7 @@ def do_test(cfg, model, iteration='final', storage=None):
     dataset_names_test = cfg.DATASETS.TEST
     only_2d = cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_3D == 0.0
     output_folder = os.path.join(cfg.OUTPUT_DIR, "inference", 'iter_{}'.format(iteration))
+    logger.info('Output folder: %s', output_folder)
 
     eval_helper = Omni3DEvaluationHelper(
         dataset_names_test, 
@@ -92,7 +93,7 @@ def do_test(cfg, model, iteration='final', storage=None):
         '''
         Distributed Cube R-CNN inference
         '''
-        data_loader = build_detection_test_loader(cfg, dataset_name,batch_size=cfg.SOLVER.IMS_PER_BATCH, num_workers=4)
+        data_loader = build_detection_test_loader(cfg, dataset_name,batch_size=cfg.SOLVER.IMS_PER_BATCH, num_workers=2)
         results_json = inference_on_dataset(model, data_loader)
 
         if comm.is_main_process():
@@ -111,7 +112,7 @@ def do_test(cfg, model, iteration='final', storage=None):
             log_str = vis.visualize_from_instances(
                 instances, data_loader.dataset, dataset_name, 
                 cfg.INPUT.MIN_SIZE_TEST, os.path.join(output_folder, dataset_name), 
-                MetadataCatalog.get('omni3d_model').thing_classes, iteration
+                MetadataCatalog.get('omni3d_model').thing_classes, iteration, visualize_every=1
             )
             logger.info(log_str)
 
@@ -140,7 +141,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
     
     # create the dataloader
     data_mapper = DatasetMapper3D(cfg, is_train=True)
-    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=4)
+    data_loader = build_detection_train_loader(cfg, mapper=data_mapper, dataset_id_to_src=dataset_id_to_src, num_workers=2)
 
     # give the mapper access to dataset_ids
     data_mapper.dataset_id_to_unknown_cats = dataset_id_to_unknown_cats
@@ -221,7 +222,8 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             if comm.is_main_process():
                 # send loss scalars to tensorboard.
                 storage.put_scalars(total_loss=losses_reduced, **loss_dict_reduced)
-        
+                epoch = iteration // cfg.SOLVER.IMS_PER_BATCH
+
             # backward and step
             optimizer.zero_grad()
             losses.backward()
