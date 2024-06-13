@@ -269,7 +269,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.figure(figsize=(15, 15))
         plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
         for i,title in enumerate(titles):
-            plt.subplot(3, 1, 1+i)
+            plt.subplot(1, 3, 1+i)
             plt.hist(stats[:,i].numpy(), bins=num_bins, color=color_palette[6],density=True)
             plt.axvline(x=0, color=color_palette[-1])
             plt.axvline(x=1, color=color_palette[-1])
@@ -282,7 +282,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.figure(figsize=(15, 15))
         plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
         for i,title in enumerate(titles):
-            plt.subplot(3, 1, 1+i)
+            plt.subplot(1, 3, 1+i)
             plt.hist(stats[:,3+i].numpy(), bins=num_bins, color=color_palette[6],density=True)
             plt.axvline(x=0, color=color_palette[-1])
             plt.axvline(x=1, color=color_palette[-1])
@@ -295,7 +295,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.figure(figsize=(15, 15))
         plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
         for i,title in enumerate(titles):
-            plt.subplot(3, 1, 1+i)
+            plt.subplot(1, 3, 1+i)
             plt.hist(stats[:,6+i].numpy(), bins=num_bins, color=color_palette[6],density=True)
             plt.axvline(x=0, color=color_palette[-1])
             plt.axvline(x=1, color=color_palette[-1])
