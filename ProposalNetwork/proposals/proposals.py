@@ -86,7 +86,7 @@ def propose_xy_patch(reference_box, depth_image, priors, im_shape, K, number_of_
     if gt_cubes is None:
         return cubes, None, None
     
-    stats = statistics(gt_cubes,x,y,z,w,h,l)
+    stats = statistics(gt_cubes,xt,yt,z,w,h,l)
 
     return cubes, stats, torch.ones(cubes.num_instances,9)
 
@@ -116,9 +116,9 @@ def propose_z(reference_box, depth_image, priors, im_shape, K, number_of_proposa
     z = torch.zeros_like(x)
     for i in range(number_of_instances):
         z_depth_patch = depth_image[int(reference_box.tensor[i,1]):int(reference_box.tensor[i,3]), int(reference_box.tensor[i,0]):int(reference_box.tensor[i,2])]
-        quantiles = torch.quantile(z_depth_patch, torch.tensor([0.2, 0.8],device=z_depth_patch.device), dim=None)
+        quantiles = torch.quantile(z_depth_patch, torch.tensor([0.1, 0.9],device=z_depth_patch.device), dim=None)
         z[i] = torch.linspace(quantiles[0],quantiles[1],number_of_proposals)
-    
+
     # Dimensions
     w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=x.device), MIN_PROP_S, 2)
     h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=x.device), MIN_PROP_S, 2)
@@ -135,7 +135,7 @@ def propose_z(reference_box, depth_image, priors, im_shape, K, number_of_proposa
     if gt_cubes is None:
         return cubes, None, None
     
-    stats = statistics(gt_cubes,x,y,z,w,h,l)
+    stats = statistics(gt_cubes,xt,yt,z,w,h,l)
 
     return cubes, stats, torch.ones(cubes.num_instances,9)
 
