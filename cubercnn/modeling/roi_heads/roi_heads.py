@@ -282,10 +282,10 @@ class ROIHeads_Boxer(StandardROIHeads):
         reference_box = gt_boxes
         if proposal_function == 'random':
             pred_cubes, stats_image, stats_ranges = proposals.propose_random(reference_box, None, None, None, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
-        elif proposal_function == 'z':
-            pred_cubes, stats_image, stats_ranges = proposals.propose_z(reference_box, depth_maps_tensor.squeeze(), None, None, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'xy':
-            pred_cubes, stats_image, stats_ranges = proposals.propose_xy_patch(reference_box, depth_maps_tensor.squeeze(), None, im_shape, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
+            pred_cubes, stats_image, stats_ranges = proposals.propose_xy_patch(reference_box, None, None, im_shape, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
+        elif proposal_function == 'z':
+            pred_cubes, stats_image, stats_ranges = proposals.propose_z(reference_box, depth_maps_tensor.squeeze(), None, im_shape, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'dim':
             pred_cubes, stats_image, stats_ranges = proposals.propose_random_dim(reference_box, depth_maps_tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'rotation':
