@@ -30,7 +30,7 @@ import ProposalNetwork.proposals.proposals as proposals
 from ProposalNetwork.scoring.scorefunction import score_dimensions, score_iou, score_point_cloud, score_segmentation, score_ratios, score_corners, score_mod_segmentation
 from ProposalNetwork.utils.conversions import cubes_to_box
 from ProposalNetwork.utils.spaces import Cubes
-from ProposalNetwork.utils.utils import iou_3d, mask_iou_loss, convex_hull
+from ProposalNetwork.utils.utils import iou_2d, iou_3d, mask_iou_loss, convex_hull
 from cubercnn.modeling.roi_heads.cube_head import build_cube_head
 from cubercnn.modeling.proposal_generator.rpn import subsample_labels
 from cubercnn.modeling.roi_heads.fast_rcnn import FastRCNNOutputs
@@ -282,10 +282,10 @@ class ROIHeads_Boxer(StandardROIHeads):
         reference_box = gt_boxes
         if proposal_function == 'random':
             pred_cubes, stats_image, stats_ranges = proposals.propose_random(reference_box, None, None, None, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
-        elif proposal_function == 'z':
-            pred_cubes, stats_image, stats_ranges = proposals.propose_z(reference_box, depth_maps_tensor.squeeze(), None, None, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'xy':
-            pred_cubes, stats_image, stats_ranges = proposals.propose_xy_patch(reference_box, depth_maps_tensor.squeeze(), None, im_shape, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
+            pred_cubes, stats_image, stats_ranges = proposals.propose_xy_patch(reference_box, None, None, im_shape, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
+        elif proposal_function == 'z':
+            pred_cubes, stats_image, stats_ranges = proposals.propose_z(reference_box, depth_maps_tensor.squeeze(), None, im_shape, None, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'dim':
             pred_cubes, stats_image, stats_ranges = proposals.propose_random_dim(reference_box, depth_maps_tensor.squeeze(), priors, None, K, number_of_proposals=number_of_proposals, gt_cubes=gt_3d)
         elif proposal_function == 'rotation':
@@ -1587,6 +1587,17 @@ class ROIHeads3DScore(StandardROIHeads):
 
             # Pull off necessary GT information
             gt_2d = gt_boxes3D[:, :2]
+            gt_z = gt_boxes3D[:, 2]
+            gt_dims = gt_boxes3D[:, 3:6]
+
+            # this box may have been mirrored and scaled so
+            # we need to recompute XYZ in 3D by backprojecting.
+            gt_x3d = gt_z * (gt_2d[:, 0] - Ks_scaled_per_box[:, 0, 2])/Ks_scaled_per_box[:, 0, 0]
+            gt_y3d = gt_z * (gt_2d[:, 1] - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
+            gt_3d = torch.stack((gt_x3d, gt_y3d, gt_z)).T
+
+            # put together the GT boxes
+            gt_cubes = Cubes(torch.cat((gt_3d, gt_dims, gt_poses.view(*gt_poses.shape[:-2], -1)), dim=1).unsqueeze(1))
 
             # Get center in meters and create cubes
             #cube_z = gt_boxes3D[:,2]
@@ -1595,6 +1606,10 @@ class ROIHeads3DScore(StandardROIHeads):
 
             cubes_tensor = torch.cat((cube_x3d.unsqueeze(1),cube_y3d.unsqueeze(1),cube_z.unsqueeze(1),cube_dims,cube_pose.reshape(n,9)),axis=1).unsqueeze(1)
             cubes = Cubes(cubes_tensor)
+            
+            IoU3Ds = torch.zeros(n)
+            for i in range(n):
+                IoU3Ds[i] = iou_3d(gt_cubes[i], cubes[i])
 
             # Get bube corners
             bube_corners = torch.zeros((n,8,2))
@@ -1687,8 +1702,15 @@ class ROIHeads3DScore(StandardROIHeads):
             
             # compute errors for tracking purposes
             xy_error = (cube_xy - gt_2d).detach().abs()
+            IoU3D = IoU3Ds.detach()
+            
+            gt_boxes = torch.cat([x.tensor for x in gt_boxes], dim=0)
+            IoU2D = iou_2d(Boxes(gt_boxes),Boxes(proj_boxes)).detach()
+            IoU2D = torch.diag(IoU2D.view(n, n))
 
             storage.put_scalar(prefix + 'xy_error', xy_error.mean().item(), smoothing_hint=False)
+            storage.put_scalar(prefix + '3D IoU', IoU3D.mean().item(), smoothing_hint=False)
+            storage.put_scalar(prefix + '2D IoU', IoU2D.mean().item(), smoothing_hint=False)
             storage.put_scalar(prefix + 'total_3D_loss', self.loss_w_3d * self.safely_reduce_losses(total_3D_loss_for_reporting), smoothing_hint=False)
 
             if self.use_confidence > 0:
