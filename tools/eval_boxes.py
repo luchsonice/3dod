@@ -51,6 +51,21 @@ from cubercnn import util, vis, data
 # even though this import is unused, it initializes the backbone registry
 from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
 
+from matplotlib.patches import PathPatch
+from matplotlib.path import Path
+
+def create_striped_patch(ax, x_start, x_end, color, alpha=0.3):
+    ylim = ax.get_ylim()
+    stripe_height = (ylim[1] - ylim[0]) / 20  # Adjust stripe height as needed
+    vertices = []
+    codes = []
+    for y in np.arange(ylim[0], ylim[1], stripe_height * 2):
+        vertices.extend([(x_start, y), (x_end, y + stripe_height), (x_end, y + stripe_height * 2), (x_start, y + stripe_height)])
+        codes.extend([Path.MOVETO, Path.LINETO, Path.LINETO, Path.LINETO])
+    path = Path(vertices, codes)
+    patch = PathPatch(path, facecolor=color, edgecolor='none', alpha=alpha, hatch='/')
+    ax.add_patch(patch)
+
 color_palette = ['#008dff','#ff73bf','#c701ff','#4ecb8d','#ff9d3a','#f0c571','#384860','#d83034']
 
 def inference_on_dataset(model, data_loader, segmentor, experiment_type, proposal_function):
@@ -205,7 +220,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off
             if output is not None:
                 outputs.append(output)
-
+        with open('output/pkl_files/outputs_'+str(proposal_function)+'.pkl', 'wb') as f:
+            pickle.dump(outputs, f)
         # mean over all the outputs
         Iou2D             = np.concatenate([np.array(sublist) for sublist in (x[1] for x in outputs)])
         score_seg         = np.concatenate([np.array(sublist) for sublist in (x[2] for x in outputs)])
@@ -256,51 +272,71 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.ylabel('3D IoU')
         plt.legend()
         plt.title('Average Best Overlap vs Number of Proposals ({} images, {} instances)'.format(1+i,total_num_instances))
-        f_name = os.path.join('ProposalNetwork/output/MABO', 'MABO.png')
+        f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO', 'MABO_'+str(proposal_function)+'.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         #logger.info('saved to ', f_name)
         print('saved to ', f_name)
-
+        
         # Statistics
         stats = torch.cat([x[8] for x in outputs],dim=0)
         num_bins = 40
         titles = ['x','y','z']
         plt.figure(figsize=(15, 5))
-        plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
+        plt.suptitle("Distribution of Ground Truths in Normalised Searched Range", fontsize=20)
         for i,title in enumerate(titles):
-            plt.subplot(1, 3, 1+i)
-            plt.hist(stats[:,i].numpy(), bins=num_bins, color=color_palette[6],density=True)
-            plt.axvline(x=0, color=color_palette[-1])
-            plt.axvline(x=1, color=color_palette[-1])
+            ax = plt.subplot(1, 3, 1+i)
+            plt.hist(stats[:,i].numpy(), bins=num_bins, color=color_palette[6],density=True, zorder=2)
+            plt.axvline(x=0, color='#97a6c4',zorder=2)
+            plt.axvline(x=1, color='#97a6c4',zorder=2)
+            create_striped_patch(ax, 0, 1, '#97a6c4', alpha=0.8)
             plt.title(title)
-        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_center.png')
+        f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO', 'stats_center_'+str(proposal_function)+'.png')
+        plt.savefig(f_name, dpi=300, bbox_inches='tight')
+        plt.close()
+        print('saved to ', f_name)
+        plt.figure(figsize=(15, 5))
+        plt.suptitle("Distribution of Ground Truths in Normalised Searched Range", fontsize=20)
+        for i,title in enumerate(titles):
+            ax = plt.subplot(1, 3, 1+i)
+            plt.hist(stats[:,i].numpy(), bins=num_bins, color=color_palette[6],density=True, zorder=2)
+            plt.axvline(x=0, color='#97a6c4', zorder=2)
+            plt.axvline(x=1, color='#97a6c4', zorder=2)
+            create_striped_patch(ax, 0, 1, '#97a6c4', alpha=0.8)
+            if i != 2:
+                plt.xlim([-2,2])
+            else:
+                True # Nothing
+            plt.title(title)
+        f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO', 'stats_center_zoom_'+str(proposal_function)+'.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         print('saved to ', f_name)
         titles = ['w','h','l']
         plt.figure(figsize=(15, 5))
-        plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
+        plt.suptitle("Distribution of Ground Truths in Normalised Searched Range", fontsize=20)
         for i,title in enumerate(titles):
-            plt.subplot(1, 3, 1+i)
-            plt.hist(stats[:,3+i].numpy(), bins=num_bins, color=color_palette[6],density=True)
-            plt.axvline(x=0, color=color_palette[-1])
-            plt.axvline(x=1, color=color_palette[-1])
+            ax = plt.subplot(1, 3, 1+i)
+            plt.hist(stats[:,3+i].numpy(), bins=num_bins, color=color_palette[6],density=True, zorder=2)
+            plt.axvline(x=0, color='#97a6c4', zorder=2)
+            plt.axvline(x=1, color='#97a6c4', zorder=2)
+            create_striped_patch(ax, 0, 1, '#97a6c4', alpha=0.8)
             plt.title(title)
-        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_dim.png')
+        f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO', 'stats_dim_'+str(proposal_function)+'.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         print('saved to ', f_name)
         titles = ['rx','ry','rz']
         plt.figure(figsize=(15, 5))
-        plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
+        plt.suptitle("Distribution of Ground Truths in Normalised Searched Range", fontsize=20)
         for i,title in enumerate(titles):
-            plt.subplot(1, 3, 1+i)
-            plt.hist(stats[:,6+i].numpy(), bins=num_bins, color=color_palette[6],density=True)
-            plt.axvline(x=0, color=color_palette[-1])
-            plt.axvline(x=1, color=color_palette[-1])
+            ax = plt.subplot(1, 3, 1+i)
+            plt.hist(stats[:,6+i].numpy(), bins=num_bins, color=color_palette[6],density=True, zorder=2)
+            plt.axvline(x=0, color=color_palette[-1], zorder=2)
+            plt.axvline(x=1, color=color_palette[-1], zorder=2)
+            create_striped_patch(ax, 0, 1, '#97a6c4', alpha=0.8)
             plt.title(title)
-        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_rot.png')
+        f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO', 'stats_rot_'+str(proposal_function)+'.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         print('saved to ', f_name)
@@ -311,7 +347,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             plt.subplot(3, 3, 1+i)
             plt.scatter(stats_off[:,1+i],stats_off[:,0], color=color_palette[6])
             plt.title(title)
-        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_off.png')
+        f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO', 'stats_off_'+str(proposal_function)+'.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         #logger.info('saved to ', f_name)
@@ -324,7 +360,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             plt.title(title)
             plt.xlim([0,2])
             plt.ylim([0,1])
-        f_name = os.path.join('ProposalNetwork/output/MABO', 'stats_off_zoom.png')
+        f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO', 'stats_off_zoom_'+str(proposal_function)+'.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         #logger.info('saved to ', f_name)
@@ -369,7 +405,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             im_concat = np.concatenate((vis_img_3d, img_novel), axis=1)
             ax1.set_title('GT')
             ax1.imshow(im_concat)
-            f_name = os.path.join('ProposalNetwork/output/MABO/vis/', f'vis_{i}.png')
+            f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO/vis/', f'vis_{i}.png')
             plt.savefig(f_name, dpi=300, bbox_inches='tight')
             plt.close()
 
