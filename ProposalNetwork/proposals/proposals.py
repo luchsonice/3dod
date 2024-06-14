@@ -48,37 +48,37 @@ def propose_xy_patch(reference_box, depth_image, priors, im_shape, K, number_of_
     '''
     only propose x and y values that are within the reference box'''
     number_of_instances = len(reference_box)
-
     # Center
     m = 4
     widths = reference_box.tensor[:,2] - reference_box.tensor[:,0]
     heights = reference_box.tensor[:,3] - reference_box.tensor[:,1]
     x_min, x_max = reference_box.tensor[:,0]+widths/m, reference_box.tensor[:,2]-widths/m
     y_min, y_max = reference_box.tensor[:,1]+heights/m, reference_box.tensor[:,3]-heights/m
-    x_tensor = pixel_to_normalised_space([x_min, x_max],[im_shape[0],im_shape[0]],[2,2])
-    y_tensor = pixel_to_normalised_space([y_min, y_max],[im_shape[1],im_shape[0]],[1.5,1.5])
-    l_x = x_tensor[:,0]
-    h_x = x_tensor[:,1]
-    l_y = y_tensor[:,0]
-    h_y = y_tensor[:,1]
 
-    x = torch.rand(number_of_instances,number_of_proposals, device=h_x.device)
-    y = torch.rand(number_of_instances,number_of_proposals, device=h_x.device)
-    # rescale the numbers to the "normalised space"
-    xt = rescale_interval(x, (h_x).view(-1, 1), l_x.view(-1, 1))
-    yt = rescale_interval(y, (h_y).view(-1, 1), l_y.view(-1, 1))
+    xt = pixel_to_normalised_space([x_min, x_max],[im_shape[0],im_shape[0]],[3,3])
+    yt = pixel_to_normalised_space([y_min, y_max],[im_shape[1],im_shape[1]],[2,2])
+
+    x = vectorized_linspace(xt[:,0],xt[:,1],number_of_proposals)
+    y = vectorized_linspace(yt[:,0],yt[:,1],number_of_proposals)
+
     z = torch.rand(number_of_instances,number_of_proposals, device=reference_box.device) * 4 + 1
+
+    # NOTE Finding the center like below might be more correct, this isnt though how we did it when we developed this method. Also, this works best when depth correct which it most likely isnt
+    #x_0 = torch.linspace(x_min[0],x_max[0],number_of_proposals).to(K.device)
+    #cube_x3d = z * (x_0 - K.unsqueeze(0).repeat(number_of_proposals,1,1)[:, 0, 2])/K.unsqueeze(0).repeat(number_of_proposals,1,1)[:, 0, 0]
+    #print(cube_x3d)
+    #cube_y3d = cube_z * (cube_y - Ks_scaled_per_box[:, 1, 2])/Ks_scaled_per_box[:, 1, 1]
 
     # Dimensions
     # constrain to interval [MIN_PROP_S, 2] meters 
-    w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=h_x.device), MIN_PROP_S, 2)
-    h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=h_x.device), MIN_PROP_S, 2)
-    l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=h_x.device), MIN_PROP_S, 2)
+    w = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=K.device), MIN_PROP_S, 2)
+    h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=K.device), MIN_PROP_S, 2)
+    l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=K.device), MIN_PROP_S, 2)
 
-    xyzwhl = torch.stack([xt, yt, z, w, h, l], 2)
+    xyzwhl = torch.stack([x, y, z, w, h, l], 2)
     
     # Pose
-    rotation_matrices = utils.randn_orthobasis_torch(number_of_proposals, number_of_instances).to(device=h_x.device)
+    rotation_matrices = utils.randn_orthobasis_torch(number_of_proposals, number_of_instances).to(device=K.device)
 
     cubes = Cubes(torch.cat((xyzwhl, rotation_matrices.flatten(start_dim=2)), dim=2))
 
@@ -86,7 +86,7 @@ def propose_xy_patch(reference_box, depth_image, priors, im_shape, K, number_of_
     if gt_cubes is None:
         return cubes, None, None
     
-    stats = statistics(gt_cubes,xt,yt,z,w,h,l)
+    stats = statistics(gt_cubes,x,y,z,w,h,l)
 
     return cubes, stats, torch.ones(cubes.num_instances,9)
 
@@ -101,18 +101,13 @@ def propose_z(reference_box, depth_image, priors, im_shape, K, number_of_proposa
     heights = reference_box.tensor[:,3] - reference_box.tensor[:,1]
     x_min, x_max = reference_box.tensor[:,0]+widths/m, reference_box.tensor[:,2]-widths/m
     y_min, y_max = reference_box.tensor[:,1]+heights/m, reference_box.tensor[:,3]-heights/m
-    x_tensor = pixel_to_normalised_space([x_min, x_max],[im_shape[0],im_shape[0]],[2,2])
-    y_tensor = pixel_to_normalised_space([y_min, y_max],[im_shape[1],im_shape[0]],[1.5,1.5])
-    l_x = x_tensor[:,0]
-    h_x = x_tensor[:,1]
-    l_y = y_tensor[:,0]
-    h_y = y_tensor[:,1]
 
-    x = torch.rand(number_of_instances,number_of_proposals, device=h_x.device)
-    y = torch.rand(number_of_instances,number_of_proposals, device=h_x.device)
-    # rescale the numbers to the "normalised space"
-    xt = rescale_interval(x, (h_x).view(-1, 1), l_x.view(-1, 1))
-    yt = rescale_interval(y, (h_y).view(-1, 1), l_y.view(-1, 1))
+    xt = pixel_to_normalised_space([x_min, x_max],[im_shape[0],im_shape[0]],[3,3])
+    yt = pixel_to_normalised_space([y_min, y_max],[im_shape[1],im_shape[1]],[2,2])
+
+    x = vectorized_linspace(xt[:,0],xt[:,1],number_of_proposals)
+    y = vectorized_linspace(yt[:,0],yt[:,1],number_of_proposals)
+
     z = torch.zeros_like(x)
     for i in range(number_of_instances):
         z_depth_patch = depth_image[int(reference_box.tensor[i,1]):int(reference_box.tensor[i,3]), int(reference_box.tensor[i,0]):int(reference_box.tensor[i,2])]
@@ -124,7 +119,7 @@ def propose_z(reference_box, depth_image, priors, im_shape, K, number_of_proposa
     h = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=x.device), MIN_PROP_S, 2)
     l = rescale_interval(torch.rand(number_of_instances,number_of_proposals, device=x.device), MIN_PROP_S, 2)
 
-    xyzwhl = torch.stack([xt, yt, z, w, h, l], 2)
+    xyzwhl = torch.stack([x, y, z, w, h, l], 2)
     
     # Pose
     rotation_matrices = utils.randn_orthobasis_torch(number_of_proposals, number_of_instances).to(device=x.device)
@@ -135,7 +130,7 @@ def propose_z(reference_box, depth_image, priors, im_shape, K, number_of_proposa
     if gt_cubes is None:
         return cubes, None, None
     
-    stats = statistics(gt_cubes,xt,yt,z,w,h,l)
+    stats = statistics(gt_cubes,x,y,z,w,h,l)
 
     return cubes, stats, torch.ones(cubes.num_instances,9)
 
