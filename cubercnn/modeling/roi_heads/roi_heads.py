@@ -1321,8 +1321,8 @@ class ROIHeads3DScore(StandardROIHeads):
             if len(boxes_out) == 0:
                 continue
             xy = boxes_out.get_centers()
-            x = torch.clamp(xy[:,0],0,w-1)
-            y = torch.clamp(xy[:,1],0,h-1)
+            x = torch.clamp(xy[:,0],10,w-11)
+            y = torch.clamp(xy[:,1],10,h-11)
             gt_z.append(depth_map[y.long(), x.long()])
 
         gt_z_o = torch.cat(gt_z)
@@ -1360,8 +1360,8 @@ class ROIHeads3DScore(StandardROIHeads):
             h, w = depth_map.shape
             y, x = xy[:,1], xy[:,0]
             # clamp points outside the image
-            x = torch.clamp(x,0,w-1)
-            y = torch.clamp(y,0,h-1)
+            x = torch.clamp(x,10,w-11)
+            y = torch.clamp(y,10,h-11)
             gt_z.append(depth_map[y.long(), x.long()])
         gt_z_o = torch.cat(gt_z)
         l1loss = self.l1_loss(pred_z, gt_z_o)
