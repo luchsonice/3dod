@@ -929,7 +929,7 @@ class ROIHeads3DScore(StandardROIHeads):
         cube_head = build_cube_head(cfg, shape)
         logger.info('Loss functions: %s', cfg.loss_functions)
         possible_losses = ['dims', 'pose_alignment', 'pose_ground', 'iou', 'segmentation', 'z', 'z_pseudo_gt_patch', 'z_pseudo_gt_center']
-        assert all([x in possible_losses for x in cfg.loss_functions]), f'loss functions must be in {possible_losses}'
+        assert all([x in possible_losses for x in cfg.loss_functions]), f'loss functions must be in {possible_losses}, but was {cfg.loss_functions}'
 
         if 'segmentation' in cfg.loss_functions:
             segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
@@ -1602,9 +1602,13 @@ class ROIHeads3DScore(StandardROIHeads):
             cubes_tensor = torch.cat((cube_x3d.unsqueeze(1),cube_y3d.unsqueeze(1),cube_z.unsqueeze(1),cube_dims,cube_pose.reshape(n,9)),axis=1).unsqueeze(1)
             cubes = Cubes(cubes_tensor)
             
-            IoU3Ds = torch.zeros(n)
+            IoU3Ds = torch.zeros(n, device=cubes.device)
             for i in range(n):
-                IoU3Ds[i] = iou_3d(gt_cubes[i], cubes[i])
+                try:
+                    IoU3Ds[i] = iou_3d(gt_cubes[i], cubes[i])
+                except:
+                    IoU3Ds[i] = 0
+                
 
             # Get bube corners
             bube_corners = torch.zeros((n,8,2))
