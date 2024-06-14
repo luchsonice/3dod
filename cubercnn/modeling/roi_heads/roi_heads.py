@@ -429,7 +429,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             if experiment_type['pseudo_gt'] == 'learn':
                 return pred_cubes
 
-            elif experiment_type['pseudo_gt'] == 'gt':
+            elif experiment_type['pseudo_gt'] == 'gt': # TODO Scoringfunctions need to be updated
                 for i, (gt_box) in enumerate(gt_boxes):
                     segment_scores = score_segmentation(mask_per_image_cpu[i][0], pred_cubes[i].get_bube_corners(Ks_scaled_per_box))
                     segment_scores = torch.stack(segment_scores)
