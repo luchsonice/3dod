@@ -266,7 +266,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         stats = torch.cat([x[8] for x in outputs],dim=0)
         num_bins = 40
         titles = ['x','y','z']
-        plt.figure(figsize=(15, 15))
+        plt.figure(figsize=(15, 5))
         plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
         for i,title in enumerate(titles):
             plt.subplot(1, 3, 1+i)
@@ -279,7 +279,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.close()
         print('saved to ', f_name)
         titles = ['w','h','l']
-        plt.figure(figsize=(15, 15))
+        plt.figure(figsize=(15, 5))
         plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
         for i,title in enumerate(titles):
             plt.subplot(1, 3, 1+i)
@@ -292,7 +292,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.close()
         print('saved to ', f_name)
         titles = ['rx','ry','rz']
-        plt.figure(figsize=(15, 15))
+        plt.figure(figsize=(15, 5))
         plt.suptitle("Histogram about the Ground Truths in Normalised Perspective to Searched Range", fontsize=20)
         for i,title in enumerate(titles):
             plt.subplot(1, 3, 1+i)
