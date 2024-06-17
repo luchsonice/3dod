@@ -301,6 +301,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         print('saved to ', f_name)
+        num_bins = 120
         plt.figure(figsize=(15, 5))
         plt.suptitle("Distribution of Ground Truths in Normalised Searched Range", fontsize=20)
         for i,title in enumerate(titles):
@@ -309,15 +310,13 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             plt.axvline(x=0, color='#97a6c4', zorder=2)
             plt.axvline(x=1, color='#97a6c4', zorder=2)
             create_striped_patch(ax, 0, 1, '#97a6c4', alpha=0.8)
-            if i != 2:
-                plt.xlim([-2,2])
-            else:
-                True # Nothing
+            plt.xlim([-2,2])
             plt.title(title)
         f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'stats_center_zoom_'+str(proposal_function)+'.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         print('saved to ', f_name)
+        num_bins = 40
         titles = ['w','h','l']
         plt.figure(figsize=(15, 5))
         plt.suptitle("Distribution of Ground Truths in Normalised Searched Range", fontsize=20)
@@ -338,8 +337,8 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         for i,title in enumerate(titles):
             ax = plt.subplot(1, 3, 1+i)
             plt.hist(stats[:,6+i].numpy(), bins=num_bins, color=color_palette[6],density=True, zorder=2)
-            plt.axvline(x=0, color=color_palette[-1], zorder=2)
-            plt.axvline(x=1, color=color_palette[-1], zorder=2)
+            plt.axvline(x=0, color='#97a6c4', zorder=2)
+            plt.axvline(x=1, color='#97a6c4', zorder=2)
             create_striped_patch(ax, 0, 1, '#97a6c4', alpha=0.8)
             plt.title(title)
         f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'stats_rot_'+str(proposal_function)+'.png')
