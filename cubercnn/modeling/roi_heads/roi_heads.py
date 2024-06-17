@@ -894,6 +894,7 @@ class ROIHeads3DScore(StandardROIHeads):
                     priors_z_stats = torch.cat([torch.FloatTensor(prior[2]).unsqueeze(0) for prior in priors['priors_bins']])
                     self.priors_z_stats = nn.Parameter(priors_z_stats)
 
+
     @classmethod
     def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec], priors=None):
         
@@ -1605,13 +1606,17 @@ class ROIHeads3DScore(StandardROIHeads):
             
 
             # 3d iou
-            gt_corners = gt_cubes.get_all_corners().squeeze(1)
-            proposal_corners = cubes.get_all_corners().squeeze(1)
-            try:
-                vol, iou = box3d_overlap(gt_corners.cpu(),proposal_corners.cpu())
-                IoU3Ds = torch.diag(iou)
-            except ValueError:
-                IoU3Ds = torch.zeros(n, device=cubes.device)
+            IoU3Ds = None
+            storage = get_event_storage()
+            # log 3d iou less frequently because it is slow
+            if storage.iter % 200 == 0:       
+                gt_corners = gt_cubes.get_all_corners().squeeze(1)
+                proposal_corners = cubes.get_all_corners().squeeze(1)
+                try:
+                    vol, iou = box3d_overlap(gt_corners.cpu(),proposal_corners.cpu())
+                    IoU3Ds = torch.diag(iou)
+                except ValueError:
+                    IoU3Ds = torch.zeros(n, device=cubes.device)
 
             # Get bube corners
             bube_corners = torch.zeros((n,8,2))
@@ -1704,14 +1709,14 @@ class ROIHeads3DScore(StandardROIHeads):
             
             # compute errors for tracking purposes
             xy_error = (cube_xy - gt_2d).detach().abs()
-            IoU3D = IoU3Ds.detach()
-            
+
             gt_boxes = torch.cat([x.tensor for x in gt_boxes], dim=0)
             IoU2D = iou_2d(Boxes(gt_boxes),Boxes(proj_boxes)).detach()
             IoU2D = torch.diag(IoU2D.view(n, n))
 
             storage.put_scalar(prefix + 'xy_error', xy_error.mean().item(), smoothing_hint=False)
-            storage.put_scalar(prefix + '3D IoU', IoU3D.mean().item(), smoothing_hint=False)
+            if IoU3Ds is not None:
+                storage.put_scalar(prefix + '3D IoU', IoU3Ds.detach().mean().item(), smoothing_hint=False)
             storage.put_scalar(prefix + '2D IoU', IoU2D.mean().item(), smoothing_hint=False)
             storage.put_scalar(prefix + 'total_3D_loss', self.loss_w_3d * self.safely_reduce_losses(total_3D_loss_for_reporting), smoothing_hint=False)
 
