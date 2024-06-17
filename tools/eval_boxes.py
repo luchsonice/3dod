@@ -222,6 +222,12 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
                 outputs.append(output)
         with open('output/pkl_files/outputs_'+str(proposal_function)+'.pkl', 'wb') as f:
             pickle.dump(outputs, f)
+
+        # Create output folder
+        if not os.path.exists('ProposalNetwork/output/MABO_'+str(proposal_function)):
+            os.makedirs('ProposalNetwork/output/MABO_'+str(proposal_function)) # This is maybe unnecessary
+            os.makedirs('ProposalNetwork/output/MABO_'+str(proposal_function)+'/vis/')
+
         # mean over all the outputs
         Iou2D             = np.concatenate([np.array(sublist) for sublist in (x[1] for x in outputs)])
         score_seg         = np.concatenate([np.array(sublist) for sublist in (x[2] for x in outputs)])
@@ -272,7 +278,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         plt.ylabel('3D IoU')
         plt.legend()
         plt.title('Average Best Overlap vs Number of Proposals ({} images, {} instances)'.format(1+i,total_num_instances))
-        f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO', 'MABO_'+str(proposal_function)+'.png')
+        f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'MABO_'+str(proposal_function)+'.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         #logger.info('saved to ', f_name)
@@ -291,7 +297,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             plt.axvline(x=1, color='#97a6c4',zorder=2)
             create_striped_patch(ax, 0, 1, '#97a6c4', alpha=0.8)
             plt.title(title)
-        f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO', 'stats_center_'+str(proposal_function)+'.png')
+        f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'stats_center_'+str(proposal_function)+'.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         print('saved to ', f_name)
@@ -308,7 +314,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             else:
                 True # Nothing
             plt.title(title)
-        f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO', 'stats_center_zoom_'+str(proposal_function)+'.png')
+        f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'stats_center_zoom_'+str(proposal_function)+'.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         print('saved to ', f_name)
@@ -322,7 +328,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             plt.axvline(x=1, color='#97a6c4', zorder=2)
             create_striped_patch(ax, 0, 1, '#97a6c4', alpha=0.8)
             plt.title(title)
-        f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO', 'stats_dim_'+str(proposal_function)+'.png')
+        f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'stats_dim_'+str(proposal_function)+'.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         print('saved to ', f_name)
@@ -336,7 +342,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             plt.axvline(x=1, color=color_palette[-1], zorder=2)
             create_striped_patch(ax, 0, 1, '#97a6c4', alpha=0.8)
             plt.title(title)
-        f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO', 'stats_rot_'+str(proposal_function)+'.png')
+        f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'stats_rot_'+str(proposal_function)+'.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         print('saved to ', f_name)
@@ -347,7 +353,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             plt.subplot(3, 3, 1+i)
             plt.scatter(stats_off[:,1+i],stats_off[:,0], color=color_palette[6])
             plt.title(title)
-        f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO', 'stats_off_'+str(proposal_function)+'.png')
+        f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'stats_off_'+str(proposal_function)+'.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         #logger.info('saved to ', f_name)
@@ -360,7 +366,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             plt.title(title)
             plt.xlim([0,2])
             plt.ylim([0,1])
-        f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO', 'stats_off_zoom_'+str(proposal_function)+'.png')
+        f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'stats_off_zoom_'+str(proposal_function)+'.png')
         plt.savefig(f_name, dpi=300, bbox_inches='tight')
         plt.close()
         #logger.info('saved to ', f_name)
@@ -405,7 +411,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
             im_concat = np.concatenate((vis_img_3d, img_novel), axis=1)
             ax1.set_title('GT')
             ax1.imshow(im_concat)
-            f_name = os.path.join('ProposalNetwork/output_'+str(proposal_function)+'/MABO/vis/', f'vis_{i}.png')
+            f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function)+'/vis/', f'vis_{i}.png')
             plt.savefig(f_name, dpi=300, bbox_inches='tight')
             plt.close()
 
