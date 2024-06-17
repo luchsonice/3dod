@@ -1,5 +1,6 @@
 from detectron2.layers.nms import batched_nms
 import pyransac3d as pyrsc
+from pytorch3d.ops.iou_box3d import box3d_overlap
 from ProposalNetwork.utils.plane import Plane as Plane_cuda
 from segment_anything.utils.transforms import ResizeLongestSide
 from cubercnn.data.generate_ground_segmentations import init_segmentation
@@ -1602,13 +1603,15 @@ class ROIHeads3DScore(StandardROIHeads):
             cubes_tensor = torch.cat((cube_x3d.unsqueeze(1),cube_y3d.unsqueeze(1),cube_z.unsqueeze(1),cube_dims,cube_pose.reshape(n,9)),axis=1).unsqueeze(1)
             cubes = Cubes(cubes_tensor)
             
-            IoU3Ds = torch.zeros(n, device=cubes.device)
-            for i in range(n):
-                try:
-                    IoU3Ds[i] = iou_3d(gt_cubes[i], cubes[i])
-                except:
-                    IoU3Ds[i] = 0
-                
+
+            # 3d iou
+            gt_corners = gt_cubes.get_all_corners().squeeze(1)
+            proposal_corners = cubes.get_all_corners().squeeze(1)
+            try:
+                vol, iou = box3d_overlap(gt_corners.cpu(),proposal_corners.cpu())
+                IoU3Ds = torch.diag(iou)
+            except ValueError:
+                IoU3Ds = torch.zeros(n, device=cubes.device)
 
             # Get bube corners
             bube_corners = torch.zeros((n,8,2))
