@@ -1608,11 +1608,10 @@ class ROIHeads3DScore(StandardROIHeads):
             gt_corners = gt_cubes.get_all_corners().squeeze(1)
             proposal_corners = cubes.get_all_corners().squeeze(1)
             try:
-                vol, iou = box3d_overlap(gt_corners,proposal_corners)
+                vol, iou = box3d_overlap(gt_corners.cpu(),proposal_corners.cpu())
                 IoU3Ds = torch.diag(iou)
             except ValueError:
                 IoU3Ds = torch.zeros(n, device=cubes.device)
-
 
             # Get bube corners
             bube_corners = torch.zeros((n,8,2))
