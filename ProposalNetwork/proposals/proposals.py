@@ -331,7 +331,7 @@ def propose_random_rotation(reference_box, depth_image, priors, im_shape, K, num
     stats = statistics(gt_cubes,x,y,z,w,h,l)
 
     n = gt_cubes.num_instances
-    ranges = torch.stack([torch.std(x,dim=1)*0.8, torch.std(y,dim=1)*0.8, torch.std(z,dim=1)*1.2, w_prior[1], h_prior[1]*1.1, l_prior[1], torch.tensor(torch.pi,device=reference_box.device).repeat(n),torch.tensor(torch.pi,device=reference_box.device).repeat(n),torch.tensor(torch.pi,device=reference_box.device).repeat(n)],dim=1).cpu().numpy()
+    ranges = torch.stack([torch.std(x,dim=1)*1.2, torch.std(y,dim=1)*0.8, torch.std(z,dim=1)*1.2, w_prior[1], h_prior[1]*1.1, l_prior[1], torch.tensor(torch.pi,device=reference_box.device).repeat(n),torch.tensor(torch.pi,device=reference_box.device).repeat(n),torch.tensor(torch.pi,device=reference_box.device).repeat(n)],dim=1).cpu().numpy()
 
     return cubes, stats, ranges
 
@@ -419,7 +419,7 @@ def propose(reference_box, depth_image, priors, im_shape, K, number_of_proposals
     stats = statistics(gt_cubes,x,y,z,w,h,l)
 
     n = gt_cubes.num_instances
-    ranges = torch.stack([torch.std(x,dim=1)*0.8, torch.std(y,dim=1)*0.8, torch.std(z,dim=1)*1.2, w_prior[1], h_prior[1]*1.1, l_prior[1], torch.tensor(torch.pi,device=reference_box.device).repeat(n),torch.tensor(torch.pi,device=reference_box.device).repeat(n),torch.tensor(torch.pi,device=reference_box.device).repeat(n)],dim=1).cpu().numpy()
+    ranges = torch.stack([torch.std(x,dim=1)*1.2, torch.std(y,dim=1)*0.8, torch.std(z,dim=1)*1.2, w_prior[1], h_prior[1]*1.1, l_prior[1], torch.tensor(torch.pi,device=reference_box.device).repeat(n),torch.tensor(torch.pi,device=reference_box.device).repeat(n),torch.tensor(torch.pi,device=reference_box.device).repeat(n)],dim=1).cpu().numpy()
 
     return cubes, stats, ranges
 
