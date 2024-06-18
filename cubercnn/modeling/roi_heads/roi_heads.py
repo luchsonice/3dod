@@ -1257,38 +1257,42 @@ class ROIHeads3DScore(StandardROIHeads):
 
         return torch.stack(normal_vecs)
     
-    def z_loss(self, gt_boxes, cubes, Ks, im_sizes, proj_boxes):
-        max_count = 50
+    def z_loss(self, gt_boxes:Boxes, cubes:Cubes, Ks, im_sizes, proj_boxes:Boxes):
+        max_count = 50 # 50 steps of 0.1 meters
         num_preds = cubes.num_instances
 
         # Find losses
         scores = torch.zeros((num_preds), device=cubes.device)
+
+        gt_area = gt_boxes.area()
+
+        pred_center = proj_boxes.get_centers()
+        pred_area = proj_boxes.area()
+        gt_boxes_t = gt_boxes.tensor
+
+        is_within_gt_box = ((gt_boxes_t[:, 0] - max_count <= pred_center[:,0]) <= gt_boxes_t[:, 2] + max_count) & \
+                           ((gt_boxes_t[:, 1] - max_count <= pred_center[:,1]) <= gt_boxes_t[:, 3] + max_count)
+        values_tensor = torch.linspace(0.0, (max_count-1)/10, max_count, device=cubes.device)
+        is_gt_smaller = gt_area < pred_area
+
         for i in range(num_preds):
-            gt_box = gt_boxes[i]
-            gt_area = torch.abs((gt_box[2]-gt_box[0])) * torch.abs((gt_box[3]-gt_box[1]))
-
-            pred_box = proj_boxes[i]
-            pred_center = [(pred_box[2]-pred_box[0])/2 + pred_box[0], (pred_box[3]-pred_box[1])/2 + pred_box[1]]
-            pred_area = torch.abs((pred_box[2]-pred_box[0])) * torch.abs((pred_box[3]-pred_box[1]))
-
             # Check if pred center is within gt box
-            if gt_box[0]-max_count <= pred_center[0] <= gt_box[2]+max_count and gt_box[1]-max_count <= pred_center[1] <= gt_box[3]+max_count:
+            if is_within_gt_box[i]:
                 cube_tensor = cubes[i].tensor
                 mod_cube_tensor = cube_tensor[0,0].clone().unsqueeze(0).repeat((max_count,1))
-                values_tensor = torch.linspace(0.0, (max_count-1)/10, max_count, device=cubes.device)
                 
                 # Check if too small or too big.
-                if gt_area < pred_area: # NOTE has disadvantage when box has different shape, CAN FAIL TODO Change to checking each corner instead
+                if is_gt_smaller[i]: # NOTE has disadvantage when box has different shape, CAN FAIL TODO Change to checking each corner instead
                     mod_cube_tensor[:, 2] += values_tensor
                 else:
                     mod_cube_tensor[:, 2] -= values_tensor
                 mod_cube = Cubes(mod_cube_tensor)
-                mod_box = cubes_to_box(mod_cube, Ks[i], im_sizes[i])[0].tensor
+                mod_box = Boxes(cubes_to_box(mod_cube, Ks[i], im_sizes[i])[0].tensor)
 
-                pred_areas = torch.abs((mod_box[:,2]-mod_box[:,0])) * torch.abs((mod_box[:,3]-mod_box[:,1]))
+                pred_areas = mod_box.area()
                 mask_zero_area = (pred_areas == 0) * 10000000
                 pred_areas = pred_areas + mask_zero_area
-                idx = torch.argmin(self.l1_loss(gt_area.repeat(max_count), pred_areas))
+                idx = torch.argmin(self.l1_loss(gt_area[i].repeat(max_count), pred_areas))
                 
                 scores[i] = self.l1_loss(cubes[i].tensor[0,0,2], mod_cube_tensor[idx,2])
                 
@@ -1341,10 +1345,12 @@ class ROIHeads3DScore(StandardROIHeads):
         P(dim|priors)
         '''
         [prior_mean, prior_std] = priors
-        dimensions_scores = torch.exp(-1/2 * ((dimensions - prior_mean)/prior_std)**2)
+        # z-score ie how many std's we are from the mean
+        dimensions_scores = (dimensions - prior_mean).abs()/prior_std
         scores = dimensions_scores.mean(1)
-
-        gt_ratio = (gt_boxes[0,2]-gt_boxes[0,0])/(gt_boxes[0,3]-gt_boxes[0,1])
+        gt_boxes = gt_boxes.tensor
+        pred_boxes = pred_boxes.tensor
+        gt_ratio = (gt_boxes[:,2]-gt_boxes[:,0])/(gt_boxes[:,3]-gt_boxes[:,1])
         pred_ratios = (pred_boxes[:,2]-pred_boxes[:,0])/(pred_boxes[:,3]-pred_boxes[:,1])
         differences = torch.abs(gt_ratio-pred_ratios)
         max_difference = torch.max(differences)
@@ -1657,7 +1663,7 @@ class ROIHeads3DScore(StandardROIHeads):
             proj_boxes = []
             for i in range(cubes.num_instances):
                 proj_boxes.append(cubes_to_box(cubes[i], Ks_scaled_per_box[i], im_sizes[i])[0].tensor[0])
-            proj_boxes = torch.stack(proj_boxes)
+            proj_boxes = Boxes(torch.stack(proj_boxes))
             
             ### Loss
             loss_iou = None
@@ -1671,11 +1677,11 @@ class ROIHeads3DScore(StandardROIHeads):
             
             # 2D IoU
             gt_boxes = [x.gt_boxes for x in proposals]
-            gt_boxes_tensor = torch.cat([gt_boxes[i].tensor for i in range(len(gt_boxes))])
+            gt_boxes = Boxes(torch.cat([gt_boxes[i].tensor for i in range(len(gt_boxes))]))
             
             # 2D IoU
             if 'iou' in self.loss_functions:
-                loss_iou = generalized_box_iou_loss(gt_boxes_tensor, proj_boxes, reduction='none').view(n, -1).mean(dim=1)
+                loss_iou = generalized_box_iou_loss(gt_boxes.tensor, proj_boxes.tensor, reduction='none').view(n, -1).mean(dim=1)
 
             # Pose
             if 'pose_alignment' in self.loss_functions:
@@ -1694,7 +1700,7 @@ class ROIHeads3DScore(StandardROIHeads):
 
             # pseudo ground truth z loss
             if 'z_pseudo_gt_patch' in self.loss_functions:
-                loss_pseudo_gt_z = self.pseudo_gt_z_loss_box(depth_maps, proposal_boxes_scaled, cube_z)
+                loss_pseudo_gt_z = self.pseudo_gt_z_loss_box(depth_maps, proj_boxes.split(num_boxes_per_image), cube_z)
             elif 'z_pseudo_gt_center' in self.loss_functions:
                 loss_pseudo_gt_z = self.pseudo_gt_z_loss_point(depth_maps, cube_xy, cube_z, num_boxes_per_image)
 
@@ -1706,11 +1712,11 @@ class ROIHeads3DScore(StandardROIHeads):
 
             # Z
             if 'z' in self.loss_functions:
-                loss_z = self.z_loss(gt_boxes_tensor, cubes, Ks_scaled_per_box, im_sizes, proj_boxes)
+                loss_z = self.z_loss(gt_boxes, cubes, Ks_scaled_per_box, im_sizes, proj_boxes)
 
             # Dimensions
             if 'dims' in self.loss_functions:
-                loss_dims = self.dim_loss((prior_dims_mean, prior_dims_std), cubes.dimensions.squeeze(1), gt_boxes_tensor, proj_boxes)
+                loss_dims = self.dim_loss((prior_dims_mean, prior_dims_std), cubes.dimensions.squeeze(1), gt_boxes, proj_boxes)
                 if torch.isnan(loss_dims).any():
                     loss_dims = None
 
@@ -1743,8 +1749,7 @@ class ROIHeads3DScore(StandardROIHeads):
             # compute errors for tracking purposes
             xy_error = (cube_xy - gt_2d).detach().abs()
 
-            gt_boxes = torch.cat([x.tensor for x in gt_boxes], dim=0)
-            IoU2D = iou_2d(Boxes(gt_boxes),Boxes(proj_boxes)).detach()
+            IoU2D = iou_2d(gt_boxes, proj_boxes).detach()
             IoU2D = torch.diag(IoU2D.view(n, n))
 
             storage.put_scalar(prefix + 'xy_error', xy_error.mean().item(), smoothing_hint=False)
