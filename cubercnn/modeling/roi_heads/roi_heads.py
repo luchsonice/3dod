@@ -935,7 +935,7 @@ class ROIHeads3DScore(StandardROIHeads):
         possible_losses = ['dims', 'pose_alignment', 'pose_ground', 'iou', 'segmentation', 'z', 'z_pseudo_gt_patch', 'z_pseudo_gt_center','depth']
         assert all([x in possible_losses for x in cfg.loss_functions]), f'loss functions must be in {possible_losses}, but was {cfg.loss_functions}'
 
-        if 'segmentation' or 'depth' in cfg.loss_functions:
+        if 'segmentation' in cfg.loss_functions or 'depth' in cfg.loss_functions:
             segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
         else:
             segmentor = None
@@ -998,7 +998,7 @@ class ROIHeads3DScore(StandardROIHeads):
                         first_occurrence_indices[entry] = unique_counter
                         unique_counter += 1
                     result_indices.append(first_occurrence_indices[entry])
-                if 'segmentation'  or 'depth' in self.loss_functions:
+                if 'segmentation' in self.loss_functions or 'depth' in self.loss_functions:
                     mask_per_image = self.object_masks(images_raw.tensor, targets) # over all images in batch
                     masks_all_images = [sublist for outer_list in mask_per_image for sublist in outer_list]
                 else:
@@ -1028,7 +1028,7 @@ class ROIHeads3DScore(StandardROIHeads):
             
             if self.loss_w_3d > 0:
                 # this will fail because the object mask function assume that proposals has gt_boxes field
-                if 'segmentation' or 'depth' in self.loss_functions:
+                if 'segmentation' in self.loss_functions or 'depth' in self.loss_functions:
                     mask_per_image = self.object_masks(images_raw.tensor, targets) # over all images in batch
                     masks_all_images = [sublist for outer_list in mask_per_image for sublist in outer_list]
                 else:
