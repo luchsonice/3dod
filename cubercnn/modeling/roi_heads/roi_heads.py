@@ -862,39 +862,39 @@ class ROIHeads3DScore(StandardROIHeads):
         self.dims_priors_func = dims_priors_func
 
         # if there is no 3D loss, then we don't need any heads. 
-        if loss_w_3d > 0:
+        # if loss_w_3d > 0:
+        
+        self.cube_head = cube_head
+        self.cube_pooler = cube_pooler
+        
+        # the dimensions could rely on pre-computed priors
+        if self.dims_priors_enabled and priors is not None:
+            self.priors_dims_per_cat = nn.Parameter(torch.FloatTensor(priors['priors_dims_per_cat']).unsqueeze(0))
+        else:
+            self.priors_dims_per_cat = nn.Parameter(torch.ones(1, self.num_classes, 2, 3))
+
+        # Optionally, refactor priors and store them in the network params
+        if self.cluster_bins > 1 and priors is not None:
+
+            # the depth could have been clustered based on 2D scales                
+            priors_z_scales = torch.stack([torch.FloatTensor(prior[1]) for prior in priors['priors_bins']])
+            self.priors_z_scales = nn.Parameter(priors_z_scales)
+
+        else:
+            self.priors_z_scales = nn.Parameter(torch.ones(self.num_classes, self.cluster_bins))
+
+        # the depth can be based on priors
+        if self.z_type == 'clusters':
             
-            self.cube_head = cube_head
-            self.cube_pooler = cube_pooler
+            assert self.cluster_bins > 1, 'To use z_type of priors, there must be more than 1 cluster bin'
             
-            # the dimensions could rely on pre-computed priors
-            if self.dims_priors_enabled and priors is not None:
-                self.priors_dims_per_cat = nn.Parameter(torch.FloatTensor(priors['priors_dims_per_cat']).unsqueeze(0))
+            if priors is None:
+                self.priors_z_stats = nn.Parameter(torch.ones(self.num_classes, self.cluster_bins, 2).float())
             else:
-                self.priors_dims_per_cat = nn.Parameter(torch.ones(1, self.num_classes, 2, 3))
 
-            # Optionally, refactor priors and store them in the network params
-            if self.cluster_bins > 1 and priors is not None:
-
-                # the depth could have been clustered based on 2D scales                
-                priors_z_scales = torch.stack([torch.FloatTensor(prior[1]) for prior in priors['priors_bins']])
-                self.priors_z_scales = nn.Parameter(priors_z_scales)
-
-            else:
-                self.priors_z_scales = nn.Parameter(torch.ones(self.num_classes, self.cluster_bins))
-
-            # the depth can be based on priors
-            if self.z_type == 'clusters':
-                
-                assert self.cluster_bins > 1, 'To use z_type of priors, there must be more than 1 cluster bin'
-                
-                if priors is None:
-                    self.priors_z_stats = nn.Parameter(torch.ones(self.num_classes, self.cluster_bins, 2).float())
-                else:
-
-                    # stats
-                    priors_z_stats = torch.cat([torch.FloatTensor(prior[2]).unsqueeze(0) for prior in priors['priors_bins']])
-                    self.priors_z_stats = nn.Parameter(priors_z_stats)
+                # stats
+                priors_z_stats = torch.cat([torch.FloatTensor(prior[2]).unsqueeze(0) for prior in priors['priors_bins']])
+                self.priors_z_stats = nn.Parameter(priors_z_stats)
 
 
     @classmethod
@@ -1006,6 +1006,9 @@ class ROIHeads3DScore(StandardROIHeads):
 
                 instances_3d, losses_cube = self._forward_cube(features, proposals, Ks, im_dims, im_scales_ratio, masks_all_images, first_occurrence_indices, ground_maps, depth_maps)
                 losses.update(losses_cube)
+
+            else:
+                instances_3d = None
 
             return instances_3d, losses
         
@@ -1302,7 +1305,7 @@ class ROIHeads3DScore(StandardROIHeads):
         
         return scores/2
     
-    def pseudo_gt_z_loss_box(self, depth_maps, proposal_boxes:list[Boxes], pred_z):
+    def pseudo_gt_z_box_loss(self, depth_maps, proposal_boxes:list[Boxes], pred_z):
         '''Compute the pseudo ground truth z loss based on the depth map
             for now, use the median value depth constrained of the proposal box as the ground truth depth
         Args:
@@ -1338,26 +1341,37 @@ class ROIHeads3DScore(StandardROIHeads):
         l1loss = self.l1_loss(pred_z, gt_z_o)
         return l1loss
     
-    def dim_loss(self, priors, dimensions, gt_boxes, pred_boxes):
+    def dim_loss(self, priors:tuple[torch.Tensor], dimensions, gt_boxes, pred_boxes, eps=1e-6):
         '''
         priors   : List
         dimensions : List of Lists
         P(dim|priors)
         '''
         [prior_mean, prior_std] = priors
+        
+        # Drop rows of prior_mean and prior_std for rows in prior_std containing nan
+        mask = ~torch.isnan(prior_std).any(dim=1)
+        if not mask.all():
+            return None
+        prior_mean = prior_mean[mask]
+        prior_std = prior_std[mask]
+        dimensions = dimensions[mask]
+        gt_boxes = gt_boxes.tensor[mask]
+        pred_boxes = pred_boxes.tensor[mask]
+        # gt_boxes = gt_boxes.tensor
+        # pred_boxes = pred_boxes.tensor
+
         # z-score ie how many std's we are from the mean
         dimensions_scores = (dimensions - prior_mean).abs()/prior_std
         scores = dimensions_scores.mean(1)
-        gt_boxes = gt_boxes.tensor
-        pred_boxes = pred_boxes.tensor
         gt_ratio = (gt_boxes[:,2]-gt_boxes[:,0])/(gt_boxes[:,3]-gt_boxes[:,1])
-        pred_ratios = (pred_boxes[:,2]-pred_boxes[:,0])/(pred_boxes[:,3]-pred_boxes[:,1])
+        pred_ratios = (pred_boxes[:,2] - pred_boxes[:,0]) / (pred_boxes[:,3] - pred_boxes[:,1] + eps)
         differences = torch.abs(gt_ratio-pred_ratios)
-        max_difference = torch.max(differences)
+        # max_difference = torch.max(differences)
         
-        return (1 - differences / max_difference) * scores
+        return scores 
     
-    def pseudo_gt_z_loss_point(self, depth_maps, pred_xy, pred_z, num_boxes_per_image):
+    def pseudo_gt_z_point_loss(self, depth_maps, pred_xy, pred_z, num_boxes_per_image):
         '''Compute the pseudo ground truth z loss based on the depth map
             for now, use the point in depth map corresponding to the center point of the pred box as the pseudo ground truth
         Args:
@@ -1700,9 +1714,9 @@ class ROIHeads3DScore(StandardROIHeads):
 
             # pseudo ground truth z loss
             if 'z_pseudo_gt_patch' in self.loss_functions:
-                loss_pseudo_gt_z = self.pseudo_gt_z_loss_box(depth_maps, proj_boxes.split(num_boxes_per_image), cube_z)
+                loss_pseudo_gt_z = self.pseudo_gt_z_box_loss(depth_maps, proj_boxes.split(num_boxes_per_image), cube_z)
             elif 'z_pseudo_gt_center' in self.loss_functions:
-                loss_pseudo_gt_z = self.pseudo_gt_z_loss_point(depth_maps, cube_xy, cube_z, num_boxes_per_image)
+                loss_pseudo_gt_z = self.pseudo_gt_z_point_loss(depth_maps, cube_xy, cube_z, num_boxes_per_image)
 
             # segment
             if 'segmentation' in self.loss_functions:
@@ -1717,8 +1731,6 @@ class ROIHeads3DScore(StandardROIHeads):
             # Dimensions
             if 'dims' in self.loss_functions:
                 loss_dims = self.dim_loss((prior_dims_mean, prior_dims_std), cubes.dimensions.squeeze(1), gt_boxes, proj_boxes)
-                if torch.isnan(loss_dims).any():
-                    loss_dims = None
 
             # Depth Range
             if 'depth' in self.loss_functions:
@@ -1744,7 +1756,8 @@ class ROIHeads3DScore(StandardROIHeads):
                 total_3D_loss_for_reporting += loss_depth*self.loss_w_depth
             
             # reporting does not need gradients
-            total_3D_loss_for_reporting = total_3D_loss_for_reporting.detach()
+            if not isinstance(total_3D_loss_for_reporting, int):
+                total_3D_loss_for_reporting = total_3D_loss_for_reporting.detach()
             
             # compute errors for tracking purposes
             xy_error = (cube_xy - gt_2d).detach().abs()
@@ -1756,7 +1769,8 @@ class ROIHeads3DScore(StandardROIHeads):
             if IoU3Ds is not None:
                 storage.put_scalar(prefix + '3D IoU', IoU3Ds.detach().mean().item(), smoothing_hint=False)
             storage.put_scalar(prefix + '2D IoU', IoU2D.mean().item(), smoothing_hint=False)
-            storage.put_scalar(prefix + 'total_3D_loss', self.loss_w_3d * self.safely_reduce_losses(total_3D_loss_for_reporting), smoothing_hint=False)
+            if not isinstance(total_3D_loss_for_reporting, int):
+                storage.put_scalar(prefix + 'total_3D_loss', self.loss_w_3d * self.safely_reduce_losses(total_3D_loss_for_reporting), smoothing_hint=False)
 
             if self.use_confidence > 0:
                 
@@ -1788,9 +1802,6 @@ class ROIHeads3DScore(StandardROIHeads):
                 losses.update({prefix + 'uncert': self.use_confidence*self.safely_reduce_losses(cube_uncert.clone())})
                 storage.put_scalar(prefix + 'conf', torch.exp(-cube_uncert).mean().item(), smoothing_hint=False)
 
-            # store per batch loss stats temporarily
-            self.batch_losses = [batch_losses.mean().item() for batch_losses in total_3D_loss_for_reporting.split(num_boxes_per_image)]
-            
             if loss_iou is not None:
                 losses.update({
                     prefix + 'loss_iou': self.safely_reduce_losses(loss_iou) * self.loss_w_iou * self.loss_w_3d,
