@@ -122,14 +122,14 @@
             "args": ["--config-file", "configs/BoxNet.yaml", "OUTPUT_DIR", "output/BoxNet_gt", "TRAIN.pseudo_gt", "learn"]
         },
         {
-            "name": "train Cube R-CNN combined features",
+            "name": "train Cube R-CNN weak loss",
             "type": "python",
             "request": "launch",
             "program": "tools/train_net.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": ["--config-file", "configs/Omni_combined.yaml", "OUTPUT_DIR", "output/omni3d_combined_segmentation", "log", "True", "loss_functions", "['segmentation']"]
-        },
+                    },
         
     ]
 }
