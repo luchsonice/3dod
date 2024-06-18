@@ -122,7 +122,7 @@
             "args": ["--config-file", "configs/BoxNet.yaml", "OUTPUT_DIR", "output/BoxNet_gt", "TRAIN.pseudo_gt", "learn"]
         },
         {
-            "name": "train Cube R-CNN combined features",
+            "name": "train Cube R-CNN weak loss",
             "type": "python",
             "request": "launch",
             "program": "tools/train_net.py",
