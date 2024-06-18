@@ -29,7 +29,7 @@ def create_striped_patch(ax, x_start, x_end, color, alpha=0.3):
 
 color_palette = ['#008dff','#ff73bf','#c701ff','#4ecb8d','#ff9d3a','#f0c571','#384860','#d83034']
 
-proposal_function = 'aspect'
+proposal_function = 'dim'
 print('loading ...')
 with open('output/pkl_files/outputs_'+str(proposal_function)+'.pkl', 'rb') as file:
     outputs = pickle.load(file)
@@ -94,6 +94,7 @@ print('saved to ', f_name)
 
 # Statistics
 stats = torch.cat([x[8] for x in outputs],dim=0)
+print('Percentage inside searched area:', ((stats >= 0) & (stats <= 1)).float().mean(dim=0) * 100)
 num_bins = 40
 titles = ['x','y','z']
 plt.figure(figsize=(15, 5))
@@ -109,7 +110,7 @@ f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'st
 plt.savefig(f_name, dpi=300, bbox_inches='tight')
 plt.close()
 print('saved to ', f_name)
-num_bins = 120
+num_bins = 200
 plt.figure(figsize=(15, 5))
 plt.suptitle("Distribution of Ground Truths in Normalised Searched Range", fontsize=20)
 for i,title in enumerate(titles):
