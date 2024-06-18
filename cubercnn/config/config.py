@@ -117,11 +117,12 @@ def get_cfg_defaults(cfg):
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_3D = 1.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_XY = 1.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_POSE = 10.0
-    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_NORMAL_VEC = 12.0
+    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_NORMAL_VEC = 25.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_IOU = 1.0
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_SEG = 0.033
     cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_Z = 1.0
-    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS = 8.0
+    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS = 4.0
+    cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DEPTH = 1.0
 
     cfg.MODEL.DLA = CN()
 
@@ -180,5 +181,5 @@ def get_cfg_defaults(cfg):
     # these are meant to be overwritten as an argument
     cfg.log = True
     # (these 2 are mutually exclusive) z_pseudo_gt_patch or z_pseudo_gt_center 
-    cfg.loss_functions = ['dims', 'pose_alignment', 'pose_ground', 'iou', 'z', 'z_pseudo_gt_patch']
+    cfg.loss_functions = ['dims', 'pose_alignment', 'pose_ground', 'iou', 'z', 'z_pseudo_gt_patch', 'depth']
     cfg.MODEL.DEPTH_ON = False #whether to use the depth anything concated features

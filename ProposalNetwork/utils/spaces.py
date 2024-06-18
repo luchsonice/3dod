@@ -316,6 +316,6 @@ class Cubes:
         """
         yield from self.tensor
 
-    def split(self, split_size: int) -> tuple["Cubes"]:
+    def split(self, split_size: int, dim=1) -> tuple["Cubes"]:
         """same behaviour as torch.split, return a tuple of chunksize Cubes"""
-        return tuple(Cubes(x) for x in self.tensor.split(split_size, dim=1))
+        return tuple(Cubes(x) for x in self.tensor.split(split_size, dim=dim))

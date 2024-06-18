@@ -797,6 +797,7 @@ class ROIHeads3DScore(StandardROIHeads):
         loss_w_normal_vec: float,
         loss_w_z: float,
         loss_w_dims: float,
+        loss_w_depth: float,
         use_confidence: float,
         inverse_z_weight: bool,
         z_type: str,
@@ -837,6 +838,7 @@ class ROIHeads3DScore(StandardROIHeads):
         self.loss_w_normal_vec = loss_w_normal_vec
         self.loss_w_z = loss_w_z
         self.loss_w_dims = loss_w_dims
+        self.loss_w_depth = loss_w_depth
 
         # loss functions
         self.loss_functions = loss_functions
@@ -930,10 +932,10 @@ class ROIHeads3DScore(StandardROIHeads):
 
         cube_head = build_cube_head(cfg, shape)
         logger.info('Loss functions: %s', cfg.loss_functions)
-        possible_losses = ['dims', 'pose_alignment', 'pose_ground', 'iou', 'segmentation', 'z', 'z_pseudo_gt_patch', 'z_pseudo_gt_center']
+        possible_losses = ['dims', 'pose_alignment', 'pose_ground', 'iou', 'segmentation', 'z', 'z_pseudo_gt_patch', 'z_pseudo_gt_center','depth']
         assert all([x in possible_losses for x in cfg.loss_functions]), f'loss functions must be in {possible_losses}, but was {cfg.loss_functions}'
 
-        if 'segmentation' in cfg.loss_functions:
+        if 'segmentation' or 'depth' in cfg.loss_functions:
             segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
         else:
             segmentor = None
@@ -950,6 +952,7 @@ class ROIHeads3DScore(StandardROIHeads):
             'loss_w_dims': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS,
             'loss_w_normal_vec': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_NORMAL_VEC,
             'loss_w_z': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_Z,
+            'loss_w_depth': cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_DEPTH,
             'z_type': cfg.MODEL.ROI_CUBE_HEAD.Z_TYPE,
             'pose_type': cfg.MODEL.ROI_CUBE_HEAD.POSE_TYPE,
             'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED,
@@ -995,7 +998,7 @@ class ROIHeads3DScore(StandardROIHeads):
                         first_occurrence_indices[entry] = unique_counter
                         unique_counter += 1
                     result_indices.append(first_occurrence_indices[entry])
-                if 'segmentation' in self.loss_functions:
+                if 'segmentation'  or 'depth' in self.loss_functions:
                     mask_per_image = self.object_masks(images_raw.tensor, targets) # over all images in batch
                     masks_all_images = [sublist for outer_list in mask_per_image for sublist in outer_list]
                 else:
@@ -1025,7 +1028,7 @@ class ROIHeads3DScore(StandardROIHeads):
             
             if self.loss_w_3d > 0:
                 # this will fail because the object mask function assume that proposals has gt_boxes field
-                if 'segmentation' in self.loss_functions:
+                if 'segmentation' or 'depth' in self.loss_functions:
                     mask_per_image = self.object_masks(images_raw.tensor, targets) # over all images in batch
                     masks_all_images = [sublist for outer_list in mask_per_image for sublist in outer_list]
                 else:
@@ -1369,6 +1372,29 @@ class ROIHeads3DScore(StandardROIHeads):
         l1loss = self.l1_loss(pred_z, gt_z_o)
         return l1loss
 
+    def depth_range_loss(self, gt_mask, at_which_mask_idx, depth_maps, cubes, num_instances):
+        """
+        Apply seg_mask on depth image, take difference in min and max values as GT value. Take length as prediction value. Then l1-loss.
+        """
+        n = len(at_which_mask_idx)
+        counter = 0
+        scores = torch.zeros(n)
+        for depth_map, cube in zip(depth_maps, cubes.split(num_instances, dim=0)):
+            for j in range(cube.num_instances):
+                segmentation_mask = gt_mask[at_which_mask_idx[counter]][0]
+                depth_map = F.interpolate(depth_map.unsqueeze(0).unsqueeze(0),size=segmentation_mask.shape, mode='bilinear', align_corners=True).squeeze()
+                depth_range = depth_map[segmentation_mask]
+                gt_depth = torch.max(depth_range) - torch.min(depth_range)
+
+                corner_depths = cube[j].get_all_corners()[0,0,:,2]
+                pred_depth = torch.max(corner_depths) - torch.min(corner_depths)
+
+                scores[counter] = self.l1_loss(gt_depth, pred_depth)
+                counter += 1
+
+        return scores
+
+
     def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, masks_all_images, first_occurrence_indices, ground_maps, depth_maps):
         
         features = [features[f] for f in self.in_features]
@@ -1641,6 +1667,7 @@ class ROIHeads3DScore(StandardROIHeads):
             loss_dims = None
             loss_pseudo_gt_z = None
             loss_ground_rot = None
+            loss_depth = None
             
             # 2D IoU
             gt_boxes = [x.gt_boxes for x in proposals]
@@ -1686,6 +1713,10 @@ class ROIHeads3DScore(StandardROIHeads):
                 loss_dims = self.dim_loss((prior_dims_mean, prior_dims_std), cubes.dimensions.squeeze(1), gt_boxes_tensor, proj_boxes)
                 if torch.isnan(loss_dims).any():
                     loss_dims = None
+
+            # Depth Range
+            if 'depth' in self.loss_functions:
+                loss_depth = self.depth_range_loss(masks_all_images, at_which_mask_idx, depth_maps, cubes, num_boxes_per_image)
             
             total_3D_loss_for_reporting = 0
             if loss_iou is not None:
@@ -1703,6 +1734,8 @@ class ROIHeads3DScore(StandardROIHeads):
                 total_3D_loss_for_reporting += loss_pseudo_gt_z*self.loss_w_z
             if loss_dims is not None:
                 total_3D_loss_for_reporting += loss_dims*self.loss_w_dims
+            if loss_depth is not None:
+                total_3D_loss_for_reporting += loss_depth*self.loss_w_depth
             
             # reporting does not need gradients
             total_3D_loss_for_reporting = total_3D_loss_for_reporting.detach()
@@ -1744,6 +1777,9 @@ class ROIHeads3DScore(StandardROIHeads):
                 if loss_dims is not None:
                     loss_dims *= uncert_sf
 
+                if loss_depth is not None:
+                    loss_depth *= uncert_sf
+
                 losses.update({prefix + 'uncert': self.use_confidence*self.safely_reduce_losses(cube_uncert.clone())})
                 storage.put_scalar(prefix + 'conf', torch.exp(-cube_uncert).mean().item(), smoothing_hint=False)
 
@@ -1777,6 +1813,10 @@ class ROIHeads3DScore(StandardROIHeads):
             if loss_dims is not None:
                 losses.update({
                     prefix + 'loss_dims': self.safely_reduce_losses(loss_dims) * self.loss_w_dims * self.loss_w_3d,
+                })
+            if loss_depth is not None:
+                losses.update({
+                    prefix + 'loss_depth': self.safely_reduce_losses(loss_depth) * self.loss_w_depth * self.loss_w_3d,
                 })
  
         '''
