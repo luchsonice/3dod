@@ -1392,10 +1392,11 @@ class ROIHeads3DScore(StandardROIHeads):
         l1loss = self.l1_loss(pred_z, gt_z_o)
         return l1loss
 
-    def depth_range_loss(self, gt_mask, at_which_mask_idx, depth_maps, cubes, num_instances):
+    def depth_range_loss(self, gt_mask, at_which_mask_idx, depth_maps, cubes, gt_boxes, num_instances):
         """
         Apply seg_mask on depth image, take difference in min and max values as GT value. Take length as prediction value. Then l1-loss.
         """
+        gt_boxes_t = gt_boxes.tensor
         counter = 0
         gt_depths = []
         corner_depths = cubes.get_all_corners()[:,0,:,2]
@@ -1407,6 +1408,9 @@ class ROIHeads3DScore(StandardROIHeads):
                 segmentation_mask = gt_mask[at_which_mask_idx[counter]][0]
                 depth_map = F.interpolate(depth_map.unsqueeze(0).unsqueeze(0),size=segmentation_mask.shape, mode='bilinear', align_corners=True).squeeze()
                 depth_range = depth_map[segmentation_mask]
+                # if segmentation fails, fall back to the bbox
+                if depth_range.numel() == 0:
+                    depth_range = depth_map[gt_boxes_t[counter,1].long():gt_boxes_t[counter,3].long(), gt_boxes_t[counter,0].long():gt_boxes_t[counter,2].long()]
                 gt_depth = torch.max(depth_range) - torch.min(depth_range)
                 gt_depths.append(gt_depth)
                 counter += 1
@@ -1736,7 +1740,7 @@ class ROIHeads3DScore(StandardROIHeads):
 
             # Depth Range
             if 'depth' in self.loss_functions:
-                loss_depth = self.depth_range_loss(masks_all_images, at_which_mask_idx, depth_maps, cubes, num_boxes_per_image)
+                loss_depth = self.depth_range_loss(masks_all_images, at_which_mask_idx, depth_maps, cubes, gt_boxes, num_boxes_per_image)
             
             total_3D_loss_for_reporting = 0
             if loss_iou is not None:
