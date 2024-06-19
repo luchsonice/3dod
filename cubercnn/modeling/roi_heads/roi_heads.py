@@ -1396,21 +1396,23 @@ class ROIHeads3DScore(StandardROIHeads):
         """
         Apply seg_mask on depth image, take difference in min and max values as GT value. Take length as prediction value. Then l1-loss.
         """
-        n = len(at_which_mask_idx)
         counter = 0
-        scores = torch.zeros(n)
+        gt_depths = []
+        corner_depths = cubes.get_all_corners()[:,0,:,2]
+        # max function gives both vals and idx, so we take only the vals
+        pred_depth = torch.max(corner_depths,dim=1)[0] - torch.min(corner_depths,dim=1)[0]
+        
         for depth_map, cube in zip(depth_maps, cubes.split(num_instances, dim=0)):
             for j in range(cube.num_instances):
                 segmentation_mask = gt_mask[at_which_mask_idx[counter]][0]
                 depth_map = F.interpolate(depth_map.unsqueeze(0).unsqueeze(0),size=segmentation_mask.shape, mode='bilinear', align_corners=True).squeeze()
                 depth_range = depth_map[segmentation_mask]
                 gt_depth = torch.max(depth_range) - torch.min(depth_range)
-
-                corner_depths = cube[j].get_all_corners()[0,0,:,2]
-                pred_depth = torch.max(corner_depths) - torch.min(corner_depths)
-
-                scores[counter] = self.l1_loss(gt_depth, pred_depth)
+                gt_depths.append(gt_depth)
                 counter += 1
+
+        gt_depths = torch.stack(gt_depths)
+        scores = self.l1_loss(gt_depths, pred_depth)
 
         return scores
 
