@@ -29,7 +29,7 @@ def create_striped_patch(ax, x_start, x_end, color, alpha=0.3):
 
 color_palette = ['#008dff','#ff73bf','#c701ff','#4ecb8d','#ff9d3a','#f0c571','#384860','#d83034']
 
-proposal_function = 'dim'
+proposal_function = 'aspect'
 print('loading ...')
 with open('output/pkl_files/outputs_'+str(proposal_function)+'.pkl', 'rb') as file:
     outputs = pickle.load(file)
@@ -110,16 +110,22 @@ f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'st
 plt.savefig(f_name, dpi=300, bbox_inches='tight')
 plt.close()
 print('saved to ', f_name)
-num_bins = 200
+
+if proposal_function == 'xy' or 'z':
+    num_bins = [600,300,200]
+elif proposal_function == 'dim' or 'rotation' or 'full':
+    num_bins = [300,700,70]
+else:
+    num_bins = [200, 200, 200]
 plt.figure(figsize=(15, 5))
 plt.suptitle("Distribution of Ground Truths in Normalised Searched Range", fontsize=20)
 for i,title in enumerate(titles):
     ax = plt.subplot(1, 3, 1+i)
-    plt.hist(stats[:,i].numpy(), bins=num_bins, color=color_palette[6],density=True, zorder=2)
+    plt.hist(stats[:,i].numpy(), bins=num_bins[i], color=color_palette[6],density=True, zorder=2)
     plt.axvline(x=0, color='#97a6c4', zorder=2)
     plt.axvline(x=1, color='#97a6c4', zorder=2)
     create_striped_patch(ax, 0, 1, '#97a6c4', alpha=0.8)
-    plt.xlim([-2,2])
+    plt.xlim([max(-2,min(stats[:,i])),min(2,max(stats[:,i]))])
     plt.title(title)
 f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'stats_center_zoom_'+str(proposal_function)+'.png')
 plt.savefig(f_name, dpi=300, bbox_inches='tight')
@@ -155,6 +161,7 @@ plt.savefig(f_name, dpi=300, bbox_inches='tight')
 plt.close()
 print('saved to ', f_name)
 
+titles = ['x','y','z','w','h','l','rx','ry','rz']
 stats_off = np.concatenate([np.array(sublist) for sublist in (x[9] for x in outputs)])
 plt.figure(figsize=(15, 15))
 for i,title in enumerate(titles):
