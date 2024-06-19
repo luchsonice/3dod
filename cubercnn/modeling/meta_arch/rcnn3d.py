@@ -467,7 +467,9 @@ class RCNN3D_combined_features(nn.Module):
         if not hasattr(self, 'thing_classes'):
             self.thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
             self.num_classes = len(self.thing_classes)
-
+        only2d = instances is None
+        if only2d:
+            instances = [None]*len(batched_inputs)
         for input, prop, instances_i in zip(batched_inputs, proposals, instances):
 
             img = input["image"]            
@@ -490,7 +492,8 @@ class RCNN3D_combined_features(nn.Module):
             vis_img_rpn = np.concatenate((anno_img, prop_img), axis=1)
             vis_img_rpn = vis_img_rpn.transpose(2, 0, 1)
             storage.put_image("Left: GT 2D bounding boxes; Right: Predicted 2D proposals", vis_img_rpn)
-
+            if only2d:
+                break
             '''
             Visualize the 3D GT and predictions
             '''
