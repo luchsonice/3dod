@@ -3,10 +3,10 @@
 #BSUB -o hpc_logs/%J.out
 #BSUB -e hpc_logs/%J.err
 #BSUB -n 4
-#BSUB -q gpua100
+#BSUB -q gpua10
 #BSUB -gpu 'num=1:mode=shared' ###:mode=exclusive_process
-#BSUB -W 4:00
-#BSUB -R 'rusage[mem=5GB]'
+#BSUB -W 5:00
+#BSUB -R 'rusage[mem=8GB]'
 #BSUB -R 'span[hosts=1]'
 #BSUB -B
 
@@ -14,13 +14,13 @@ source /work3/s194369/3dod_hpc_env/bin/activate
 export PYTHONPATH=/work3/s194369/3dod
 
 # Run evaluation
-CUDA_VISIBLE_DEVICES=0 python tools/eval_boxes.py --eval-only \
+python tools/eval_boxes.py --eval-only \
     --config-file configs/BoxNet.yaml \
-    PLOT.EVAL AP \
-    PLOT.MODE2D PRED \
-    PLOT.PROPOSAL_FUNC propose \
+    PLOT.EVAL MABO \
+    PLOT.MODE2D GT \
+    PLOT.PROPOSAL_FUNC tmp \
     MODEL.WEIGHTS output/Baseline_sgd/model_final.pth \
-    OUTPUT_DIR output/propose
+    OUTPUT_DIR output/propose_tmp
 
 # Run baseline
 #CUDA_VISIBLE_DEVICES=0 python tools/train_net.py \
