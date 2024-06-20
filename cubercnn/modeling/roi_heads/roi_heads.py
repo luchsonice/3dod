@@ -421,30 +421,44 @@ class ROIHeads_Boxer(StandardROIHeads):
         if self.training: # generate and save all proposals
             assert not experiment_type['use_pred_boxes'], 'must use GT boxes for training'
 
-            pred_cubes, many_pred_boxes, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps.tensor, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec)
+            pred_cubes, pred_boxes, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps.tensor, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec)
             pred_cubes.scores = torch.zeros(pred_cubes.tensor.shape[:-1], device=pred_cubes.tensor.device)
-            for i, (gt_box, pred_boxes) in enumerate(zip(gt_boxes, many_pred_boxes)):
-                IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes)
-                pred_cubes.scores[i] = IoU2D_scores
 
             if experiment_type['pseudo_gt'] == 'learn':
+                for i, (gt_box, pred_boxe) in enumerate(zip(gt_boxes, pred_boxes)):
+                    IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxe)
+                    pred_cubes.scores[i] = IoU2D_scores
                 return pred_cubes
 
-            elif experiment_type['pseudo_gt'] == 'gt': # TODO Scoringfunctions need to be updated
-                for i, (gt_box) in enumerate(gt_boxes):
-                    segment_scores = score_segmentation(mask_per_image_cpu[i][0], pred_cubes[i].get_bube_corners(Ks_scaled_per_box))
-                    segment_scores = torch.stack(segment_scores)
-                    dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0])
-                    combined_score = IoU2D_scores*dim_scores*segment_scores
-                    
+            elif experiment_type['pseudo_gt'] == 'pseudo':
+                gt_cubes = Cubes(torch.cat((gt_boxes3D[:,6:].unsqueeze(0),gt_boxes3D[:,3:6].unsqueeze(0), gt_poses.view(n_gt,9).unsqueeze(0)),dim=2).permute(1,0,2))
+                for i in range(n_gt):
+                    bube_corners = pred_cubes[i].get_bube_corners(Ks_scaled_per_box, im_shape)
+                    IoU2D_scores = score_iou(cubes_to_box(gt_cubes[i], Ks_scaled_per_box, im_shape)[0], pred_boxes[i])
+                    dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0], gt_boxes[i], pred_boxes[i])
+                    corners_scores = score_corners(mask_per_image_cpu[i][0], bube_corners)
+                    combined_score = np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu())*np.array(corners_scores.cpu())
+                
                     score_to_use = combined_score
-                    highest_score = torch.argmax(score_to_use)
+                    highest_score = np.argmax(score_to_use)
                     pred_cube = pred_cubes[i,highest_score]
                     pred_cubes_out.scores[i] = torch.as_tensor(score_to_use[highest_score])
                     pred_cubes_out.tensor[i] = pred_cube.tensor[0]
-                return pred_cubes_out
+                    pred_boxes_out.append(pred_boxes[0][int(highest_score)])
+                pred_boxes_out = Boxes.cat(pred_boxes_out)
 
+                pred_instances = [Instances(size) for size in images_raw.image_sizes] # each instance object contains all boxes in one image, the list is for each image
+                for instances_i in pred_instances:
+                    instances_i.pred_boxes = pred_boxes_out
+                    instances_i.scores = pred_cubes_out.scores.squeeze(1)
+                    instances_i.pred_classes = pred_cubes_out.labels
+                    instances_i.pred_bbox3D = pred_cubes_out.get_all_corners().squeeze(1)
+                    instances_i.pred_center_cam = pred_cubes_out.centers.squeeze(1)
+                    instances_i.pred_dimensions = pred_cubes_out.dimensions.squeeze(1)
+                    instances_i.pred_pose = pred_cubes_out.rotations.squeeze(1)
+                    instances_i.pred_center_2D = instances_i.pred_boxes.get_centers()  
 
+                return pred_instances
 
         if experiment_type['use_pred_boxes']:
             pred_cubes, pred_boxes, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps.tensor, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec)
