@@ -68,10 +68,10 @@ def score_corners(segmentation_mask, bube_corners):
         box = cv2.boxPoints(rect)
     else:
         # if it fails, set the box as the mean of the bube corners
-        mean_min_x = bube_corners[:,:,0].min(1)[0].mean()
-        mean_max_x = bube_corners[:,:,0].max(1)[0].mean()
-        mean_min_y = bube_corners[:,:,1].min(1)[0].mean()
-        mean_max_y = bube_corners[:,:,1].max(1)[0].mean()
+        mean_min_x = bube_corners[:,:,0].min(1)[0].mean().cpu().numpy()
+        mean_max_x = bube_corners[:,:,0].max(1)[0].mean().cpu().numpy()
+        mean_min_y = bube_corners[:,:,1].min(1)[0].mean().cpu().numpy()
+        mean_max_y = bube_corners[:,:,1].max(1)[0].mean().cpu().numpy()
         box = np.array([[mean_min_x, mean_min_y], [mean_max_x, mean_min_y], [mean_max_x, mean_max_y], [mean_min_x, mean_max_y]])
 
     bube_corners = bube_corners.squeeze(0) # remove instance dim
