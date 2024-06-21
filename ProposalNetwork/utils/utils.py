@@ -388,40 +388,11 @@ def show_box(box, ax):
 # Convex Hull
 import torch
 
-def jarvis_march11(points):
-    # Number of points
-    n = points.size(0)
-    # List to store the convex hull vertices
-    hull = []
-    
-    # Find the leftmost point
-    leftmost = points[torch.argmin(points[:, 0])]
-    point_on_hull = leftmost
-    while True:
-        hull.append(point_on_hull)
-        endpoint = points[0]
-        
-        for j in range(1, n):
-            if torch.equal(endpoint, point_on_hull) or is_left_turn(point_on_hull, endpoint, points[j]):
-                endpoint = points[j]
-        point_on_hull = endpoint
-        
-        if torch.equal(endpoint, leftmost):
-            break
-    
-    return torch.stack(hull)
-
-def is_left_turn(p1, p2, p3):
-    return (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0]) > 0
-
 def direction(p1, p2, p3):
     return (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0])
 
 def distance_sq(p1, p2):
     return (p2[0] - p1[0])**2 + (p2[1] - p1[1])**2
-
-def distance_2d(p1, p2):
-    return (p2[:,0] - p1[:,0])**2 + (p2[:,1] - p1[:,1])**2
 
 def findDuplicates(arr): 
     Len = len(arr)
@@ -449,8 +420,6 @@ def findDuplicates(arr):
         return set(idx) # lazi inefficient implementation
     else:
         return None
-        
-
 
 def jarvis_march(points):
     '''https://algorithmtutor.com/Computational-Geometry/Convex-Hull-Algorithms-Jarvis-s-March/
@@ -498,50 +467,6 @@ def jarvis_march(points):
 
     return torch.flip(torch.stack(result), [0,])
 
-
-def cross(o, a, b):
-    """
-    Calculates cross between two vectors.
-
-    :param o, a: vector
-    :param o, b: vector
-    :return: cross product
-    """
-    ox, oy = o
-    ax, ay = a
-    bx, by = b
-
-    return (ax - ox) * (by - oy) - (ay - oy) * (bx - ox)
-
-def convex(points):
-    """
-    Calculates the concave hull for a list of points. Each point is a tuple
-    containing the x- and y-coordinate.
-
-    :param points: list of points
-    :return: convex hull
-    """
-    dataset = points  # Remove duplicates
-    if len(dataset) <= 1:
-        return dataset
-
-    # Build lower hull
-    lower = []
-    for p in dataset:
-        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
-            lower.pop()
-        lower.append(p)
-
-    # Build upper hull
-    upper = []
-    for p in reversed(dataset):
-        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
-            upper.pop()
-        upper.append(p)
-
-    a = lower[:-1] + upper[:-1]
-    return torch.flip(torch.stack(a), [0,])
-
 def fill_polygon(mask, polygon):
     '''
     inspired by https://web.archive.org/web/20120323102807/http://local.wasp.uwa.edu.au/~pbourke/geometry/insidepoly/
@@ -578,7 +503,6 @@ def fill_polygon(mask, polygon):
 
 def convex_hull(mask, coords):
     hull = jarvis_march(coords)
-    # hull = convex(coords)
     new_mask = fill_polygon(mask, hull)
     return new_mask
 
