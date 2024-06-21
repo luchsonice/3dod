@@ -1341,7 +1341,7 @@ class ROIHeads3DScore(StandardROIHeads):
         l1loss = self.l1_loss(pred_z, gt_z_o)
         return l1loss
     
-    def dim_loss(self, priors:tuple[torch.Tensor], dimensions, gt_boxes, pred_boxes, eps=1e-6):
+    def dim_loss(self, priors:tuple[torch.Tensor], dimensions):
         '''
         priors   : List
         dimensions : List of Lists
@@ -1352,24 +1352,19 @@ class ROIHeads3DScore(StandardROIHeads):
         # Drop rows of prior_mean and prior_std for rows in prior_std containing nan
         mask = ~torch.isnan(prior_std).any(dim=1)
         if not mask.all():
-            return None
+            return None, None, None
         prior_mean = prior_mean[mask]
         prior_std = prior_std[mask]
         dimensions = dimensions[mask]
-        gt_boxes = gt_boxes.tensor[mask]
-        pred_boxes = pred_boxes.tensor[mask]
-        # gt_boxes = gt_boxes.tensor
-        # pred_boxes = pred_boxes.tensor
 
         # z-score ie how many std's we are from the mean
         dimensions_scores = (dimensions - prior_mean).abs()/prior_std
-        scores = dimensions_scores.mean(1)
-        gt_ratio = (gt_boxes[:,2]-gt_boxes[:,0])/(gt_boxes[:,3]-gt_boxes[:,1])
-        pred_ratios = (pred_boxes[:,2] - pred_boxes[:,0]) / (pred_boxes[:,3] - pred_boxes[:,1] + eps)
-        differences = torch.abs(gt_ratio-pred_ratios)
-        # max_difference = torch.max(differences)
-        
-        return scores 
+
+        for i in range(dimensions_scores.shape[0]):
+            for j in range(dimensions_scores.shape[1]):
+                dimensions_scores[i,j] = torch.floor(dimensions_scores[i,j])
+       
+        return dimensions_scores[:,0], dimensions_scores[:,1], dimensions_scores[:,2]
     
     def pseudo_gt_z_point_loss(self, depth_maps, pred_xy, pred_z, num_boxes_per_image):
         '''Compute the pseudo ground truth z loss based on the depth map
@@ -1690,7 +1685,7 @@ class ROIHeads3DScore(StandardROIHeads):
             loss_pose = None
             loss_seg = None
             loss_z = None
-            loss_dims = None
+            loss_dims_w = None
             loss_pseudo_gt_z = None
             loss_ground_rot = None
             loss_depth = None
@@ -1736,7 +1731,7 @@ class ROIHeads3DScore(StandardROIHeads):
 
             # Dimensions
             if 'dims' in self.loss_functions:
-                loss_dims = self.dim_loss((prior_dims_mean, prior_dims_std), cubes.dimensions.squeeze(1), gt_boxes, proj_boxes)
+                loss_dims_w, loss_dims_h, loss_dims_l = self.dim_loss((prior_dims_mean, prior_dims_std), cubes.dimensions.squeeze(1))
 
             # Depth Range
             if 'depth' in self.loss_functions:
@@ -1756,8 +1751,10 @@ class ROIHeads3DScore(StandardROIHeads):
                 total_3D_loss_for_reporting += loss_z*self.loss_w_z
             if loss_pseudo_gt_z is not None:
                 total_3D_loss_for_reporting += loss_pseudo_gt_z*self.loss_w_z
-            if loss_dims is not None:
-                total_3D_loss_for_reporting += loss_dims*self.loss_w_dims
+            if loss_dims_w is not None:
+                total_3D_loss_for_reporting += loss_dims_w*self.loss_w_dims
+                total_3D_loss_for_reporting += loss_dims_h*self.loss_w_dims
+                total_3D_loss_for_reporting += loss_dims_l*self.loss_w_dims
             if loss_depth is not None:
                 total_3D_loss_for_reporting += loss_depth*self.loss_w_depth
             
@@ -1799,8 +1796,10 @@ class ROIHeads3DScore(StandardROIHeads):
                 if loss_pseudo_gt_z is not None:
                     loss_pseudo_gt_z *= uncert_sf
 
-                if loss_dims is not None:
-                    loss_dims *= uncert_sf
+                if loss_dims_w is not None:
+                    loss_dims_w *= uncert_sf
+                    loss_dims_h *= uncert_sf
+                    loss_dims_l *= uncert_sf
 
                 if loss_depth is not None:
                     loss_depth *= uncert_sf
@@ -1832,9 +1831,15 @@ class ROIHeads3DScore(StandardROIHeads):
                 losses.update({
                     prefix + 'loss_pseudo_gt_z': self.safely_reduce_losses(loss_pseudo_gt_z) * self.loss_w_z * self.loss_w_3d,
                 })
-            if loss_dims is not None:
+            if loss_dims_w is not None:
                 losses.update({
-                    prefix + 'loss_dims': self.safely_reduce_losses(loss_dims) * self.loss_w_dims * self.loss_w_3d,
+                    prefix + 'loss_dims_w': self.safely_reduce_losses(loss_dims_w) * self.loss_w_dims * self.loss_w_3d,
+                })
+                losses.update({
+                    prefix + 'loss_dims_h': self.safely_reduce_losses(loss_dims_h) * self.loss_w_dims * self.loss_w_3d,
+                })
+                losses.update({
+                    prefix + 'loss_dims_l': self.safely_reduce_losses(loss_dims_l) * self.loss_w_dims * self.loss_w_3d,
                 })
             if loss_depth is not None:
                 losses.update({
