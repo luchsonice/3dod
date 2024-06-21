@@ -1736,8 +1736,6 @@ class ROIHeads3DScore(StandardROIHeads):
             # segment
             if 'segmentation' in self.loss_functions:
                 loss_seg = self.segment_loss(masks_all_images, bube_corners, at_which_mask_idx)
-            if loss_seg is not None:
-                loss_seg = loss_seg.repeat(n)
 
             # Z
             if 'z' in self.loss_functions:

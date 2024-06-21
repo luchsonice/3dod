@@ -465,15 +465,22 @@ def jarvis_march(points):
         points = points + plusone
 
     # find the lower left point
-    index = torch.argmin(distance_2d(points, torch.tensor([[0,0]], device=points.device)))
-    # index = torch.argmin(points[:,0])
+    min_x = torch.min(points[:, 0])
+    candidates = (points[:, 0] == min_x).nonzero(as_tuple=True)[0]
 
+    # If there are multiple points, choose the one with the highest y value
+    if len(candidates) > 1:
+        index = candidates[torch.argmax(points[candidates][:, 1])]
+    else:
+        index = candidates[0]
+    
     a = points[index]
     
     # selection sort
     l = index
     result = []
     result.append(a)
+    count = 0
     while (True):
         q = (l + 1) % len(points)
         for i in range(len(points)):
@@ -488,6 +495,11 @@ def jarvis_march(points):
         if l == index:
             break
         result.append(points[q])
+        if count > 100000:
+            print('fucked up', count)
+            print(points, a)
+            exit()
+        count += 1
 
     return torch.flip(torch.stack(result), [0,])
 
@@ -626,7 +638,7 @@ if __name__ == '__main__':
                     [262.5294, 327.9978],
                     [271.0000, 120.8048]])
 
-    # mask5 = convex_hull(mask, p5)
+    mask5 = convex_hull(mask, p5)
     mask4 = convex_hull(mask, p4)
     mask1 = convex_hull(mask, p)
     mask2 = convex_hull(mask, p2)
@@ -642,6 +654,6 @@ if __name__ == '__main__':
     ax[1].imshow(mask2)
     ax[2].imshow(mask3)
     ax[3].imshow(mask4)
-    # ax[4].imshow(mask5)
+    ax[4].imshow(mask5)
     plt.show()
     a = 2
