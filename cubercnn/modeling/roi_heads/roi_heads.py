@@ -1420,11 +1420,12 @@ class ROIHeads3DScore(StandardROIHeads):
                 # if segmentation fails, fall back to the bbox
                 if depth_range.numel() == 0:
                     depth_range = depth_map[gt_boxes_t[counter,1].long():gt_boxes_t[counter,3].long(), gt_boxes_t[counter,0].long():gt_boxes_t[counter,2].long()]
-                gt_depth = torch.max(depth_range) - torch.min(depth_range)
+                gt_depth = torch.quantile(depth_range,0.9) - torch.quantile(depth_range,0.1) #torch.max(depth_range) - torch.min(depth_range)
                 gt_depths.append(gt_depth)
                 counter += 1
 
         gt_depths = torch.stack(gt_depths)
+        print('dp range', gt_depths)
         scores = self.l1_loss(gt_depths, pred_depth)
 
         return scores
@@ -1746,6 +1747,7 @@ class ROIHeads3DScore(StandardROIHeads):
                 loss_dims_w, loss_dims_h, loss_dims_l = self.dim_loss((prior_dims_mean, prior_dims_std), cubes.dimensions.squeeze(1))
 
             # Depth Range
+            print(gt_cubes.dimensions[:,0,2])
             if 'depth' in self.loss_functions:
                 loss_depth = self.depth_range_loss(masks_all_images, at_which_mask_idx, depth_maps, cubes, gt_boxes, num_boxes_per_image)
             
