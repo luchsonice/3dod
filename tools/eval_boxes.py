@@ -1,4 +1,7 @@
+import json
 import warnings
+
+from detectron2.modeling.meta_arch.rcnn import GeneralizedRCNN
 
 from cubercnn.data.build import build_detection_train_loader
 warnings.filterwarnings("ignore", message="Overwriting tiny_vit_21m_512 in registry")
@@ -609,18 +612,56 @@ def do_train(cfg, model):
     experiment_type['use_pred_boxes'] = cfg.PLOT.MODE2D if cfg.PLOT.MODE2D != '' else False
     experiment_type['pseudo_gt'] = cfg.TRAIN.pseudo_gt
     os.makedirs(f'datasets/proposals_{cfg.TRAIN.pseudo_gt}',exist_ok=True)
+
+    # lol I think we have to hardcode this part in
+    
+    dataset_json = {}
+    dataset_json.update({"categories": [{"supercategory": "nan", "id": 18, "name": "chair"}, {"supercategory": "nan", "id": 31, "name": "door"}, {"supercategory": "nan", "id": 37, "name": "table"}, {"supercategory": "nan", "id": 26, "name": "shelves"}, {"supercategory": "nan", "id": 51, "name": "kitchen pan"}, {"supercategory": "nan", "id": 52, "name": "bin"}, {"supercategory": "nan", "id": 38, "name": "counter"}, {"supercategory": "nan", "id": 29, "name": "cabinet"}, {"supercategory": "nan", "id": 53, "name": "stove"}, {"supercategory": "nan", "id": 28, "name": "sink"}, {"supercategory": "nan", "id": 14, "name": "books"}, {"supercategory": "nan", "id": 49, "name": "refrigerator"}, {"supercategory": "nan", "id": 54, "name": "microwave"}, {"supercategory": "nan", "id": 15, "name": "bottle"}, {"supercategory": "nan", "id": 55, "name": "plates"}, {"supercategory": "nan", "id": 56, "name": "bowl"}, {"supercategory": "nan", "id": 57, "name": "oven"}, {"supercategory": "nan", "id": 58, "name": "vase"}, {"supercategory": "nan", "id": 59, "name": "faucet"}, {"supercategory": "nan", "id": 22, "name": "towel"}, {"supercategory": "nan", "id": 60, "name": "tissues"}, {"supercategory": "nan", "id": 61, "name": "machine"}, {"supercategory": "nan", "id": 62, "name": "printer"}, {"supercategory": "nan", "id": 33, "name": "desk"}, {"supercategory": "nan", "id": 63, "name": "monitor"}, {"supercategory": "nan", "id": 64, "name": "podium"}, {"supercategory": "nan", "id": 35, "name": "bookcase"}, {"supercategory": "nan", "id": 41, "name": "dresser"}, {"supercategory": "nan", "id": 65, "name": "cart"}, {"supercategory": "nan", "id": 66, "name": "projector"}, {"supercategory": "nan", "id": 67, "name": "electronics"}, {"supercategory": "nan", "id": 68, "name": "computer"}, {"supercategory": "nan", "id": 34, "name": "box"}, {"supercategory": "nan", "id": 36, "name": "picture"}, {"supercategory": "nan", "id": 20, "name": "laptop"}, {"supercategory": "nan", "id": 42, "name": "pillow"}, {"supercategory": "nan", "id": 39, "name": "bed"}, {"supercategory": "nan", "id": 69, "name": "air conditioner"}, {"supercategory": "nan", "id": 25, "name": "lamp"}, {"supercategory": "nan", "id": 40, "name": "night stand"}, {"supercategory": "nan", "id": 50, "name": "board"}, {"supercategory": "nan", "id": 43, "name": "sofa"}, {"supercategory": "nan", "id": 71, "name": "coffee maker"}, {"supercategory": "nan", "id": 72, "name": "toaster"}, {"supercategory": "nan", "id": 73, "name": "potted plant"}, {"supercategory": "nan", "id": 48, "name": "stationery"}, {"supercategory": "nan", "id": 74, "name": "painting"}, {"supercategory": "nan", "id": 75, "name": "bag"}, {"supercategory": "nan", "id": 76, "name": "tray"}, {"supercategory": "nan", "id": 19, "name": "cup"}, {"supercategory": "nan", "id": 70, "name": "drawers"}, {"supercategory": "nan", "id": 77, "name": "keyboard"}, {"supercategory": "nan", "id": 21, "name": "shoes"}, {"supercategory": "vehicle & road", "id": 11, "name": "bicycle"}, {"supercategory": "nan", "id": 78, "name": "blanket"}, {"supercategory": "nan", "id": 44, "name": "television"}, {"supercategory": "nan", "id": 79, "name": "rack"}, {"supercategory": "nan", "id": 27, "name": "mirror"}, {"supercategory": "nan", "id": 47, "name": "clothes"}, {"supercategory": "nan", "id": 80, "name": "phone"}, {"supercategory": "nan", "id": 81, "name": "mouse"}, {"supercategory": "person", "id": 7, "name": "person"}, {"supercategory": "nan", "id": 82, "name": "fire extinguisher"}, {"supercategory": "nan", "id": 83, "name": "toys"}, {"supercategory": "nan", "id": 84, "name": "ladder"}, {"supercategory": "nan", "id": 85, "name": "fan"}, {"supercategory": "nan", "id": 32, "name": "toilet"}, {"supercategory": "nan", "id": 30, "name": "bathtub"}, {"supercategory": "nan", "id": 86, "name": "glass"}, {"supercategory": "nan", "id": 87, "name": "clock"}, {"supercategory": "nan", "id": 88, "name": "toilet paper"}, {"supercategory": "nan", "id": 89, "name": "closet"}, {"supercategory": "nan", "id": 46, "name": "curtain"}, {"supercategory": "nan", "id": 24, "name": "window"}, {"supercategory": "nan", "id": 90, "name": "fume hood"}, {"supercategory": "nan", "id": 91, "name": "utensils"}, {"supercategory": "nan", "id": 45, "name": "floor mat"}, {"supercategory": "nan", "id": 92, "name": "soundsystem"}, {"supercategory": "nan", "id": 93, "name": "fire place"}, {"supercategory": "nan", "id": 94, "name": "shower curtain"}, {"supercategory": "nan", "id": 23, "name": "blinds"}, {"supercategory": "nan", "id": 95, "name": "remote"}, {"supercategory": "nan", "id": 96, "name": "pen"}]})
+
+    d_id_to_contiguous = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
+    contiguous_to_id = {v:k for k,v in d_id_to_contiguous.items()}
+
+    global_id = 1
     # this controls the flow of the program in the model class
     model.train()
     for dataset_name in dataset_names:
+        idd = 12
+        if 'val' in dataset_name:
+            idd = 13
+        dataset_json.update({"info": {"id": idd, "source": "SUNRGBD", "name": "SUNRGBD Train", "split": "Train", "version": "0.1", "url": "https://rgbd.cs.princeton.edu/"}})
         data_loader = build_detection_test_loader(cfg, dataset_name, mapper=data_mapper, num_workers=4)
 
         total = len(data_loader)  # inference data loader must have a fixed length
 
+        annotations = []
+        images = []
         for idx, inputs in tqdm(enumerate(data_loader), desc="Generating pseudo GT", total=total):
             cubes = model(inputs, segmentor, experiment_type)
+            instances = cubes[0]['instances']
             input_ = inputs[0]
             img_id = input_['image_id']
-            torch.save(cubes.to('cpu'), f'datasets/proposals/proposals_{cfg.TRAIN.pseudo_gt}/{img_id}.pt')
+            input_['instances'].proposal_boxes = input_['instances'].gt_boxes
+            bboxes = GeneralizedRCNN._postprocess([input_['instances']], [input_], [input_['instances']._image_size])
+            bboxes = bboxes[0]['instances'].proposal_boxes
+            # build json for each image
+            img = {'width':input_['width'], 'height':input_['height'], 'file_path':input_['file_name'][9:], 'K':input_['K'], 'src_90_rotate':False, 'src_flagged':False, 'incomplete':False, 'id':img_id, 'dataset_id':12}
+            for bbox, gt_class, center, dimensions, bbox3D, rotation in zip(bboxes, input_['instances'].gt_classes,
+                                                                            instances.pred_center_cam.tolist(), instances.pred_dimensions.tolist(), 
+                                                                            instances.pred_bbox3D.tolist(), instances.pred_pose.tolist()):
+                c_id = util.MetadataCatalog.get('omni3d_model').thing_classes[gt_class]
+                ann = {'behind_camera':False, 'truncation': 0, 'bbox2D_proj':bbox.tolist(), 'bbox2D_tight':-1, 'visibility':1.0, 'segmentation_pts':-1, 'lidar_pts':-1,\
+                       'valid3D':True, 'category_id':contiguous_to_id[gt_class.tolist()], 'category_name':c_id, \
+                       'id':global_id, 'image_id':img_id, 'dataset_id':idd, 'depth_error':-1, 'center_cam':center,\
+                       'dimensions':dimensions, 'bbox3D_cam':bbox3D, 'R_cam':rotation}
+                annotations.append(ann)
+                global_id += 1
+
+            images.append(img)
+
+        dataset_json.update({'images':images, 'annotations':annotations})
+
+        with open(f'datasets/Omni3D/SUNRGBD_pseudo_gt_{dataset_name}.json', 'w') as f:
+            json.dump(dataset_json, f)
 
     return True
 

@@ -697,8 +697,9 @@ class BoxNet(nn.Module):
             features = None
             
             gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
-            results = self.roi_heads(images, images_raw, depth_maps, ground_maps, features, gt_instances, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function)
-            return results
+                          # def forward(self, images, images_raw, combined_features, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, targets=None):
+            results = self.roi_heads(images, images_raw, None, depth_maps, ground_maps, features, gt_instances, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function)
+            return GeneralizedRCNN._postprocess(results, batched_inputs, images.image_sizes)
 
     def inference(self,
         batched_inputs: List[Dict[str, torch.Tensor]],
