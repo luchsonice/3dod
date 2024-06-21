@@ -480,7 +480,7 @@ def jarvis_march(points):
     l = index
     result = []
     result.append(a)
-    count = 0
+
     while (True):
         q = (l + 1) % len(points)
         for i in range(len(points)):
@@ -495,11 +495,6 @@ def jarvis_march(points):
         if l == index:
             break
         result.append(points[q])
-        if count > 100000:
-            print('fucked up', count)
-            print(points, a)
-            exit()
-        count += 1
 
     return torch.flip(torch.stack(result), [0,])
 
