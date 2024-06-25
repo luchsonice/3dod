@@ -1042,18 +1042,9 @@ class ROIHeads3DScore(StandardROIHeads):
             else:
                 pred_instances = self._forward_box(features, proposals)
             
-            if self.loss_w_3d > 0:
-                # this will fail because the object mask function assume that proposals has gt_boxes field
-                if 'segmentation' in self.loss_functions or 'depth' in self.loss_functions:
-                    mask_per_image = self.object_masks(images_raw.tensor, targets) # over all images in batch
-                    masks_all_images = [sublist for outer_list in mask_per_image for sublist in outer_list]
-                else:
-                    mask_per_image, masks_all_images, first_occurrence_indices = None, None, None
-                del targets
-
-                pred_instances = self._forward_cube(features, pred_instances, Ks, im_dims, im_scales_ratio, masks_all_images, first_occurrence_indices, ground_maps, depth_maps)
+            mask_per_image, masks_all_images, first_occurrence_indices = None, None, None
+            pred_instances = self._forward_cube(features, pred_instances, Ks, im_dims, im_scales_ratio, masks_all_images, first_occurrence_indices, ground_maps, depth_maps)
             return pred_instances, {}
-    
 
     def _forward_box(self, features: Dict[str, torch.Tensor], proposals: List[Instances]):
         """
@@ -1169,7 +1160,7 @@ class ROIHeads3DScore(StandardROIHeads):
         dice = (2.*intersection + smooth)/(y_hat.sum() + y.sum() + smooth)
         return 1 - dice
     
-    def segment_loss(self, gt_mask, bube_corners, at_which_mask_idx, loss='bce'):
+    def segment_loss(self, gt_mask, bube_corners, at_which_mask_idx, loss='focal'):
         n = len(bube_corners)
         y_hat = []
         y = []
