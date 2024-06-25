@@ -1365,9 +1365,7 @@ class ROIHeads3DScore(StandardROIHeads):
         # z-score ie how many std's we are from the mean
         dimensions_scores = (dimensions - prior_mean).abs()/prior_std
 
-        for i in range(dimensions_scores.shape[0]):
-            for j in range(dimensions_scores.shape[1]):
-                dimensions_scores[i,j] = torch.floor(dimensions_scores[i,j])
+        dimensions_scores = torch.floor(dimensions_scores)
        
         return dimensions_scores[:,0], dimensions_scores[:,1], dimensions_scores[:,2]
     
