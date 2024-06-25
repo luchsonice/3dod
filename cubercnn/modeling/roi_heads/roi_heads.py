@@ -463,15 +463,14 @@ class ROIHeads_Boxer(StandardROIHeads):
         if experiment_type['use_pred_boxes']:
             pred_cubes, pred_boxes, _, _ = self.predict_cubes(gt_boxes, (prior_dims_mean, prior_dims_std), depth_maps.tensor, im_shape, Ks_scaled_per_box, number_of_proposals, proposal_function, normal_vec)
             for i, (gt_box) in enumerate(gt_boxes):
-                IoU2D_scores = score_iou(Boxes(gt_box.unsqueeze(0)), pred_boxes[i])
-                segment_scores = score_segmentation(mask_per_image_cpu[i][0], pred_cubes[i].get_bube_corners(Ks_scaled_per_box))
-                segment_scores = torch.stack(segment_scores)
-                dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0])
-                #point_cloud_scores = score_point_cloud(torch.from_numpy(points_no_ground), pred_cubes[i])
-                combined_score = IoU2D_scores*dim_scores*segment_scores
+                bube_corners = pred_cubes[i].get_bube_corners(Ks_scaled_per_box, im_shape)
+                IoU2D_scores = score_iou(gt_boxes[i], pred_boxes[i])
+                dim_scores = score_dimensions((prior_dims_mean[i], prior_dims_std[i]), pred_cubes[i].dimensions[0], gt_boxes[i], pred_boxes[i])
+                corners_scores = score_corners(mask_per_image_cpu[i][0], bube_corners)
+                combined_score = np.array(IoU2D_scores.cpu())*np.array(dim_scores.cpu())*np.array(corners_scores.cpu())
                 
                 score_to_use = combined_score
-                highest_score = torch.argmax(score_to_use)
+                highest_score = np.argmax(score_to_use)
                 pred_cube = pred_cubes[i,highest_score]
                 pred_cubes_out.scores[i] = torch.as_tensor(score_to_use[highest_score])
                 pred_cubes_out.tensor[i] = pred_cube.tensor[0]
@@ -618,8 +617,8 @@ class ROIHeads_Boxer(StandardROIHeads):
             # such that the loop can be over the images.
             pred_instances = [Instances(size) for size in images_raw.image_sizes] # each instance object contains all boxes in one image, the list is for each image
             for instances_i in pred_instances:
-                instances_i.pred_boxes = pred_boxes_out #Boxes.cat(cubes_to_box(pred_cubes_out, Ks_scaled_per_box.to('cpu'), im_shape))
-                instances_i.scores = pred_cubes_out.scores
+                instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes_out, Ks_scaled_per_box, im_shape))
+                instances_i.scores = pred_cubes_out.scores.squeeze(1)
                 instances_i.pred_classes = pred_cubes_out.labels
                 instances_i.pred_bbox3D = pred_cubes_out.get_all_corners().squeeze(1)
                 instances_i.pred_center_cam = pred_cubes_out.centers.squeeze(1)

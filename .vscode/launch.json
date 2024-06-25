@@ -65,7 +65,7 @@
             "program": "tools/eval_boxes.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--eval-only", "--config-file" ,"configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "MABO", "PLOT.MODE2D", "GT", "PLOT.PROPOSAL_FUNC", "full", "PLOT.SCORING_FUNC", "False"]
+            "args": ["--eval-only", "--config-file" ,"configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "MABO", "PLOT.MODE2D", "GT", "PLOT.PROPOSAL_FUNC", "z", "PLOT.SCORING_FUNC", "False"]
         },
         {
             "name": "BoxNet MABO PRED",
@@ -86,13 +86,22 @@
             "args": ["--eval-only", "--config-file" ,"configs/BoxNet.yaml", "PLOT.EVAL", "IoU3D", "PLOT.MODE2D", "GT", "PLOT.PROPOSAL_FUNC", "['random', 'z', 'xy', 'dim', 'rotation', 'aspect' ,'full']", "PLOT.SCORING_FUNC", "False"]
         },
         {
-            "name": "BoxNet AP PRED",
+            "name": "BoxNet PRED AP DETECTION RATE",
             "type": "python",
             "request": "launch",
             "program": "tools/eval_boxes.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "AP", "PLOT.MODE2D", "PRED"]
+        },
+        {
+            "name": "BoxNet AP PRED",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/eval_boxes.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--eval-only", "--config-file", "configs/BoxNet.yaml", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "PLOT.EVAL", "AP", "PLOT.MODE2D", "PRED", "PLOT.SCORING_FUNC", "True"]
         },
         {
             "name": "BoxNet AP GT",
@@ -128,7 +137,7 @@
             "program": "tools/train_net.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--config-file", "configs/Omni_combined.yaml", "OUTPUT_DIR", "output/omni3d_combined_segmentation", "log", "False", "loss_functions", "['depth']"]
+            "args": ["--config-file", "configs/Omni_combined.yaml", "OUTPUT_DIR", "output/omni3d_combined_range", "log", "False", "loss_functions", "['depth']"]
         },
         
     ]

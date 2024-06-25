@@ -111,9 +111,9 @@ plt.savefig(f_name, dpi=300, bbox_inches='tight')
 plt.close()
 print('saved to ', f_name)
 
-if proposal_function == 'xy' or 'z':
+if proposal_function == 'xy' or proposal_function == 'z':
     num_bins = [600,300,200]
-elif proposal_function == 'dim' or 'rotation' or 'full':
+elif proposal_function == 'dim' or proposal_function == 'rotation' or proposal_function == 'full':
     num_bins = [300,700,70]
 else:
     num_bins = [200, 200, 200]
@@ -125,7 +125,7 @@ for i,title in enumerate(titles):
     plt.axvline(x=0, color='#97a6c4', zorder=2)
     plt.axvline(x=1, color='#97a6c4', zorder=2)
     create_striped_patch(ax, 0, 1, '#97a6c4', alpha=0.8)
-    plt.xlim([max(-2,min(stats[:,i])),min(2,max(stats[:,i]))])
+    plt.xlim([max(-1,min(stats[:,i])),min(2,max(stats[:,i]))])
     plt.title(title)
 f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'stats_center_zoom_'+str(proposal_function)+'.png')
 plt.savefig(f_name, dpi=300, bbox_inches='tight')
@@ -146,6 +146,25 @@ f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'st
 plt.savefig(f_name, dpi=300, bbox_inches='tight')
 plt.close()
 print('saved to ', f_name)
+
+if proposal_function == 'rotation' or proposal_function == 'aspect':
+    num_bins = [120,90,130]
+    plt.figure(figsize=(15, 5))
+    plt.suptitle("Distribution of Ground Truths in Normalised Searched Range", fontsize=20)
+    for i,title in enumerate(titles):
+        ax = plt.subplot(1, 3, 1+i)
+        plt.hist(stats[:,3+i].numpy(), bins=num_bins[i], color=color_palette[6],density=True, zorder=2)
+        plt.axvline(x=0, color='#97a6c4', zorder=2)
+        plt.axvline(x=1, color='#97a6c4', zorder=2)
+        create_striped_patch(ax, 0, 1, '#97a6c4', alpha=0.8)
+        plt.xlim([max(-0.2,min(stats[:,i])),min(1.5,max(stats[:,i]))])
+        plt.title(title)
+    f_name = os.path.join('ProposalNetwork/output/MABO_'+str(proposal_function), 'stats_dim_zoom_'+str(proposal_function)+'.png')
+    plt.savefig(f_name, dpi=300, bbox_inches='tight')
+    plt.close()
+    print('saved to ', f_name)
+
+num_bins = 40
 titles = ['rx','ry','rz']
 plt.figure(figsize=(15, 5))
 plt.suptitle("Distribution of Ground Truths in Normalised Searched Range", fontsize=20)
