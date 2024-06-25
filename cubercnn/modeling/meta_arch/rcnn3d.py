@@ -595,7 +595,6 @@ class BoxNet(nn.Module):
         pixel_std: tuple[float],
         input_format: Optional[str] = None,
         vis_period: int = 0,
-        scorenet_base: nn.Module,
     ):
         """
         Args:
@@ -611,7 +610,6 @@ class BoxNet(nn.Module):
         self.backbone = backbone
         self.proposal_generator = proposal_generator
         self.roi_heads = roi_heads
-        self.scorenet_base = scorenet_base
         
         self.input_format = input_format
         self.vis_period = vis_period
@@ -627,9 +625,6 @@ class BoxNet(nn.Module):
     @classmethod
     def from_config(cls, cfg, priors=None):
         backbone = build_backbone(cfg, priors=priors)
-        depth_model = 'zoedepth'
-        pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
-        d_model = setup_depth_model(depth_model, pretrained_resource) #NOTE maybe make the depth model be learnable as well
         return {
             "backbone": backbone,
             "proposal_generator": build_proposal_generator(cfg, backbone.output_shape()),
@@ -638,7 +633,6 @@ class BoxNet(nn.Module):
             "vis_period": cfg.VIS_PERIOD,
             "pixel_mean": cfg.MODEL.PIXEL_MEAN,
             "pixel_std": cfg.MODEL.PIXEL_STD,
-            "scorenet_base": ScoreNetBase(depth_model=d_model, backbone=backbone, pixel_mean=cfg.MODEL.PIXEL_MEAN, pixel_std=cfg.MODEL.PIXEL_STD, input_format=cfg.INPUT.FORMAT),
         }
             
     @property

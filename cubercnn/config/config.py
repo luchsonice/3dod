@@ -49,6 +49,8 @@ def get_cfg_defaults(cfg):
     cfg.MODEL.ROI_CUBE_HEAD.CONV_DIM = 256
     cfg.MODEL.ROI_CUBE_HEAD.NUM_FC = 2
     cfg.MODEL.ROI_CUBE_HEAD.FC_DIM = 1024
+    # proposal method 
+    cfg.MODEL.ROI_CUBE_HEAD.NUMBER_OF_PROPOSALS = 1000
     
     # the style to predict Z with currently supported
     # options --> ['direct', 'sigmoid', 'log', 'clusters']
