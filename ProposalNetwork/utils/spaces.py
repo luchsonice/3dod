@@ -221,7 +221,7 @@ class Cubes:
 
         return verts, faces
     
-    def get_bube_corners(self, K, clamp:tuple) -> torch.Tensor:
+    def get_bube_corners(self, K, clamp:tuple=None) -> torch.Tensor:
         '''This assumes that all the cubes have the same camera intrinsic matrix K
 
         clamp is a typically the image shape (width, height) to truncate the boxes to image frame, this avoids huge projected boxes
