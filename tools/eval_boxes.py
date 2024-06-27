@@ -132,23 +132,24 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
     it will work
     '''
     total = len(data_loader)  # inference data loader must have a fixed length
+    torch.set_float32_matmul_precision('high')
 
     with ExitStack() as stack:
         if isinstance(model, nn.Module):
             stack.enter_context(inference_context(model))
         stack.enter_context(torch.no_grad())
 
-        if not os.path.exists('ProposalNetwork/output/outputs.pkl'):
-            torch.set_float32_matmul_precision('high')
+        # if not os.path.exists('ProposalNetwork/output/outputs.pkl'):
+        if True:
             outputs = []
             for i, inputs in tqdm(enumerate(data_loader), desc=f"IoU3D plots, proposal method: {proposal_functions}", total=total):
                 output = model(inputs, segmentor, experiment_type, proposal_functions)
                 outputs.append(output.cpu().numpy())
-            with open('ProposalNetwork/output/outputs.pkl', 'wb') as f:
-                pickle.dump(outputs, f)
-        else:
-            with open('ProposalNetwork/output/outputs_10k.pkl', 'rb') as f:
-                outputs = pickle.load(f)
+        #     with open('ProposalNetwork/output/outputs.pkl', 'wb') as f:
+        #         pickle.dump(outputs, f)
+        # else:
+        #     with open('ProposalNetwork/output/outputs_10k.pkl', 'rb') as f:
+        #         outputs = pickle.load(f)
         xlim = [0.2,1]
         IoUat = [0.25, 0.4, 0.6]
         n_proposals = outputs[0].shape[-1]
@@ -200,6 +201,7 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
     for ax in axes2:
         ax.legend()
     axes.legend()
+    print("saved to 'ProposalNetwork/output/'")
     fig.savefig(f'ProposalNetwork/output/detection_rate_{n_proposals}.png', dpi=300, bbox_inches='tight')
     fig2.savefig(f'ProposalNetwork/output/IoU_varying_{n_proposals}.png', dpi=300, bbox_inches='tight')
 
