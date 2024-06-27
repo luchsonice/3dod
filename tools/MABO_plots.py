@@ -29,7 +29,7 @@ def create_striped_patch(ax, x_start, x_end, color, alpha=0.3):
 
 color_palette = ['#008dff','#ff73bf','#c701ff','#4ecb8d','#ff9d3a','#f0c571','#384860','#d83034']
 
-proposal_function = 'aspect'
+proposal_function = 'full'
 print('loading ...')
 with open('output/pkl_files/outputs_'+str(proposal_function)+'.pkl', 'rb') as file:
     outputs = pickle.load(file)
@@ -72,13 +72,14 @@ print('Best possible IoU:', score_combined[-1])
 x_range = np.arange(1,1001)
 plt.figure(figsize=(8,5))
 plt.plot(x_range,score_combined, linestyle='-',c=color_palette[6], label='combined') 
-plt.plot(x_range,score_dim, linestyle='-',c=color_palette[5],label='dim') 
-plt.plot(x_range,score_seg, linestyle='-',c=color_palette[2],label='segment')
 plt.plot(x_range,Iou2D, linestyle='-',c=color_palette[4],label='2D IoU') 
-plt.plot(x_range,score_corners, linestyle='-',c=color_palette[7],label='corner dist')
-plt.plot(x_range,score_random, linestyle='-',c='grey',label='random') 
+plt.plot(x_range,score_seg_mod, linestyle='-',c=color_palette[0],label='mod. segment')
+plt.plot(x_range,score_corners, linestyle='-',c=color_palette[7],label='corner dist.')
+plt.plot(x_range,score_seg, linestyle='-',c=color_palette[2],label='segment')
+plt.plot(x_range,score_dim, linestyle='-',c=color_palette[5],label='dimensions') 
+plt.plot(x_range,score_random, linestyle='-',c='grey',label='random')
 plt.plot(x_range,score_point_cloud, linestyle='-',c=color_palette[3],label='point cloud')
-plt.plot(x_range,score_seg_mod, linestyle='-',c=color_palette[0],label='mod segment')
+
 plt.grid(True)
 plt.xscale('log')
 plt.xticks([1, 10, 100, 1000], ['1', '10', '100', '1000'])
