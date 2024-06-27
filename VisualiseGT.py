@@ -21,7 +21,7 @@ from detectron2.utils.logger import setup_logger
 color = '#384860'
 second_color = '#97a6c4'
 
-def load_gt(dataset='SUNRGBD', mode='test', single_im=True, filter=False):
+def load_gt(dataset='SUNRGBD', mode='test', single_im=True, filter=False, img_idx=150):
 
     # we can do this block of code to get the categories reduced number of categories in the sunrgbd dataset as there normally is 83 categories, however we only work with 38.
     config_file = 'configs/Base_Omni3D.yaml'
@@ -46,7 +46,7 @@ def load_gt(dataset='SUNRGBD', mode='test', single_im=True, filter=False):
     if single_im:
         # img = random.choice(imgs)
         # 730 and 150 are used in the report
-        img = imgs[150]
+        img = imgs[img_idx]
         annIds = dataset.getAnnIds(imgIds=img['id'])
     else:
         # get all annotations
@@ -114,8 +114,13 @@ def plot_scene(image_path, output_dir, center_cams, dimensions_all, Rs, K, cats,
         util.imwrite(im_drawn_rgb, os.path.join(output_dir, image_name+'_boxes.jpg'))
         util.imwrite(im_topdown, os.path.join(output_dir, image_name+'_novel.jpg'))
         v_pred = Visualizer(image, None)
-        v_pred = v_pred.overlay_instances(boxes=np.array(bboxes), assigned_colors=colors)
+        #bboxes = [[320, 150, 560, 340]]
+        #bboxes = [[350, 220, 440, 290]]
+        v_pred = v_pred.overlay_instances(boxes=np.array(bboxes), assigned_colors=[np.array([0.5,0,0.5])])#colors)
         util.imwrite(v_pred.get_image(), os.path.join(output_dir, image_name+'_pred_boxes.jpg'))
+        
+        im_drawn_rgb, im_topdown, _ = vis.draw_scene_view(v_pred.get_image(), np.array(K), meshes, colors=colors, text=meshes_text, scale=image.shape[0], blend_weight=0.5, blend_weight_overlay=0.85)
+        util.imwrite(im_drawn_rgb, os.path.join(output_dir, image_name+'_boxes_with_2d.jpg'))
     else:
         print('No meshes')
         util.imwrite(image, os.path.join(output_dir, image_name+'_boxes.jpg'))
@@ -533,15 +538,87 @@ def gt_stats(dataset):
     plt.savefig(os.path.join(output_dir, 'dimensions.png'), dpi=300, bbox_inches='tight')
     plt.close()
 
+def report_figures(dataset, filter_invalid=False, output_dir='output/report_images'):
+    # Create Output Directory
+    util.mkdir_if_missing(output_dir)
+    util.mkdir_if_missing(output_dir+'/low_green')
+    util.mkdir_if_missing(output_dir+'/high_green')
+    util.mkdir_if_missing(output_dir+'/fail_green')
+    util.mkdir_if_missing(output_dir+'/low_red')
+    util.mkdir_if_missing(output_dir+'/high_red')
+    util.mkdir_if_missing(output_dir+'/fail_red')
+    util.mkdir_if_missing(output_dir+'/low_blue')
+    util.mkdir_if_missing(output_dir+'/high_blue')
+    util.mkdir_if_missing(output_dir+'/fail_blue')
+    
+    # Load Image and Ground Truths 
+    image, Rs, center_cams, dimensions_all, cats, bboxes = load_gt(dataset, filter=filter_invalid, img_idx=352)
+
+    gt_center = center_cams[1:]
+    gt_dim = dimensions_all[1:]
+    gt_Rs = Rs[1:]
+    cats = cats[1:]
+    gt_bb = bboxes[1:]
+
+    # Make low loss boxes for IoU, ps. z and proj
+    center = gt_center[-1]
+    dim = gt_dim[-1]
+    R = gt_Rs[-1]
+    cat = cats[-1]
+    bb = gt_bb[-1]
+    plot_scene(image['file_path'], output_dir+'/low_green', [center], [dim], [R], image['K'], [cat], [bb])
+
+    # Make high loss boxes for IoU, ps. z and proj
+    center = [gt_center[-1][0],gt_center[-1][1],gt_center[-1][2]+3]
+    dim = gt_dim[-1]
+    R = gt_Rs[-1]
+    cat = cats[-1]
+    bb = gt_bb[-1]
+    plot_scene(image['file_path'], output_dir+'/high_green', [center], [dim], [R], image['K'], [cat], [bb])
+
+    # Make low loss boxes for range and seg
+    center = gt_center[0]
+    dim = gt_dim[0]
+    R = gt_Rs[0]
+    cat = cats[0]
+    bb = gt_bb[0]
+    plot_scene(image['file_path'], output_dir+'/low_red', [center], [dim], [R], image['K'], [cat], [bb])
+
+    # Make high loss boxes for range and seg
+    center = [gt_center[0][0],gt_center[0][1]+0.3,gt_center[0][2]]
+    dim = [gt_dim[0][0]+1.5,gt_dim[0][1]-0.6,gt_dim[0][2]]
+    R = gt_Rs[0]
+    cat = cats[0]
+    bb = gt_bb[0]
+    plot_scene(image['file_path'], output_dir+'/high_red', [center], [dim], [R], image['K'], [cat], [bb])
+
+    # Make low loss boxes for dim, pose and align
+    center = gt_center[1:]
+    dim = [[gt_dim[1][0]*1.5,gt_dim[1][1],gt_dim[1][2]*1.5], gt_dim[2]]
+    R = gt_Rs[1:]
+    cat = cats[1:]
+    bb = gt_bb[1:]
+    plot_scene(image['file_path'], output_dir+'/low_blue', center, dim, R, image['K'], cat, bb)
+
+    # Make high loss boxes for dim, pose and align
+    center = gt_center[1:]
+    dim = gt_dim[1:]
+    R = [util.euler2mat(util.mat2euler(np.array(gt_Rs[1]))+[20,0,0]), util.euler2mat(util.mat2euler(np.array(gt_Rs[2]))+[-20,0,0])]
+    cat = cats[1:]
+    bb = gt_bb[1:]
+    plot_scene(image['file_path'], output_dir+'/high_blue', center, dim, R, image['K'], cat, bb)
 
     return True
+
 if __name__ == '__main__':
-    show_data('SUNRGBD', filter_invalid=False, output_dir='output/playground/no_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
-    show_data('SUNRGBD', filter_invalid=True, output_dir='output/playground/with_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
+    #show_data('SUNRGBD', filter_invalid=False, output_dir='output/playground/no_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
+    #show_data('SUNRGBD', filter_invalid=True, output_dir='output/playground/with_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
     # _ = category_distribution('SUNRGBD')
     # AP_vs_no_of_classes('SUNRGBD')
     #spatial_statistics('SUNRGBD')
     # AP3D_vs_AP2D('SUNRGBD')
     # init_dataloader()
     # vol_over_cat('SUNRGBD')
-    gt_stats('SUNRGBD')
+    #gt_stats('SUNRGBD')
+
+    report_figures('SUNRGBD')
