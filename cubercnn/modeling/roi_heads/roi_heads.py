@@ -1552,7 +1552,7 @@ class ROIHeads3DScore(StandardROIHeads):
 
             # pseudo ground truth z loss
             if 'z_pseudo_gt_patch' in self.loss_functions:
-                loss_pseudo_gt_z = self.pseudo_gt_z_box_loss(depth_maps, proj_boxes.split(num_boxes_per_image), cube_z)
+                loss_pseudo_gt_z = self.pseudo_gt_z_box_loss(depth_maps, proj_boxes.tensor.split(num_boxes_per_image), cube_z)
             elif 'z_pseudo_gt_center' in self.loss_functions:
                 loss_pseudo_gt_z = self.pseudo_gt_z_point_loss(depth_maps, cube_xy, cube_z, num_boxes_per_image)
 
