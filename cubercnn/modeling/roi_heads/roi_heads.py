@@ -1144,7 +1144,7 @@ class ROIHeads3DScore(StandardROIHeads):
         
         return scores/2
     
-    def pseudo_gt_z_box_loss(self, depth_maps, proposal_boxes:list[Boxes], pred_z):
+    def pseudo_gt_z_box_loss(self, depth_maps, proposal_boxes:tuple[torch.Tensor], pred_z):
         '''Compute the pseudo ground truth z loss based on the depth map
             for now, use the median value depth constrained of the proposal box as the ground truth depth
         Args:
@@ -1155,6 +1155,7 @@ class ROIHeads3DScore(StandardROIHeads):
             z_loss: torch.Tensor of shape (N, 1)'''
         gt_z = []
         for depth_map, boxes in zip(depth_maps, proposal_boxes):
+            boxes = Boxes(boxes)
             h, w = depth_map.shape
             # x1, y1, x2, y2 = box
             # clamp boxes extending the image
