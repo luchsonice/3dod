@@ -114,13 +114,14 @@ def plot_scene(image_path, output_dir, center_cams, dimensions_all, Rs, K, cats,
         util.imwrite(im_drawn_rgb, os.path.join(output_dir, image_name+'_boxes.jpg'))
         util.imwrite(im_topdown, os.path.join(output_dir, image_name+'_novel.jpg'))
         v_pred = Visualizer(image, None)
-        #bboxes = [[320, 150, 560, 340]]
-        #bboxes = [[350, 220, 440, 290]]
-        v_pred = v_pred.overlay_instances(boxes=np.array(bboxes), assigned_colors=[np.array([0.5,0,0.5])])#colors)
+        #bboxes = [[320, 150, 560, 340]] # low loss
+        #bboxes = [[350, 220, 440, 290]] # high loss
+        #bboxes = [[340, 163, 540, 297]] # fail loss
+        v_pred = v_pred.overlay_instances(boxes=np.array(bboxes), assigned_colors=colors)#[np.array([0.5,0,0.5])])#colors)
         util.imwrite(v_pred.get_image(), os.path.join(output_dir, image_name+'_pred_boxes.jpg'))
         
-        im_drawn_rgb, im_topdown, _ = vis.draw_scene_view(v_pred.get_image(), np.array(K), meshes, colors=colors, text=meshes_text, scale=image.shape[0], blend_weight=0.5, blend_weight_overlay=0.85)
-        util.imwrite(im_drawn_rgb, os.path.join(output_dir, image_name+'_boxes_with_2d.jpg'))
+        #im_drawn_rgb, im_topdown, _ = vis.draw_scene_view(v_pred.get_image(), np.array(K), meshes, colors=colors, text=meshes_text, scale=image.shape[0], blend_weight=0.5, blend_weight_overlay=0.85)
+        #util.imwrite(im_drawn_rgb, os.path.join(output_dir, image_name+'_boxes_with_2d.jpg'))
     else:
         print('No meshes')
         util.imwrite(image, os.path.join(output_dir, image_name+'_boxes.jpg'))
@@ -576,6 +577,14 @@ def report_figures(dataset, filter_invalid=False, output_dir='output/report_imag
     bb = gt_bb[-1]
     plot_scene(image['file_path'], output_dir+'/high_green', [center], [dim], [R], image['K'], [cat], [bb])
 
+    # Make fail loss boxes for IoU, ps. z and proj
+    center = [gt_center[-1][0]-0.03,gt_center[-1][1],gt_center[-1][2]]
+    dim = [0.05,0.71,0.05] 
+    R = util.euler2mat(np.array([0,0,45]))
+    cat = cats[-1]
+    bb = gt_bb[-1]
+    plot_scene(image['file_path'], output_dir+'/fail_green', [center], [dim], [R], image['K'], [cat], [bb])
+
     # Make low loss boxes for range and seg
     center = gt_center[0]
     dim = gt_dim[0]
@@ -592,6 +601,14 @@ def report_figures(dataset, filter_invalid=False, output_dir='output/report_imag
     bb = gt_bb[0]
     plot_scene(image['file_path'], output_dir+'/high_red', [center], [dim], [R], image['K'], [cat], [bb])
 
+    # Make fail loss boxes for range and seg
+    center = [gt_center[0][0]+0.25,gt_center[0][1],gt_center[0][2]]
+    dim = [gt_dim[0][0]+0.7,gt_dim[0][1],gt_dim[0][2]]
+    R = gt_Rs[-1]
+    cat = cats[-1]
+    bb = gt_bb[-1]
+    plot_scene(image['file_path'], output_dir+'/fail_red', [center], [dim], [R], image['K'], [cat], [bb])
+
     # Make low loss boxes for dim, pose and align
     center = gt_center[1:]
     dim = [[gt_dim[1][0]*1.5,gt_dim[1][1],gt_dim[1][2]*1.5], gt_dim[2]]
@@ -607,6 +624,14 @@ def report_figures(dataset, filter_invalid=False, output_dir='output/report_imag
     cat = cats[1:]
     bb = gt_bb[1:]
     plot_scene(image['file_path'], output_dir+'/high_blue', center, dim, R, image['K'], cat, bb)
+
+    # Make fail loss boxes for dim, pose and align
+    center = gt_center[1:]
+    dim = [[gt_dim[1][0],gt_dim[1][1],gt_dim[1][2]],[gt_dim[2][1],gt_dim[2][0],gt_dim[2][2]]]
+    R = [util.euler2mat(util.mat2euler(np.array(gt_Rs[1]))+[1,0,0]), util.euler2mat(util.mat2euler(np.array(gt_Rs[2]))+[1,0,0])]
+    cat = cats[1:]
+    bb = gt_bb[1:]
+    plot_scene(image['file_path'], output_dir+'/fail_blue', center, dim, R, image['K'], cat, bb)
 
     return True
 
