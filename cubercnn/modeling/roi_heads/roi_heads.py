@@ -382,6 +382,30 @@ class ROIHeads_Boxer(StandardROIHeads):
         else:
             points_no_ground = points_all
 
+        if False:
+            # To visualise point cloud
+            import open3d as o3d
+            pcd = o3d.geometry.PointCloud()
+            # transform R such that y up is aligned with normal vector
+            colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu())[ground].reshape(-1, 3) / 255.0
+
+            pcd.points = o3d.utility.Vector3dVector(points)
+            pcd.colors = o3d.utility.Vector3dVector(colors)
+            # display normal vector in point cloud 
+                        
+            plane = pcd.select_by_index(best_inliers).paint_uniform_color([1, 0, 0])
+            not_plane = pcd.select_by_index(best_inliers, invert=True)
+            mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(origin=[0, 0, 0])
+            # rotate mesh by R
+            # mesh = mesh.rotate(gt_pose.numpy())
+            # X-axis : Red arrow
+            # Y-axis : Green arrow
+            # Z-axis : Blue arrow
+            # draw 3d box
+            obb = plane.get_oriented_bounding_box()
+            objs = [plane, not_plane, mesh, obb]
+            o3d.visualization.draw_geometries(objs)
+
         #normal_vec = np.array([normal_vec[1], normal_vec[0], normal_vec[2]])
         x_up = np.array([1,0,0])
         y_up = np.array([0,1,0])
@@ -619,7 +643,8 @@ class ROIHeads_Boxer(StandardROIHeads):
             # list of Instances with the fields: pred_boxes, scores, pred_classes, pred_bbox3D, pred_center_cam, pred_center_2D, pred_dimensions, pred_pose
             # it is possible to assign multiple element to each Instances object at once.
             # such that the loop can be over the images.
-            pred_instances = [Instances(size) for size in images_raw.image_sizes] # each instance object contains all boxes in one image, the list is for each image
+            pred_instances = instances if not self.training else \
+            [Instances(size) for size in images_raw.image_sizes]
             for instances_i in pred_instances:
                 instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes_out, Ks_scaled_per_box, im_shape))
                 instances_i.scores = pred_cubes_out.scores.squeeze(1)
