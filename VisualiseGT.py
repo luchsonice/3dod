@@ -6,6 +6,7 @@ from detectron2.utils.visualizer import Visualizer
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 from cubercnn import data, util, vis
 from cubercnn.config import get_cfg_defaults
@@ -535,13 +536,81 @@ def gt_stats(dataset):
 
 
     return True
+
+def gt_stats_in_terms_of_sigma(dataset):
+    '''
+    Errorbarplot of volume of object category
+    '''
+    # Load Image and Ground Truths
+    image, Rs, center_cams, dimensions_all, cats, bboxes = load_gt(dataset, mode='train', single_im=False)
+    image_t, Rs_t, center_cams_t, dimensions_all_t, cats_t, bboxes = load_gt(dataset, mode='test', single_im=False)
+
+    output_dir = 'output/figures/' + dataset
+    util.mkdir_if_missing(output_dir)
+
+    # histogram of centers
+    center_all = center_cams + center_cams_t
+    center_all = np.transpose(np.array(center_all))
+
+    # Filter -1 annotations
+    valid_columns = center_all[0] != -1
+    center_all = center_all[:,valid_columns]
+    
+    x_label = ['x', 'y', 'z']
+    fig, axes = plt.subplots(1, len(center_all), figsize=(18, 5))
+    for i in range(len(center_all)):
+        axes[i].hist(center_all[i], color=color, bins=20)
+        axes[i].set_xlabel(x_label[i])
+        axes[i].set_ylabel('Count')
+    fig.suptitle('Center Distribution in Meters')
+    plt.savefig(os.path.join(output_dir, 'center.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+    # histogram of dimensions
+    dimensions_all = dimensions_all + dimensions_all_t
+    dimensions_all = np.transpose(np.array(dimensions_all))
+
+    # Filter -1 annotations
+    valid_columns = dimensions_all[0] != -1
+    dimensions_all = dimensions_all[:,valid_columns]
+    
+    x_label = ['w', 'h', 'l']
+    fig, axes = plt.subplots(1, len(dimensions_all), figsize=(18, 5))
+    for i in range(len(dimensions_all)):
+        axes[i].hist(dimensions_all[i], color=color, bins=20, density=True)
+
+        # Plot normal distribution
+        mu, sigma = np.mean(dimensions_all[i]), np.std(dimensions_all[i])
+        x = np.linspace(mu - 3 * sigma, mu + 3 * sigma, 100)
+        axes[i].plot(x, stats.norm.pdf(x, mu, sigma))
+        y_lim = axes[i].get_ylim()[1]
+        axes[i].vlines(mu+sigma, 0, y_lim, linestyle='--', label='$\sigma$', color='gray')
+        axes[i].vlines(mu-sigma, 0, y_lim, linestyle='--', label='$\sigma$', color='gray')
+        axes[i].vlines(1.4, 0, y_lim, linestyle='--', color='red', label='pred')
+        if i != 0:
+            axes[i].plot((mu+sigma,1.4), (y_lim/2,y_lim/2), color='c', label='loss')
+        axes[i].set_xlabel(x_label[i])
+        axes[i].set_ylabel('density')
+        # Set xticks in terms of sigma
+        xticks = [mu - 3 * sigma, mu - 2 * sigma, mu - sigma, mu, mu + sigma, mu + 2 * sigma, mu + 3 * sigma, mu + 4 * sigma, mu + 5 * sigma, mu + 6 * sigma]
+        xticklabels = ['-3$\sigma$', '-2$\sigma$', '-$\sigma$', '0', '$\sigma$', '$2\sigma$', '$3\sigma$', '$4\sigma$', '$5\sigma$', '$6\sigma$']
+        axes[i].set_xticks(xticks)
+        axes[i].set_xticklabels(xticklabels)
+    axes[-1].legend()
+    fig.suptitle('Dimensions Distribution in Meters')
+    plt.savefig(os.path.join(output_dir, 'dimensions_sigma.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+    return True
+
 if __name__ == '__main__':
-    show_data('SUNRGBD', filter_invalid=False, output_dir='output/playground/no_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
-    show_data('SUNRGBD', filter_invalid=True, output_dir='output/playground/with_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
+    # show_data('SUNRGBD', filter_invalid=False, output_dir='output/playground/no_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
+    # show_data('SUNRGBD', filter_invalid=True, output_dir='output/playground/with_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
     # _ = category_distribution('SUNRGBD')
     # AP_vs_no_of_classes('SUNRGBD')
     #spatial_statistics('SUNRGBD')
     # AP3D_vs_AP2D('SUNRGBD')
     # init_dataloader()
     # vol_over_cat('SUNRGBD')
-    gt_stats('SUNRGBD')
+    # gt_stats('SUNRGBD')
+    gt_stats_in_terms_of_sigma('SUNRGBD')

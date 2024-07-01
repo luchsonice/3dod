@@ -319,3 +319,10 @@ class Cubes:
     def split(self, split_size: int, dim=1) -> tuple["Cubes"]:
         """same behaviour as torch.split, return a tuple of chunksize Cubes"""
         return tuple(Cubes(x) for x in self.tensor.split(split_size, dim=dim))
+    
+    def reshape(self, *args) -> "Cubes":
+        """
+        Returns:
+            Cubes: reshaped Cubes
+        """
+        return Cubes(self.tensor.reshape(*args), self.scores, self.labels)
