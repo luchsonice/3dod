@@ -12,6 +12,7 @@ from detectron2.config import get_cfg
 from detectron2.engine import default_argument_parser, default_setup, launch
 from detectron2.data import transforms as T
 
+
 logger = logging.getLogger("detectron2")
 
 sys.dont_write_bytecode = True
@@ -77,17 +78,31 @@ def do_test(args, cfg, model):
             [0.0, focal_length, py], 
             [0.0, 0.0, 1.0]
         ])
+        ground_map = np.load(f'datasets/ground_maps/{im_name}.jpg.npz')['mask']
+        depth_map = np.load(f'datasets/depth_maps/{im_name}.jpg.npz')['depth']
 
         aug_input = T.AugInput(im)
-        _ = augmentations(aug_input)
+        tfms = augmentations(aug_input)
         image = aug_input.image
+        ground_map = tfms.apply_image(ground_map*1.0)
+        depth_map = tfms.apply_image(depth_map)
 
+        # batched = [{
+        #     'image': torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1))).cuda(), 
+        #     'height': image_shape[0], 'width': image_shape[1], 'K': K
+        # }]
+        # first you must run the scripts to get the ground and depth map for the images
         batched = [{
-            'image': torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1))).cuda(), 
+            'image': torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1))), 
+            'depth_map': torch.as_tensor(depth_map),
+            'ground_map': torch.as_tensor(ground_map),
             'height': image_shape[0], 'width': image_shape[1], 'K': K
         }]
+        if model.__class__.__name__ == 'RCNN3D':
+            dets = model(batched)[0]['instances']
+        else:
+            dets = model(batched)[0]['instances'][0]
 
-        dets = model(batched)[0]['instances']
         n_det = len(dets)
 
         meshes = []

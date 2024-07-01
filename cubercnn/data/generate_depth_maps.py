@@ -94,18 +94,18 @@ if __name__ == '__main__':
 
     import torch.nn.functional as F
 
-    from rich.progress import track
-    datasets = init_dataset()
+    from tqdm import tqdm
+    # datasets = init_dataset()
 
     os.makedirs('datasets/depth_maps', exist_ok=True)
 
     depth_model = 'zoedepth'
     pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
     model = setup_depth_model(depth_model, pretrained_resource)
-    for img_id, img_info in track(datasets.imgs.items()):
-        file_path = img_info['file_path']
-        width = img_info['width']
-        height = img_info['height']
+    for img_id in tqdm(os.listdir('datasets/coco_examples')):
+        file_path = 'coco_examples/'+img_id
+    # for img_id, img_info in track(datasets.imgs.items()):
+    #     file_path = img_info['file_path']
         img = np.array(Image.open('datasets/'+file_path))
         depth = depth_of_images(img, model)
         np.savez_compressed(f'datasets/depth_maps/{img_id}.npz', depth=depth)

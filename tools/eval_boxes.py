@@ -19,7 +19,6 @@ from detectron2.evaluation.evaluator import inference_context
 from detectron2.utils.visualizer import Visualizer
 from matplotlib import pyplot as plt
 import numpy as np
-from cubercnn.data.generate_ground_segmentations import init_segmentation
 import torch
 import datetime
 import detectron2.utils.comm as comm
@@ -71,7 +70,7 @@ def create_striped_patch(ax, x_start, x_end, color, alpha=0.3):
 
 color_palette = ['#008dff','#ff73bf','#c701ff','#4ecb8d','#ff9d3a','#f0c571','#384860','#d83034']
 
-def inference_on_dataset(model, data_loader, segmentor, experiment_type, proposal_function):
+def inference_on_dataset(model, data_loader, experiment_type, proposal_function):
     """
     Run model on the data_loader. 
     Also benchmark the inference speed of `model.__call__` accurately.
@@ -103,7 +102,7 @@ def inference_on_dataset(model, data_loader, segmentor, experiment_type, proposa
         stack.enter_context(torch.no_grad())
 
         for idx, inputs in tqdm(enumerate(data_loader), desc="Average Precision", total=total):
-            outputs = model(inputs, segmentor, experiment_type, proposal_function)
+            outputs = model(inputs, experiment_type, proposal_function)
             for input, output in zip(inputs, outputs):
 
                 prediction = {
@@ -123,7 +122,7 @@ def inference_on_dataset(model, data_loader, segmentor, experiment_type, proposa
 
     return inference_json
 
-def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_functions):
+def percent_of_boxes(model, data_loader, experiment_type, proposal_functions):
     '''make the detection that have a certain 3D IoU score plots
     if you give the proposal function as input to argparser as:
     
@@ -143,7 +142,7 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
         if True:
             outputs = []
             for i, inputs in tqdm(enumerate(data_loader), desc=f"IoU3D plots, proposal method: {proposal_functions}", total=total):
-                output = model(inputs, segmentor, experiment_type, proposal_functions)
+                output = model(inputs, experiment_type, proposal_functions)
                 outputs.append(output.cpu().numpy())
         #     with open('ProposalNetwork/output/outputs.pkl', 'wb') as f:
         #         pickle.dump(outputs, f)
@@ -209,7 +208,7 @@ def percent_of_boxes(model, data_loader, segmentor, experiment_type, proposal_fu
     return
             
 
-def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, proposal_function):
+def mean_average_best_overlap(model, data_loader, experiment_type, proposal_function):
         
     total = len(data_loader)  # inference data loader must have a fixed length
 
@@ -221,7 +220,7 @@ def mean_average_best_overlap(model, data_loader, segmentor, experiment_type, pr
         outputs = []
         for i, inputs in tqdm(enumerate(data_loader), desc="Mean average best overlap plots", total=total):
             logger.info('iteration %s',i)
-            output = model(inputs, segmentor, experiment_type, proposal_function)
+            output = model(inputs, experiment_type, proposal_function)
             # p_info, IoU3D, score_IoU2D, score_seg, score_dim, score_combined, score_random, score_point_cloud, stat_empty_boxes, stats_im, stats_off
             if output is not None:
                 outputs.append(output)
@@ -440,8 +439,6 @@ def do_test(cfg, model, iteration='final', storage=None):
     output_folder = os.path.join(cfg.OUTPUT_DIR, "inference", 'iter_{}'.format(iteration))
 
  
-    segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
-
     for dataset_name in dataset_names_test:
         """
         Cycle through each dataset and test them individually.
@@ -504,11 +501,11 @@ def do_test(cfg, model, iteration='final', storage=None):
             experiment_type['scoring_func'] = False
         # define proposal function to use
         if experiment_type['output_recall_scores']:
-            _ = mean_average_best_overlap(model, data_loader, segmentor, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
+            _ = mean_average_best_overlap(model, data_loader, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
         elif not cfg.PLOT.SCORING_FUNC:
-            _ = percent_of_boxes(model, data_loader, segmentor, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
+            _ = percent_of_boxes(model, data_loader, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
         else:
-            results_json = inference_on_dataset(model, data_loader, segmentor, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
+            results_json = inference_on_dataset(model, data_loader, experiment_type, cfg.PLOT.PROPOSAL_FUNC)
 
             eval_helper = Omni3DEvaluationHelper(
                 dataset_names_test, 
@@ -561,7 +558,6 @@ def do_train(cfg, model):
     Returns:
         The return value of `evaluator.evaluate()`
     """
-    segmentor = init_segmentation(device=cfg.MODEL.DEVICE)
 
     filter_settings = data.get_filter_settings_from_cfg(cfg)
 
@@ -638,7 +634,7 @@ def do_train(cfg, model):
         annotations = []
         images = []
         for idx, inputs in tqdm(enumerate(data_loader), desc="Generating pseudo GT", total=total):
-            cubes = model(inputs, segmentor, experiment_type)
+            cubes = model(inputs, experiment_type)
             instances = cubes[0]['instances']
             input_ = inputs[0]
             img_id = input_['image_id']

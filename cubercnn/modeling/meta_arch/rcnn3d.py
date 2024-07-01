@@ -665,12 +665,12 @@ class BoxNet(nn.Module):
         )
         return images
 
-    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], segmentor, experiment_type, proposal_function='propose'):
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], experiment_type={'use_pred_boxes':True}, proposal_function='propose'):
         if not self.training:
             if not experiment_type['use_pred_boxes']: # MABO
-                return self.inference(batched_inputs, do_postprocess=False, segmentor=segmentor, experiment_type=experiment_type, proposal_function=proposal_function)
+                return self.inference(batched_inputs, do_postprocess=False, experiment_type=experiment_type, proposal_function=proposal_function)
             else: # AP
-                return self.inference(batched_inputs, do_postprocess=True, segmentor=segmentor, experiment_type=experiment_type, proposal_function=proposal_function)
+                return self.inference(batched_inputs, do_postprocess=True, experiment_type=experiment_type, proposal_function=proposal_function)
 
         if self.training:
             images = self.preprocess_image(batched_inputs, img_type='image', convert=False)
@@ -692,12 +692,12 @@ class BoxNet(nn.Module):
             
             gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
                           # def forward(self, images, images_raw, combined_features, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, targets=None):
-            results = self.roi_heads(images, images_raw, None, depth_maps, ground_maps, features, gt_instances, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function)
+            results = self.roi_heads(images, images_raw, None, depth_maps, ground_maps, features, gt_instances, Ks, im_scales_ratio, experiment_type, proposal_function)
             return GeneralizedRCNN._postprocess(results, batched_inputs, images.image_sizes)
 
     def inference(self,
         batched_inputs: List[Dict[str, torch.Tensor]],
-        detected_instances: Optional[List[Instances]] = None, do_postprocess: bool = True, segmentor=None, experiment_type={}, proposal_function='propose'):
+        detected_instances: Optional[List[Instances]] = None, do_postprocess: bool = True, experiment_type={}, proposal_function='propose'):
         assert not self.training
 
         # must apply the same preprocessing to both the image, the depth map, and the mask
@@ -740,8 +740,8 @@ class BoxNet(nn.Module):
 
         # use the mask and the 2D box to predict the 3D box
         # proposals are ground truth for MABO plots and predictions for AP plots
-        results = self.roi_heads(images, images_raw, combined_features, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function)
-        return results
+        results = self.roi_heads(images, images_raw, combined_features, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, experiment_type, proposal_function)
+        return [{'instances':results}]
     
     def visualize_training(self, batched_inputs, proposals, instances):
         """
