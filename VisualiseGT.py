@@ -702,7 +702,7 @@ def gt_stats_in_terms_of_sigma(dataset):
 
     return True
 
-def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/Proposal_AP/log.txt']):
+def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/proposal_AP/log.txt','output/proposal_AP/log.txt']):
     '''Search the log file for the precision numbers corresponding to the last iteration
     then parse it in as a pd.DataFrame and plot the AP vs number of classes'''
     import plotly.express as px
@@ -719,7 +719,7 @@ def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd
     # is found
 
     target_line = "cubercnn.vis.logperf INFO: Performance for each of 38 categories on SUNRGBD_test:"
-    model_names = ['Baseline Cube R-CNN', 'Time-equalised Cube R-CNN', 'Pseudo GT Cube R-CNN', 'Proposal ']
+    model_names = ['Base Cube R-CNN', 'Time-eq.', 'Pseudo GT', 'Proposal', 'Weak loss']
     df = []
     for file, model_name in zip(files, model_names):
         df_i = search_file_backwards(file, target_line).drop(['AP2D'], axis=1).rename(columns={'AP3D':model_name})
@@ -728,10 +728,11 @@ def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd
         # merge df's
     df = reduce(lambda x, y: pd.merge(x, y, on = 'category'), df)
     # sort df by ap3d of model 1
-    df = df.sort_values(by='Baseline Cube R-CNN', ascending=False)
+    df = df.sort_values(by='Base Cube R-CNN', ascending=False)
     # encode each category as a number
     df['category_num'] = list(reversed([i for i in range(len(df))]))
 
+    # https://plotly.com/python/parallel-coordinates-plot/
     fig = go.Figure(data=
     go.Parcoords(
         line = dict(color = df.iloc[:, 1],
@@ -745,11 +746,13 @@ def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd
             dict(range = [0,70],
                 constraintrange = [5,70],
                 label = model_names[0], values = df[model_names[0]]),
-            dict(range = [0,70],
-                label = model_names[1], values = df[model_names[1]]),
-            dict(range = [0,70],
+            dict(range = [0,50],
                 label = model_names[2], values = df[model_names[2]]),
-            dict(range = [0,70],
+            dict(range = [0,50],
+                label = model_names[1], values = df[model_names[1]]),
+            dict(range = [0,50],
+                label = model_names[4], values = df[model_names[4]]),
+            dict(range = [0,50],
                 label = model_names[3], values = df[model_names[3]]),
             ]),
         )
@@ -757,10 +760,17 @@ def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd
 
     fig.update_layout(
         plot_bgcolor = 'white',
-        paper_bgcolor = 'white'
+        paper_bgcolor = 'white',
+        title={
+            'text': "AP3D per category for each model",
+            'y':0.96,
+            'x':0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'},
+        margin=dict(l=65, r=25, t=80, b=5)
     )
     # pip install --upgrade "kaleido==0.1.*"
-    fig.write_image('output/figures/parallel_coordinate_plot.png', width=1200*3, height=800*3, format='png')
+    fig.write_image('output/figures/parallel_coordinate_plot.png', scale=3, format='png')
     # fig.show()
 
 
