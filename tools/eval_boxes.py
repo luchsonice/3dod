@@ -211,7 +211,7 @@ def percent_of_boxes(model, data_loader, experiment_type, proposal_functions):
 def mean_average_best_overlap(model, data_loader, experiment_type, proposal_function):
         
     total = len(data_loader)  # inference data loader must have a fixed length
-
+    os.makedirs('output/pkl_files', exist_ok=True)
     with ExitStack() as stack:
         if isinstance(model, nn.Module):
             stack.enter_context(inference_context(model))

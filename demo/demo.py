@@ -78,13 +78,19 @@ def do_test(args, cfg, model):
             [0.0, focal_length, py], 
             [0.0, 0.0, 1.0]
         ])
-        ground_map = np.load(f'datasets/ground_maps/{im_name}.jpg.npz')['mask']
+        is_ground = os.path.exists(f'datasets/ground_maps/{im_name}.jpg.npz')
+        if is_ground:
+            ground_map = np.load(f'datasets/ground_maps/{im_name}.jpg.npz')['mask']
         depth_map = np.load(f'datasets/depth_maps/{im_name}.jpg.npz')['depth']
 
         aug_input = T.AugInput(im)
         tfms = augmentations(aug_input)
         image = aug_input.image
-        ground_map = tfms.apply_image(ground_map*1.0)
+        if is_ground:
+            ground_map = tfms.apply_image(ground_map*1.0)
+            ground_map = torch.as_tensor(ground_map)
+        else:
+            ground_map = None
         depth_map = tfms.apply_image(depth_map)
 
         # batched = [{
@@ -95,10 +101,10 @@ def do_test(args, cfg, model):
         batched = [{
             'image': torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1))), 
             'depth_map': torch.as_tensor(depth_map),
-            'ground_map': torch.as_tensor(ground_map),
+            'ground_map': ground_map,
             'height': image_shape[0], 'width': image_shape[1], 'K': K
         }]
-        if model.__class__.__name__ == 'Boxnet':
+        if model.__class__.__name__ == 'BoxNet':
             dets = model(batched)[0]['instances'][0]
         else:
             dets = model(batched)[0]['instances']
