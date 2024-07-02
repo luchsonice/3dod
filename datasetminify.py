@@ -49,19 +49,19 @@ def minify_dataset_cats(path, cats):
 # minify_dataset_cats('datasets/Omni3D/SUNRGBD_train.json', cats)
 # minify_dataset_cats('datasets/Omni3D/SUNRGBD_val.json', cats)
 
-# def minify_dataset_idx(path, idx):
-#     with open(path, 'r') as f:
-#         data = json.load(f)
+def minify_dataset_idx(path, idx):
+    with open(path, 'r') as f:
+        data = json.load(f)
     
-#     new_file = {}
-#     new_file['info'] = data['info']
-#     # find only image with idx
-#     new_file['images'] = [i for i in data['images'] if i['id'] == idx]
-#     new_file['categories'] = data['categories']
-#     # grab only annotation for the image ids
-#     new_file['annotations'] = [ann for ann in data['annotations'] if ann['image_id'] in [img['id'] for img in new_file['images']]]
+    new_file = {}
+    new_file['info'] = data['info']
+    # find only image with idx
+    new_file['images'] = [i for i in data['images'] if i['id'] == idx]
+    new_file['categories'] = data['categories']
+    # grab only annotation for the image ids
+    new_file['annotations'] = [ann for ann in data['annotations'] if ann['image_id'] in [img['id'] for img in new_file['images']]]
     
-#     with open(path.replace('_train.json', '_test_mini.json'), 'w') as f:
-#         json.dump(new_file, f)
+    with open(path.replace('.json', f'_mini_{idx}.json'), 'w') as f:
+        json.dump(new_file, f)
 
-# minify_dataset_idx('datasets/Omni3D/SUNRGBD_train.json', 167896)
+# minify_dataset_idx('datasets/Omni3D/SUNRGBD_test.json', 168509)

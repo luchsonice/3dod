@@ -82,10 +82,11 @@ class ROIHeads_Boxer(StandardROIHeads):
 
     @configurable
     def __init__(self, *, 
-                 dims_priors_enabled = None, priors=None, number_of_proposals=1000, **kwargs, ): 
+                 dims_priors_enabled = None, priors=None, number_of_proposals=1000, segmentor, **kwargs, ): 
         super().__init__(**kwargs)
 
         # misc
+        self.segmentor = segmentor
         self.dims_priors_enabled = dims_priors_enabled
         # the dimensions could rely on pre-computed priors
         if self.dims_priors_enabled and priors is not None:
@@ -123,14 +124,15 @@ class ROIHeads_Boxer(StandardROIHeads):
     
         return {'dims_priors_enabled': cfg.MODEL.ROI_CUBE_HEAD.DIMS_PRIORS_ENABLED,
                 'number_of_proposals': cfg.MODEL.ROI_CUBE_HEAD.NUMBER_OF_PROPOSALS,
+                'segmentor': init_segmentation(cfg.MODEL.DEVICE)
                 }
 
-    def forward(self, images, images_raw, combined_features, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, segmentor, experiment_type, proposal_function, targets=None):
+    def forward(self, images, images_raw, combined_features, depth_maps, ground_maps, features, proposals, Ks, im_scales_ratio, experiment_type, proposal_function, targets=None):
         # proposals are GT here
         im_dims = [image.shape[1:] for image in images]
 
         if self.training:
-            masks = self.object_masks(images_raw.tensor, proposals, segmentor, {'use_pred_boxes': False})
+            masks = self.object_masks(images_raw.tensor, proposals, {'use_pred_boxes': False})
             experiment_type['use_pred_boxes'] = False
             results = self._forward_cube(images, images_raw, combined_features, masks, depth_maps, ground_maps, features, proposals, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function)
             return results
@@ -199,18 +201,18 @@ class ROIHeads_Boxer(StandardROIHeads):
             if experiment_type['use_pred_boxes']:
                 if len(target_instances[0].pred_boxes) == 0:
                     return target_instances
-            masks = self.object_masks(images_raw.tensor, target_instances, segmentor, experiment_type) # over all images in batch
+            masks = self.object_masks(images_raw.tensor, target_instances, experiment_type) # over all images in batch
             pred_instances = self._forward_cube(images, images_raw, combined_features, masks, depth_maps, ground_maps, features, target_instances, Ks, im_dims, im_scales_ratio, experiment_type, proposal_function)
             return pred_instances
         
-    def object_masks(self, images, instances, segmentor, ex):
+    def object_masks(self, images, instances, ex):
         '''list of masks for each object in the image.
         Returns
         ------
         mask_per_image: List of torch.Tensor of shape (N_instance, 1, H, W)
         '''
         org_shape = images.shape[-2:]
-        resize_transform = ResizeLongestSide(segmentor.image_encoder.img_size)
+        resize_transform = ResizeLongestSide(self.segmentor.image_encoder.img_size)
         batched_input = []
         images = resize_transform.apply_image_torch(images*1.0)# .permute(2, 0, 1).contiguous()
         for image, instance in zip(images, instances):
@@ -221,7 +223,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             transformed_boxes = resize_transform.apply_boxes_torch(boxes, org_shape) # Bx4
             batched_input.append({'image': image, 'boxes': transformed_boxes, 'original_size':org_shape})
 
-        seg_out = segmentor(batched_input, multimask_output=False)
+        seg_out = self.segmentor(batched_input, multimask_output=False)
 
         mask_per_image = [i['masks'] for i in seg_out]
         return mask_per_image
@@ -310,6 +312,9 @@ class ROIHeads_Boxer(StandardROIHeads):
         #     ground_maps = ground_maps.to('cpu')
         # Ks = [K.to('cpu') for K in Ks]
         # instances = [instance.to('cpu') for instance in instances]
+        if 'output_recall_scores' not in experiment_type:
+            experiment_type['output_recall_scores'] = False
+
 
 
         if experiment_type['use_pred_boxes']:
@@ -376,6 +381,30 @@ class ROIHeads_Boxer(StandardROIHeads):
             points_no_ground = np.stack((x_no_g, y_no_g, z_no_g), axis=-1).reshape(-1, 3)
         else:
             points_no_ground = points_all
+
+        if False:
+            # To visualise point cloud
+            import open3d as o3d
+            pcd = o3d.geometry.PointCloud()
+            # transform R such that y up is aligned with normal vector
+            colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu())[ground].reshape(-1, 3) / 255.0
+
+            pcd.points = o3d.utility.Vector3dVector(points)
+            pcd.colors = o3d.utility.Vector3dVector(colors)
+            # display normal vector in point cloud 
+                        
+            plane = pcd.select_by_index(best_inliers).paint_uniform_color([1, 0, 0])
+            not_plane = pcd.select_by_index(best_inliers, invert=True)
+            mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(origin=[0, 0, 0])
+            # rotate mesh by R
+            # mesh = mesh.rotate(gt_pose.numpy())
+            # X-axis : Red arrow
+            # Y-axis : Green arrow
+            # Z-axis : Blue arrow
+            # draw 3d box
+            obb = plane.get_oriented_bounding_box()
+            objs = [plane, not_plane, mesh, obb]
+            o3d.visualization.draw_geometries(objs)
 
         #normal_vec = np.array([normal_vec[1], normal_vec[0], normal_vec[2]])
         x_up = np.array([1,0,0])
@@ -614,7 +643,8 @@ class ROIHeads_Boxer(StandardROIHeads):
             # list of Instances with the fields: pred_boxes, scores, pred_classes, pred_bbox3D, pred_center_cam, pred_center_2D, pred_dimensions, pred_pose
             # it is possible to assign multiple element to each Instances object at once.
             # such that the loop can be over the images.
-            pred_instances = [Instances(size) for size in images_raw.image_sizes] # each instance object contains all boxes in one image, the list is for each image
+            pred_instances = instances if not self.training else \
+            [Instances(size) for size in images_raw.image_sizes]
             for instances_i in pred_instances:
                 instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes_out, Ks_scaled_per_box, im_shape))
                 instances_i.scores = pred_cubes_out.scores.squeeze(1)

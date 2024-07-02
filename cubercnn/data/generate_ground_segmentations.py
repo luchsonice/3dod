@@ -1,8 +1,6 @@
-
 from segment_anything import sam_model_registry
 from segment_anything.modeling import Sam
 import os
-
 
 def init_segmentation(device='cpu') -> Sam:
     # 1) first cd into the segment_anything and pip install -e .
@@ -22,20 +20,15 @@ def init_segmentation(device='cpu') -> Sam:
     return sam
 
 
-
-
-
-
 if __name__ == '__main__':
-
+    from segment_anything.utils.transforms import ResizeLongestSide
     import numpy as np
     import pandas as pd
     import torch
     import torchvision.transforms as T2
     from matplotlib import pyplot as plt
     from PIL import Image
-    from rich.progress import track
-    from segment_anything import SamPredictor, sam_model_registry
+    from tqdm import tqdm
     from torchvision.ops import box_convert
 
     import groundingdino.datasets.transforms as T
@@ -133,7 +126,7 @@ if __name__ == '__main__':
         return annotated_frame
 
 
-    datasets = init_dataset()
+    # datasets = init_dataset()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     # model.to(device)
@@ -149,13 +142,17 @@ if __name__ == '__main__':
     noground = 0
     no_ground_idx = []
 
-
-    for img_id, img_info in track(datasets.imgs.items()):
-        file_path = img_info['file_path']
-        width = img_info['width']
-        height = img_info['height']
-
+    #  **** to annotate full dataset ****
+    # for img_id, img_info in tqdm(datasets.imgs.items()):
+    #     file_path = img_info['file_path']
+    #     width = img_info['width']
+    #     height = img_info['height']
+    #  **** to annotate full dataset ****
+    #  **** to annotate demo images ****
+    for img_id in tqdm(os.listdir('datasets/coco_examples')):
+        file_path = 'coco_examples/'+img_id
         image_source, image = load_image('datasets/'+file_path, device=device)
+    #  **** to annotate demo images ****
 
         boxes, logits, phrases = predict(
             model=model,
@@ -181,13 +178,17 @@ if __name__ == '__main__':
         box = box * torch.tensor([w, h, w, h], device=device)
         xyxy = box_convert(boxes=box, in_fmt="cxcywh", out_fmt="xyxy")
 
-        # a = annotate(image_source.permute(1,2,0).cpu().numpy(), box.cpu(), logit, phrase)
-        # 
-        im_in = segmentor.transform.apply_image_torch(image_source.unsqueeze(0))
-        segmentor.set_torch_image(im_in, (height, width))
-        transformed_boxes = segmentor.transform.apply_boxes_torch(xyxy, (height, width))
-        mask_per_image, _, _ = segmentor.predict_torch(
-            point_coords=None, point_labels=None, boxes=transformed_boxes, multimask_output=False,)
+        image = image.unsqueeze(0)
+        org_shape = image.shape[-2:]
+        resize_transform = ResizeLongestSide(segmentor.image_encoder.img_size)
+        batched_input = []
+        images = resize_transform.apply_image_torch(image*1.0)# .permute(2, 0, 1).contiguous()
+        for image, boxes in zip(images, xyxy):
+            transformed_boxes = resize_transform.apply_boxes_torch(boxes, org_shape) # Bx4
+            batched_input.append({'image': image, 'boxes': transformed_boxes, 'original_size':org_shape})
+
+        seg_out = segmentor(batched_input, multimask_output=False)
+        mask_per_image = seg_out[0]['masks']
 
         np.savez_compressed(f'datasets/ground_maps/{img_id}.npz', mask=mask_per_image.cpu()[0,0,:,:].numpy())
 
