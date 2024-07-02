@@ -702,6 +702,68 @@ def gt_stats_in_terms_of_sigma(dataset):
 
     return True
 
+def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/Proposal_AP/log.txt']):
+    '''Search the log file for the precision numbers corresponding to the last iteration
+    then parse it in as a pd.DataFrame and plot the AP vs number of classes'''
+    import plotly.express as px
+    import plotly.graph_objects as go
+
+    from functools import reduce
+
+
+    # df with each model as a column and performance for each class as rows
+
+
+    # search the file from the back until the line 
+    # cubercnn.vis.logperf INFO: Performance for each of 38 categories on SUNRGBD_test:
+    # is found
+
+    target_line = "cubercnn.vis.logperf INFO: Performance for each of 38 categories on SUNRGBD_test:"
+    model_names = ['Baseline Cube R-CNN', 'Time-equalised Cube R-CNN', 'Pseudo GT Cube R-CNN', 'Proposal ']
+    df = []
+    for file, model_name in zip(files, model_names):
+        df_i = search_file_backwards(file, target_line).drop(['AP2D'], axis=1).rename(columns={'AP3D':model_name})
+        assert df_i is not None, 'df not found'
+        df.append(df_i)
+        # merge df's
+    df = reduce(lambda x, y: pd.merge(x, y, on = 'category'), df)
+    # sort df by ap3d of model 1
+    df = df.sort_values(by='Baseline Cube R-CNN', ascending=False)
+    # encode each category as a number
+    df['category_num'] = list(reversed([i for i in range(len(df))]))
+
+    fig = go.Figure(data=
+    go.Parcoords(
+        line = dict(color = df.iloc[:, 1],
+                #    colorscale = [[0,'purple'],[0.5,'lightseagreen'],[1,'gold']]),
+                    colorscale = 'Viridis'),
+                    visible = True,
+        dimensions = list([
+            dict(tickvals = df['category_num'],
+                ticktext = df['category'],
+                label = 'Categories', values = df['category_num']),
+            dict(range = [0,70],
+                constraintrange = [5,70],
+                label = model_names[0], values = df[model_names[0]]),
+            dict(range = [0,70],
+                label = model_names[1], values = df[model_names[1]]),
+            dict(range = [0,70],
+                label = model_names[2], values = df[model_names[2]]),
+            dict(range = [0,70],
+                label = model_names[3], values = df[model_names[3]]),
+            ]),
+        )
+    )
+
+    fig.update_layout(
+        plot_bgcolor = 'white',
+        paper_bgcolor = 'white'
+    )
+    # pip install --upgrade "kaleido==0.1.*"
+    fig.write_image('output/figures/parallel_coordinate_plot.png', width=1200*3, height=800*3, format='png')
+    # fig.show()
+
+
 if __name__ == '__main__':
     # show_data('SUNRGBD', filter_invalid=False, output_dir='output/playground/no_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
     # show_data('SUNRGBD', filter_invalid=True, output_dir='output/playground/with_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
@@ -712,7 +774,9 @@ if __name__ == '__main__':
     # init_dataloader()
     # vol_over_cat('SUNRGBD')
     # gt_stats('SUNRGBD')
-    gt_stats_in_terms_of_sigma('SUNRGBD')
+    # gt_stats_in_terms_of_sigma('SUNRGBD')
     #gt_stats('SUNRGBD')
 
-    report_figures('SUNRGBD')
+    # report_figures('SUNRGBD')
+
+    parallel_coordinate_plot()
