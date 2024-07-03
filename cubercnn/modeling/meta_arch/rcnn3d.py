@@ -363,13 +363,17 @@ class RCNN3D_combined_features(nn.Module):
         # if we want depth maps they are there
         depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False, NoOp=True)
         # Note if a single ground map in a batch is missing, we skip the ground map for the entire batch 
-        if not None in [i['ground_map'] for i in batched_inputs]:
-            ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
-            if not torch.count_nonzero(ground_maps.tensor): # for some reason there is a single ground map causing problems
-                print('no_ground for', batched_inputs[0]['image_id'])
-                ground_maps = None
-        else:
-            ground_maps = None
+        ground_maps_fail = [i['ground_map'] is None for i in batched_inputs]
+        ground_maps_fail_idx = [i for i, x in enumerate(ground_maps_fail) if x]
+        for idx in ground_maps_fail_idx:
+            batched_inputs[idx]['ground_map'] = torch.tensor([[1]]) # make a dummy to indicate a fail
+        ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
+        nnz = torch.count_nonzero(ground_maps.tensor,dim=(-2,-1))
+        if 0 in nnz: # for some reason there is a single ground map causing problems
+            indices = torch.nonzero(nnz == 0)
+            for i in indices.flatten():
+                print('no_ground for', batched_inputs[i]['image_id'])
+                ground_maps.tensor[i] = torch.tensor([[1]]) # make a dummy to indicate a fail
 
         # scaling factor for the sample relative to its original scale
         # e.g., how much has the image been upsampled by? or downsampled?

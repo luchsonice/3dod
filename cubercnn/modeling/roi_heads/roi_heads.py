@@ -1077,9 +1077,8 @@ class ROIHeads3DScore(StandardROIHeads):
         dvc = depth_maps.device
         normal_vecs = []
         # i cannot really see any other options than to loop over the them because the images have different sizes
-        if ground_maps is None:
-            ground_maps = [None] * len(depth_maps)
         for ground_map, depth_map, org_image_size in zip(ground_maps, depth_maps, depth_maps.image_sizes):
+            if ground_map.shape == (1,1): ground_map = None
             z = depth_map[::use_nth,::use_nth]
             focal_length_x, focal_length_y = z.shape[1], z.shape[0]
             u, v = torch.meshgrid(torch.arange(focal_length_x, device=dvc), torch.arange(focal_length_y,device=dvc), indexing='xy')
@@ -1574,12 +1573,14 @@ class ROIHeads3DScore(StandardROIHeads):
 
             # normal vector to ground loss
             if 'pose_ground' in self.loss_functions:
+                valid_ground_maps_conf = torch.tensor([0.1 if shape == (1,1) else 1.0 for shape in ground_maps.image_sizes],device=cube_pose.device)
                 num_boxes_per_image_tensor = torch.tensor(num_boxes_per_image,device=Ks_scaled_per_box.device)
                 normal_vectors = self.normal_vector_from_maps(ground_maps, depth_maps)
                 normal_vectors = normal_vectors.repeat_interleave(num_boxes_per_image_tensor, 0)
+                valid_ground_maps_conf = valid_ground_maps_conf.repeat_interleave(num_boxes_per_image_tensor, 0)
                 pred_normal = cube_pose[:, 1, :]
                 loss_ground_rot = 1-F.cosine_similarity(normal_vectors, pred_normal, dim=1).abs()
-                ground_rot_loss_confidence = 0.1 if ground_maps is None else 1.0
+                loss_ground_rot = loss_ground_rot * valid_ground_maps_conf
 
             # pseudo ground truth z loss
             if 'z_pseudo_gt_patch' in self.loss_functions:
@@ -1612,7 +1613,7 @@ class ROIHeads3DScore(StandardROIHeads):
                 # this loss is a bit weird when adding, because it is a single number, which is broadcasted. instead of a number per instance
                 total_3D_loss_for_reporting += loss_pose*self.loss_w_pose
             if loss_ground_rot is not None:
-                total_3D_loss_for_reporting += loss_ground_rot * self.loss_w_normal_vec *  ground_rot_loss_confidence
+                total_3D_loss_for_reporting += loss_ground_rot * self.loss_w_normal_vec *  valid_ground_maps_conf
             if loss_z is not None:
                 total_3D_loss_for_reporting += loss_z*self.loss_w_z
             if loss_pseudo_gt_z is not None:
@@ -1683,7 +1684,7 @@ class ROIHeads3DScore(StandardROIHeads):
                 })
             if loss_ground_rot is not None:
                 losses.update({
-                    prefix + 'loss_normal_vec': self.safely_reduce_losses(loss_ground_rot) * self.loss_w_normal_vec * self.loss_w_3d * ground_rot_loss_confidence,
+                    prefix + 'loss_normal_vec': self.safely_reduce_losses(loss_ground_rot) * self.loss_w_normal_vec * self.loss_w_3d,
                 })
             if loss_seg is not None:
                 losses.update({
