@@ -1,5 +1,7 @@
+from pycocotools.coco import COCO
 import os
 import random
+from functools import reduce
 from io import StringIO
 
 from detectron2.utils.visualizer import Visualizer
@@ -144,13 +146,22 @@ def category_distribution(dataset):
     # Load Image and Ground Truths
     image, Rs, center_cams, dimensions_all, cats, bboxes = load_gt(dataset, mode='train', single_im=False)
     image_t, Rs_t, center_cams_t, dimensions_all_t, cats_t, bboxes = load_gt(dataset, mode='test', single_im=False)
+    config_file = 'configs/Base_Omni3D.yaml'
+    cfg, filter_settings = get_config_and_filter_settings(config_file)
+    annotation_file = 'datasets/Omni3D/SUNRGBD_train.json'
+    coco_api = COCO(annotation_file)
+    meta = MetadataCatalog.get('SUNRGBD')
+    cat_ids = sorted(coco_api.getCatIds(filter_settings['category_names']))
+    cats_sun = coco_api.loadCats(cat_ids)
+    thing_classes = [c["name"] for c in sorted(cats_sun, key=lambda x: x["id"])]
 
     output_dir = 'output/figures/' + dataset
     util.mkdir_if_missing(output_dir)
 
     # histogram of categories
     cats_all = cats + cats_t
-    cats_unique = list(set(cats_all))
+    # cats_unique = list(set(cats_all))
+    cats_unique = thing_classes
     print('cats unique: ', len(cats_unique))
     # make dict with count of each category
     cats_count = {cat: cats_all.count(cat) for cat in cats_unique}
@@ -244,7 +255,7 @@ def spatial_statistics(dataset):
     plt.close()
     return
 
-def AP_vs_no_of_classes(dataset, file='output/Baseline_sgd/log.txt'):
+def AP_vs_no_of_classes(dataset, files:list=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/proposal_AP/log.txt','output/proposal_AP/log.txt']):
     '''Search the log file for the precision numbers corresponding to the last iteration
     then parse it in as a pd.DataFrame and plot the AP vs number of classes'''
 
@@ -253,10 +264,16 @@ def AP_vs_no_of_classes(dataset, file='output/Baseline_sgd/log.txt'):
     # is found
 
     target_line = "cubercnn.vis.logperf INFO: Performance for each of 38 categories on SUNRGBD_test:"
-    df = search_file_backwards(file, target_line)
-    if df is None:
-        print('df not found')
-        return
+    model_names = ['Base Cube R-CNN', 'Time-eq.', 'Pseudo GT', 'Proposal', 'Weak loss']
+    df = []
+    for file, model_name in zip(files, model_names):
+        df_i = search_file_backwards(file, target_line).rename(columns={'AP3D':f'{model_name} AP3D', 'AP2D':f'{model_name} AP2D'})
+        assert df_i is not None, 'df not found'
+        df.append(df_i)
+        # merge df's
+    df = reduce(lambda x, y: pd.merge(x, y, on = 'category'), df)
+    # sort df by ap3d of model 1
+    df = df.sort_values(by='Base Cube R-CNN AP3D', ascending=False)
 
     cats = category_distribution(dataset)
     df.sort_values(by='category', inplace=True)
@@ -268,25 +285,27 @@ def AP_vs_no_of_classes(dataset, file='output/Baseline_sgd/log.txt'):
     
     
     fig, ax = plt.subplots(figsize=(12,8))
-    scatter = ax.scatter(merged_df['cats'].values, merged_df['AP3D'].values, s=merged_df['AP2D'].values*2, alpha=0.5, label='AP3D (scaled by AP2D)')
-    for i, txt in enumerate(merged_df['category']):
-        ax.text(merged_df['cats'].values[i], merged_df['AP3D'].values[i], txt)
+    for model_name in model_names:
+        ax.scatter(merged_df['cats'].values, merged_df[f'{model_name} AP3D'].values, s=merged_df[f'{model_name} AP2D'].values*2, alpha=0.5, label=model_name)
     
-    correlation_coef = np.corrcoef(merged_df['cats'].values, merged_df['AP3D'].values)[0, 1]
-    line_fit = np.polyfit(merged_df['cats'].values, merged_df['AP3D'].values, 1)
+        for i, txt in enumerate(merged_df['category']):
+            ax.text(merged_df['cats'].values[i], merged_df[f'{model_name} AP3D'].values[i], txt)
+    
+        correlation_coef = np.corrcoef(merged_df['cats'].values, merged_df[f'{model_name} AP3D'].values)[0, 1]
+        line_fit = np.polyfit(merged_df['cats'].values, merged_df[f'{model_name} AP3D'].values, 1)
 
-    # plot the line of best fit
-    ax.plot(merged_df['cats'].values, np.poly1d(line_fit)(merged_df['cats'].values), linestyle='--', color=color,alpha=0.5, label=f'Linear fit (R={correlation_coef:.2f})')
+        # plot the line of best fit
+        ax.plot(merged_df['cats'].values, np.poly1d(line_fit)(merged_df['cats'].values), linestyle='--', color=color,alpha=0.5, label=f'Linear fit (R={correlation_coef:.2f})')
 
     # Set labels and title
     ax.set_xlabel('No. of annotations')
     ax.set_ylabel('AP3D')
     ax.set_xscale('log')
     ax.set_title('AP3D vs No. of annotations')
-    ax.legend()
+    ax.legend(title='AP3D scaled by AP2D')
 
     # Save the plot
-    plt.savefig('output/figures/'+dataset+'/AP_vs_no_of_classes.png', dpi=300, bbox_inches='tight')
+    plt.savefig('output/figures/'+dataset+'/AP_vs_no_of_classes_all.png', dpi=300, bbox_inches='tight')
     plt.close()
 
     return
@@ -705,19 +724,12 @@ def gt_stats_in_terms_of_sigma(dataset):
 def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/proposal_AP/log.txt','output/proposal_AP/log.txt']):
     '''Search the log file for the precision numbers corresponding to the last iteration
     then parse it in as a pd.DataFrame and plot the AP vs number of classes'''
-    import plotly.express as px
     import plotly.graph_objects as go
 
-    from functools import reduce
-
-
     # df with each model as a column and performance for each class as rows
-
-
     # search the file from the back until the line 
     # cubercnn.vis.logperf INFO: Performance for each of 38 categories on SUNRGBD_test:
     # is found
-
     target_line = "cubercnn.vis.logperf INFO: Performance for each of 38 categories on SUNRGBD_test:"
     model_names = ['Base Cube R-CNN', 'Time-eq.', 'Pseudo GT', 'Proposal', 'Weak loss']
     df = []
@@ -778,7 +790,7 @@ if __name__ == '__main__':
     # show_data('SUNRGBD', filter_invalid=False, output_dir='output/playground/no_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
     # show_data('SUNRGBD', filter_invalid=True, output_dir='output/playground/with_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
     # _ = category_distribution('SUNRGBD')
-    # AP_vs_no_of_classes('SUNRGBD')
+    AP_vs_no_of_classes('SUNRGBD')
     #spatial_statistics('SUNRGBD')
     # AP3D_vs_AP2D('SUNRGBD')
     # init_dataloader()
@@ -789,4 +801,4 @@ if __name__ == '__main__':
 
     # report_figures('SUNRGBD')
 
-    parallel_coordinate_plot()
+    # parallel_coordinate_plot()
