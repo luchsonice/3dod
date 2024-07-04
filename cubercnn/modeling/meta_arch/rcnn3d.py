@@ -368,13 +368,6 @@ class RCNN3D_combined_features(nn.Module):
         for idx in ground_maps_fail_idx:
             batched_inputs[idx]['ground_map'] = torch.tensor([[1]]) # make a dummy to indicate a fail
         ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
-        nnz = torch.count_nonzero(ground_maps.tensor,dim=(-2,-1))
-        if 0 in nnz: # for some reason there is a single ground map causing problems
-            indices = torch.nonzero(nnz == 0)
-            for i in indices.flatten():
-                print('no_ground for', batched_inputs[i]['image_id'])
-                ground_maps.tensor[i] = torch.tensor([[1]]) # make a dummy to indicate a fail
-
         # scaling factor for the sample relative to its original scale
         # e.g., how much has the image been upsampled by? or downsampled?
         im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]
