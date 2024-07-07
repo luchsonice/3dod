@@ -255,10 +255,9 @@ def spatial_statistics(dataset):
     plt.close()
     return
 
-def AP_vs_no_of_classes(dataset, files:list=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/proposal_AP/log.txt','output/proposal_AP/log.txt']):
+def AP_vs_no_of_classes(dataset, files:list=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/proposal_AP/log.txt','output/exp_10_iou_zpseudogt_dims_depthrange_rotalign_ground/log.txt']):
     '''Search the log file for the precision numbers corresponding to the last iteration
     then parse it in as a pd.DataFrame and plot the AP vs number of classes'''
-
     # search the file from the back until the line 
     # cubercnn.vis.logperf INFO: Performance for each of 38 categories on SUNRGBD_test:
     # is found
@@ -289,13 +288,13 @@ def AP_vs_no_of_classes(dataset, files:list=['output/Baseline_sgd/log.txt','outp
         ax.scatter(merged_df['cats'].values, merged_df[f'{model_name} AP3D'].values, s=merged_df[f'{model_name} AP2D'].values*2, alpha=0.5, label=model_name)
     
         for i, txt in enumerate(merged_df['category']):
-            ax.text(merged_df['cats'].values[i], merged_df[f'{model_name} AP3D'].values[i], txt)
+            ax.text(merged_df['cats'].values[i], merged_df[f'{model_name} AP3D'].values[i], txt, fontsize=merged_df[f'{model_name} AP3D'].values[i]*0.3+3)
     
         correlation_coef = np.corrcoef(merged_df['cats'].values, merged_df[f'{model_name} AP3D'].values)[0, 1]
         line_fit = np.polyfit(merged_df['cats'].values, merged_df[f'{model_name} AP3D'].values, 1)
 
         # plot the line of best fit
-        ax.plot(merged_df['cats'].values, np.poly1d(line_fit)(merged_df['cats'].values), linestyle='--', color=color,alpha=0.5, label=f'Linear fit (R={correlation_coef:.2f})')
+        ax.plot(merged_df['cats'].values, np.poly1d(line_fit)(merged_df['cats'].values), linestyle='--',alpha=0.5, label=f'Linear fit (R={correlation_coef:.2f})')
 
     # Set labels and title
     ax.set_xlabel('No. of annotations')
@@ -310,7 +309,7 @@ def AP_vs_no_of_classes(dataset, files:list=['output/Baseline_sgd/log.txt','outp
 
     return
 
-def AP3D_vs_AP2D(dataset, file='output/Baseline_sgd/log.txt'):
+def AP3D_vs_AP2D(dataset, mode = 'standard', files=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/proposal_AP/log.txt','output/exp_10_iou_zpseudogt_dims_depthrange_rotalign_ground/log.txt']):
     '''Search the log file for the precision numbers corresponding to the last iteration
     then parse it in as a pd.DataFrame and plot the AP vs number of classes'''
 
@@ -319,10 +318,16 @@ def AP3D_vs_AP2D(dataset, file='output/Baseline_sgd/log.txt'):
     # is found
 
     target_line = "cubercnn.vis.logperf INFO: Performance for each of 38 categories on SUNRGBD_test:"
-    df = search_file_backwards(file, target_line)
-    if df is None:
-        print('df not found')
-        return
+    model_names = ['Base Cube R-CNN', 'Time-eq.', 'Pseudo GT', 'Proposal', 'Weak loss']
+    df = []
+    for file, model_name in zip(files, model_names):
+        df_i = search_file_backwards(file, target_line).rename(columns={'AP3D':f'{model_name} AP3D', 'AP2D':f'{model_name} AP2D'})
+        assert df_i is not None, 'df not found'
+        df.append(df_i)
+        # merge df's
+    df = reduce(lambda x, y: pd.merge(x, y, on = 'category'), df)
+    # sort df by ap3d of model 1
+    df = df.sort_values(by='Base Cube R-CNN AP3D', ascending=False)
 
     cats = category_distribution(dataset)
     df.sort_values(by='category', inplace=True)
@@ -331,24 +336,38 @@ def AP3D_vs_AP2D(dataset, file='output/Baseline_sgd/log.txt'):
     merged_df = merged_df.sort_values(by='cats')
     merged_df = merged_df.drop('index',axis=1)
     merged_df = merged_df.reset_index(drop=True)
-    print(merged_df)
+    
+    # mode = 'standard' # 'log'
     
     fig, ax = plt.subplots(figsize=(12,8))
-    scatter = ax.scatter(merged_df['AP2D'].values, merged_df['AP3D'].values, alpha=0.5, label='')
-    for i, txt in enumerate(merged_df['category']):
-        ax.text(merged_df['AP2D'].values[i], merged_df['AP3D'].values[i], txt)
+    for model_name in model_names:
+        if mode == 'standard': s=merged_df[f'{model_name} AP2D'].values*2
+        else: s = None
+        # we have to add 0.001 to the values to avoid log(0) errors
+        ax.scatter(merged_df[f'{model_name} AP2D'].values+0.001, merged_df[f'{model_name} AP3D'].values+0.001, alpha=0.5, label=model_name, s=s)
+        for i, txt in enumerate(merged_df['category']):
+            if mode == 'standard': fontsize=merged_df[f'{model_name} AP3D'].values[i]*0.3+3
+            else: fontsize=7
+            ax.text(merged_df[f'{model_name} AP2D'].values[i]+0.001, merged_df[f'{model_name} AP3D'].values[i]+0.001, txt,fontsize=fontsize)
     # plot average line
     ax.plot((0, 70), (0, 70), linestyle='--', color=color, alpha=0.3, label=f'AP2D=AP3D')
 
     # Set labels and title
+    if mode == 'log':
+        ax.set_xscale('log')
+        ax.set_yscale('log')
     ax.set_xlabel('AP2D')
     ax.set_ylabel('AP3D')
-    ax.set_xlim(0, 75); ax.set_ylim(0, 75)
+    # ax.set_xlim(0.1, 75); ax.set_ylim(0.1, 75)
     ax.set_title('AP in 3D vs AP in 2D')
     ax.legend()
+    # if mode == 'log':
+    #     # for some obscure reason the log plot fails to save
+    #     plt.show()
 
-    # Save the plot
-    plt.savefig('output/figures/'+dataset+'/AP3D_vs_AP2D.png', dpi=300, bbox_inches='tight')
+    # # Save the plot
+    # else:
+    plt.savefig('output/figures/'+dataset+f'/AP3D_vs_AP2D_all_{mode}.png', dpi=300, bbox_inches='tight')
     plt.close()
 
     return
@@ -721,7 +740,7 @@ def gt_stats_in_terms_of_sigma(dataset):
 
     return True
 
-def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/proposal_AP/log.txt','output/proposal_AP/log.txt']):
+def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/proposal_AP/log.txt','output/exp_10_iou_zpseudogt_dims_depthrange_rotalign_ground/log.txt']):
     '''Search the log file for the precision numbers corresponding to the last iteration
     then parse it in as a pd.DataFrame and plot the AP vs number of classes'''
     import plotly.graph_objects as go
@@ -761,9 +780,9 @@ def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd
             dict(range = [0,50],
                 label = model_names[2], values = df[model_names[2]]),
             dict(range = [0,50],
-                label = model_names[1], values = df[model_names[1]]),
-            dict(range = [0,50],
                 label = model_names[4], values = df[model_names[4]]),
+            dict(range = [0,50],
+                label = model_names[1], values = df[model_names[1]]),
             dict(range = [0,50],
                 label = model_names[3], values = df[model_names[3]]),
             ]),
@@ -782,7 +801,7 @@ def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd
         margin=dict(l=65, r=25, t=80, b=5)
     )
     # pip install --upgrade "kaleido==0.1.*"
-    fig.write_image('output/figures/parallel_coordinate_plot.png', scale=3, format='png')
+    fig.write_image('output/figures/SUNRGBD/parallel_coordinate_plot.png', scale=3, format='png')
     # fig.show()
 
 
@@ -792,7 +811,8 @@ if __name__ == '__main__':
     # _ = category_distribution('SUNRGBD')
     AP_vs_no_of_classes('SUNRGBD')
     #spatial_statistics('SUNRGBD')
-    # AP3D_vs_AP2D('SUNRGBD')
+    AP3D_vs_AP2D('SUNRGBD')
+    AP3D_vs_AP2D('SUNRGBD', mode='log')
     # init_dataloader()
     # vol_over_cat('SUNRGBD')
     # gt_stats('SUNRGBD')
@@ -801,4 +821,4 @@ if __name__ == '__main__':
 
     # report_figures('SUNRGBD')
 
-    # parallel_coordinate_plot()
+    parallel_coordinate_plot()
