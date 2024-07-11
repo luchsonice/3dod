@@ -184,7 +184,7 @@ class ROIHeads_Boxer(StandardROIHeads):
                         instances_i.pred_boxes.tensor, 
                         instances_i.scores, 
                         torch.zeros(len(instances_i.scores), dtype=torch.long, device=instances_i.scores.device), 
-                        0.9)
+                        0.5)
                     
                     keep = keep[:max_vis_prop]
                     new_instances = Instances(instances_i.image_size)
@@ -345,10 +345,10 @@ class ROIHeads_Boxer(StandardROIHeads):
         # ### point cloud
         use_nth = 5
         dp_map = depth_maps.tensor.cpu().squeeze()[::use_nth,::use_nth]
-        focal_length_x, focal_length_y = dp_map.shape[1], dp_map.shape[0]
+        focal_length_x, focal_length_y = Ks_scaled_per_box[0,0], Ks_scaled_per_box[1,1]
         FINAL_WIDTH, FINAL_HEIGHT = dp_map.shape[1], dp_map.shape[0]
         u, v = np.meshgrid(np.arange(FINAL_WIDTH), np.arange(FINAL_HEIGHT))
-        cx, cy = FINAL_WIDTH / 2, FINAL_HEIGHT / 2 # principal point of camera
+        cx, cy = Ks_scaled_per_box[0,2], Ks_scaled_per_box[1,2] # principal point of camera
         # https://www.open3d.org/docs/0.7.0/python_api/open3d.geometry.create_point_cloud_from_depth_image.html
         z = np.array(dp_map)
         x = (u - cx) * z / focal_length_x
@@ -387,7 +387,7 @@ class ROIHeads_Boxer(StandardROIHeads):
             import open3d as o3d
             pcd = o3d.geometry.PointCloud()
             # transform R such that y up is aligned with normal vector
-            colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu())[ground].reshape(-1, 3) / 255.0
+            colors = np.array(images_raw.tensor[0].permute(1,2,0)[::use_nth,::use_nth].cpu()).reshape(-1, 3) / 255.0
 
             pcd.points = o3d.utility.Vector3dVector(points)
             pcd.colors = o3d.utility.Vector3dVector(colors)
@@ -1071,18 +1071,18 @@ class ROIHeads3DScore(StandardROIHeads):
             return None
         return loss_pose * 1/(fail_count+1)
     
-    def normal_vector_from_maps(self, ground_maps, depth_maps, use_nth=5):
+    def normal_vector_from_maps(self, ground_maps, depth_maps, Ks, use_nth=5):
         '''compute a normal vector corresponding to the ground from a point ground generated from a depth map'''
         # ### point cloud
         dvc = depth_maps.device
         normal_vecs = []
         # i cannot really see any other options than to loop over the them because the images have different sizes
-        for ground_map, depth_map, org_image_size in zip(ground_maps, depth_maps, depth_maps.image_sizes):
+        for ground_map, depth_map, org_image_size, K in zip(ground_maps, depth_maps, depth_maps.image_sizes, Ks):
             if ground_map.shape == (1,1): ground_map = None
             z = depth_map[::use_nth,::use_nth]
-            focal_length_x, focal_length_y = z.shape[1], z.shape[0]
+            focal_length_x, focal_length_y = K[0,0], K[1,1]
             u, v = torch.meshgrid(torch.arange(focal_length_x, device=dvc), torch.arange(focal_length_y,device=dvc), indexing='xy')
-            cx, cy = focal_length_x / 2, focal_length_y / 2 # principal point of camera
+            cx, cy = K[0,2], K[1,2] # principal point of camera
             # https://www.open3d.org/docs/0.7.0/python_api/open3d.geometry.create_point_cloud_from_depth_image.html
             x = (u - cx) * z / focal_length_x
             y = (v - cy) * z / focal_length_y
@@ -1575,7 +1575,7 @@ class ROIHeads3DScore(StandardROIHeads):
             if 'pose_ground' in self.loss_functions:
                 valid_ground_maps_conf = torch.tensor([0.1 if shape == (1,1) else 1.0 for shape in ground_maps.image_sizes],device=cube_pose.device)
                 num_boxes_per_image_tensor = torch.tensor(num_boxes_per_image,device=Ks_scaled_per_box.device)
-                normal_vectors = self.normal_vector_from_maps(ground_maps, depth_maps)
+                normal_vectors = self.normal_vector_from_maps(ground_maps, depth_maps, Ks_scaled_per_box)
                 normal_vectors = normal_vectors.repeat_interleave(num_boxes_per_image_tensor, 0)
                 valid_ground_maps_conf = valid_ground_maps_conf.repeat_interleave(num_boxes_per_image_tensor, 0)
                 pred_normal = cube_pose[:, 1, :]
