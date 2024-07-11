@@ -20,7 +20,43 @@
             "program": "demo/demo.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--config-file", "cubercnn://omni3d/cubercnn_DLA34_FPN.yaml", "--input-folder", "datasets/coco_examples", "--threshold", "0.25", "--display", "MODEL.WEIGHTS", "cubercnn://omni3d/cubercnn_DLA34_FPN.pth", "OUTPUT_DIR", "output/demo"]
+            "args": ["--config-file", "cubercnn://omni3d/cubercnn_DLA34_FPN.yaml", "--input-folder", "datasets/coco_examples", "--threshold", "0.25", "MODEL.WEIGHTS", "cubercnn://omni3d/cubercnn_DLA34_FPN.pth", "OUTPUT_DIR", "output/demo"]
+        },
+        {
+            "name": "Cube R-CNN Time equalised Demo",
+            "type": "python",
+            "request": "launch",
+            "program": "demo/demo.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--config-file", "configs/Base_Omni3D.yaml", "--input-folder", "datasets/coco_examples", "--threshold", "0.25", "MODEL.WEIGHTS", "output/omni_equalised/model_final.pth", "OUTPUT_DIR", "output/demo_time_equal"]
+        },
+        {
+            "name": "Cube R-CNN pseudo gt demo",
+            "type": "python",
+            "request": "launch",
+            "program": "demo/demo.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--config-file", "configs/Base_Omni3D.yaml", "--input-folder", "datasets/coco_examples", "--threshold", "0.25", "MODEL.WEIGHTS", "output/omni_pseudo_gt/model_final.pth", "OUTPUT_DIR", "output/demo_pseudogt"]
+        },
+        {
+            "name": "Proposal Demo",
+            "type": "python",
+            "request": "launch",
+            "program": "demo/demo.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--config-file", "configs/BoxNet.yaml", "--input-folder", "datasets/coco_examples", "--threshold", "0.00", "MODEL.WEIGHTS", "output/Baseline_sgd/model_final.pth", "OUTPUT_DIR", "output/demo_proposals"]
+        },
+        {
+            "name": "Learned Demo",
+            "type": "python",
+            "request": "launch",
+            "program": "demo/demo.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--config-file", "configs/Omni_combined.yaml", "--input-folder", "datasets/coco_examples", "--threshold", "0.25", "MODEL.WEIGHTS", "output/exp_10_iou_zpseudogt_dims_depthrange_rotalign_ground/model_recent.pth", "OUTPUT_DIR", "output/demo_learned"]
         },
         {
             "name": "train",
@@ -137,7 +173,7 @@
             "program": "tools/train_net.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--config-file", "configs/Omni_combined.yaml", "OUTPUT_DIR", "output/omni3d_combined_range", "log", "False", "loss_functions", "['depth']"]
+            "args": ["--config-file", "configs/Omni_combined.yaml", "OUTPUT_DIR", "output/omni3d_combined_test", "log", "False", "loss_functions", "['iou','z_pseudo_gt_center', 'pose_ground']"]
         },
         
     ]

@@ -190,6 +190,13 @@ if __name__ == '__main__':
         seg_out = segmentor(batched_input, multimask_output=False)
         mask_per_image = seg_out[0]['masks']
 
+        nnz = torch.count_nonzero(mask_per_image, dim=(-2, -1))
+        indices = torch.nonzero(nnz <= 1000).flatten()
+        if len(indices) > 0:
+            noground += 1
+            # save a ground map that is all zeros
+            no_ground_idx.append(img_id)
+
         np.savez_compressed(f'datasets/ground_maps/{img_id}.npz', mask=mask_per_image.cpu()[0,0,:,:].numpy())
 
     print(f"Could not find ground for {noground} images")
