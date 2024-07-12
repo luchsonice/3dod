@@ -344,11 +344,12 @@ class ROIHeads_Boxer(StandardROIHeads):
         
         # ### point cloud
         use_nth = 5
+        K_pc = Ks_scaled_per_box.cpu().numpy()
         dp_map = depth_maps.tensor.cpu().squeeze()[::use_nth,::use_nth]
-        focal_length_x, focal_length_y = Ks_scaled_per_box[0,0], Ks_scaled_per_box[1,1]
+        focal_length_x, focal_length_y = K_pc[0,0], K_pc[1,1]
         FINAL_WIDTH, FINAL_HEIGHT = dp_map.shape[1], dp_map.shape[0]
         u, v = np.meshgrid(np.arange(FINAL_WIDTH), np.arange(FINAL_HEIGHT))
-        cx, cy = Ks_scaled_per_box[0,2], Ks_scaled_per_box[1,2] # principal point of camera
+        cx, cy = K_pc[0,2], K_pc[1,2] # principal point of camera
         # https://www.open3d.org/docs/0.7.0/python_api/open3d.geometry.create_point_cloud_from_depth_image.html
         z = np.array(dp_map)
         x = (u - cx) * z / focal_length_x
