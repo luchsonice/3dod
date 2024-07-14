@@ -285,22 +285,28 @@ def AP_vs_no_of_classes(dataset, files:list=['output/Baseline_sgd/log.txt','outp
     
     fig, ax = plt.subplots(figsize=(12,8))
     for model_name in model_names:
-        ax.scatter(merged_df['cats'].values, merged_df[f'{model_name} AP3D'].values, s=merged_df[f'{model_name} AP2D'].values*2, alpha=0.5, label=model_name)
+        if model_name == 'Base Cube R-CNN':
+            scale = 114
+        else:
+            scale = 10.15
+        # convert the annotation time to hours
+        time = merged_df['cats']*scale / 60 / 60
+        ax.scatter(time, merged_df[f'{model_name} AP3D'].values, s=merged_df[f'{model_name} AP2D'].values*2, alpha=0.5, label=model_name)
     
         for i, txt in enumerate(merged_df['category']):
-            ax.text(merged_df['cats'].values[i], merged_df[f'{model_name} AP3D'].values[i], txt, fontsize=merged_df[f'{model_name} AP3D'].values[i]*0.3+3)
+            ax.text(time[i], merged_df[f'{model_name} AP3D'].values[i], txt, fontsize=merged_df[f'{model_name} AP3D'].values[i]*0.3+3)
     
-        correlation_coef = np.corrcoef(merged_df['cats'].values, merged_df[f'{model_name} AP3D'].values)[0, 1]
-        line_fit = np.polyfit(merged_df['cats'].values, merged_df[f'{model_name} AP3D'].values, 1)
+        correlation_coef = np.corrcoef(time, merged_df[f'{model_name} AP3D'].values)[0, 1]
+        line_fit = np.polyfit(time, merged_df[f'{model_name} AP3D'].values, 1)
 
         # plot the line of best fit
-        ax.plot(merged_df['cats'].values, np.poly1d(line_fit)(merged_df['cats'].values), linestyle='--',alpha=0.5, label=f'Linear fit (R={correlation_coef:.2f})')
+        ax.plot(time, np.poly1d(line_fit)(time), linestyle='--',alpha=0.5, label=f'Linear fit (R={correlation_coef:.2f})')
 
     # Set labels and title
-    ax.set_xlabel('No. of annotations')
+    ax.set_xlabel('Annotation time (h)')
     ax.set_ylabel('AP3D')
     ax.set_xscale('log')
-    ax.set_title('AP3D vs No. of annotations')
+    ax.set_title('AP3D vs class-wise annotation time')
     ax.legend(title='AP3D scaled by AP2D')
 
     # Save the plot
@@ -777,13 +783,13 @@ def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd
             dict(range = [0,70],
                 constraintrange = [5,70],
                 label = model_names[0], values = df[model_names[0]]),
-            dict(range = [0,50],
+            dict(range = [0,40],
                 label = model_names[2], values = df[model_names[2]]),
-            dict(range = [0,50],
+            dict(range = [0,40],
                 label = model_names[4], values = df[model_names[4]]),
-            dict(range = [0,50],
+            dict(range = [0,40],
                 label = model_names[1], values = df[model_names[1]]),
-            dict(range = [0,50],
+            dict(range = [0,40],
                 label = model_names[3], values = df[model_names[3]]),
             ]),
         )
@@ -811,8 +817,8 @@ if __name__ == '__main__':
     # _ = category_distribution('SUNRGBD')
     AP_vs_no_of_classes('SUNRGBD')
     #spatial_statistics('SUNRGBD')
-    AP3D_vs_AP2D('SUNRGBD')
-    AP3D_vs_AP2D('SUNRGBD', mode='log')
+    # AP3D_vs_AP2D('SUNRGBD')
+    # AP3D_vs_AP2D('SUNRGBD', mode='log')
     # init_dataloader()
     # vol_over_cat('SUNRGBD')
     # gt_stats('SUNRGBD')
