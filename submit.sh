@@ -5,7 +5,7 @@
 #BSUB -n 4
 #BSUB -q gpua100
 #BSUB -gpu 'num=1:mode=exclusive_process'
-#BSUB -W 0:20
+#BSUB -W 5:30
 #BSUB -R 'rusage[mem=8GB]'
 #BSUB -R 'span[hosts=1]'
 #BSUB -B
@@ -18,9 +18,9 @@ python tools/eval_boxes.py --eval-only \
     --config-file configs/BoxNet.yaml \
     PLOT.EVAL MABO \
     PLOT.MODE2D GT \
-    PLOT.PROPOSAL_FUNC random \
+    PLOT.PROPOSAL_FUNC full_dim \
     MODEL.WEIGHTS output/Baseline_sgd/model_final.pth \
-    OUTPUT_DIR output/propose_random \
+    OUTPUT_DIR output/propose_full_dim \
     PLOT.SCORING_FUNC True
 
 # Run baseline
