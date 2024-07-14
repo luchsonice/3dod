@@ -646,7 +646,8 @@ class ROIHeads_Boxer(StandardROIHeads):
             pred_instances = instances if not self.training else \
             [Instances(size) for size in images_raw.image_sizes]
             for instances_i in pred_instances:
-                instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes_out, Ks_scaled_per_box, im_shape))
+                instances_i.pred_boxes = pred_boxes_out
+                # instances_i.pred_boxes = Boxes.cat(cubes_to_box(pred_cubes_out, Ks_scaled_per_box, im_shape))
                 instances_i.scores = pred_cubes_out.scores.squeeze(1)
                 instances_i.pred_classes = pred_cubes_out.labels
                 instances_i.pred_bbox3D = pred_cubes_out.get_all_corners().squeeze(1)
