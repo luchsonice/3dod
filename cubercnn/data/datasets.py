@@ -344,7 +344,13 @@ def load_omni3d_json(json_file, image_root, dataset_name, filter_settings, filte
     with contextlib.redirect_stdout(io.StringIO()):
         coco_api = COCO(json_file)
     ground_map_files = os.listdir('datasets/ground_maps')
-    ground_idx = set([int(file.split('.')[0]) for file in ground_map_files])
+    ground_idx = []
+    for file in ground_map_files:
+        try:
+            idx = int(file.split('.')[0])
+            ground_idx.append(idx)
+        except:
+            pass
     if timer.seconds() > 1:
         logger.info("Loading {} takes {:.2f} seconds.".format(json_file, timer.seconds()))
 

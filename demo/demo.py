@@ -104,10 +104,7 @@ def do_test(args, cfg, model):
             'ground_map': ground_map,
             'height': image_shape[0], 'width': image_shape[1], 'K': K
         }]
-        if model.__class__.__name__ == 'BoxNet':
-            dets = model(batched)[0]['instances'][0]
-        else:
-            dets = model(batched)[0]['instances']
+        dets = model(batched)[0]['instances']
 
         n_det = len(dets)
 

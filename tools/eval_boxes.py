@@ -113,7 +113,7 @@ def inference_on_dataset(model, data_loader, experiment_type, proposal_function)
                 }
 
                 # convert to json format
-                instances = output.to('cpu')
+                instances = output["instances"].to('cpu')
                 # instances = output["instances"].to('cpu')
                 prediction["instances"] = instances_to_coco_json(instances, input["image_id"])
 
