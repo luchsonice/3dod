@@ -1,8 +1,127 @@
 # Weak supervised 3D Object Detection
-based on the Omni3D dataset & Cube R-CNN model 
+Based on the Omni3D dataset & Cube R-CNN model 
 [[`Project Page`](https://garrickbrazil.com/omni3d)] [[`arXiv`](https://arxiv.org/abs/2207.10660)] [[`BibTeX`](#citing)]
 
-# Setup
+This is the code accompanying our thesis which focuses on weakly-supervised 3D object detection, extinguishing the need for such data. By specifically investigating monocular methods, we leverage the high accessibility of single-camera systems over costly LiDAR sensors or complex multi-camera setups. We create three methods using 2D box annotations: A **proposal-and-scoring method**, a **pseudo-ground-truth method**, and a **weak Cube R-CNN**. The proposal method generates 1000 cubes per object and scores them. The prediction of this method is used as a pseudo ground truth in the [[`Cube R-CNN framework`](https://garrickbrazil.com/omni3d)]. To create a weak Cube RCNN, we modify the framework by replacing its 3D loss functions with ones based solely on 2D annotations. Our methods rely heavily on external, strong generalised deep learning models to infer spatial information in scenes. Experimental results show that all models perform comparably to an annotation time-equalised Cube R-CNN, whereof the pseudo ground truth method achieves the highest accuracy. The results show the methods’ ability to understand scenes in 3D, providing satisfactory visual results. Although not precise enough for centimetre accurate measurements, the methods provide a solid foundation for further research.
+
+# Brief outline of method
+We use rely heavily on the [Depth Anything]([github.com/](https://github.com/LiheYoung/Depth-Anything)) for processing the depth of images. An example of which can be seen below. 
+<p align="center">
+  <img src=".github/depth_map.png" />
+</p>
+We interpret the depth maps as point clouds like the one below. This enables us to identify the ground and determine which way is up in images.
+<p align="center">
+  <img src=".github/point_cloud_floor.png" />
+</p>
+
+# Example results
+<table style="border-collapse: collapse; border: none;">
+<tr>
+	<td width="60%">
+		<p align="center">
+			Proposal method
+			<img src=".github/proposal.jpg" alt=""/ height=>
+		</p>
+	</td>
+	<td width="35%">
+		<p align="center">
+			Top view
+			<img src=".github/proposal2.jpg" alt="COCO demo"/ height=>
+		</p>
+	</td>
+</tr>
+</table>
+<table style="border-collapse: collapse; border: none;">
+<tr>
+	<td width="60%">
+		<p align="center">
+			Pseudo ground truth method
+			<img src=".github/pseudo.jpg" alt=""/ height=>
+		</p>
+	</td>
+	<td width="35%">
+		<p align="center">
+			Top view
+			<img src=".github/pseudo2.jpg" alt="COCO demo"/ height=>
+		</p>
+	</td>
+</tr>
+</table>
+<table style="border-collapse: collapse; border: none;">
+<tr>
+	<td width="60%">
+		<p align="center">
+			Weak Cube R-CNN
+			<img src=".github/weak1.jpg" alt=""/ height=>
+		</p>
+	</td>
+	<td width="35%">
+		<p align="center">
+			Top view
+			<img src=".github/weak2.jpg" alt="COCO demo"/ height=>
+		</p>
+	</td>
+</tr>
+</table>
+<table style="border-collapse: collapse; border: none;">
+<tr>
+	<td width="60%">
+		<p align="center">
+			Time equalised Cube R-CNN
+			<img src=".github/time1.jpg" alt=""/ height=>
+		</p>
+	</td>
+	<td width="35%">
+		<p align="center">
+			Top view
+			<img src=".github/time2.jpg" alt="COCO demo"/ height=>
+		</p>
+	</td>
+</tr>
+</table>
+<table style="border-collapse: collapse; border: none;">
+<tr>
+	<td width="60%">
+		<p align="center">
+			Standard (benchmark) Cube R-CNN
+			<img src=".github/cube1.jpg" alt=""/ height=>
+		</p>
+	</td>
+	<td width="35%">
+		<p align="center">
+			Top view
+			<img src=".github/cube2.jpg" alt="COCO demo"/ height=>
+		</p>
+	</td>
+</tr>
+</table>
+
+
+# Updated results
+We found some weird inconsistencies in our testing, namely the postprocessing of the 2D box predictions was missing for the proposal method. After rerunning the models, the results are as follows.
+
+| | **AP2D**    | **AP3D**    | **AP3D@15** | **AP3D@25**   | **AP3D@50**   |
+|-----|----:|----:|----:|----:|----:|
+| Proposal method | 8.26 | 5.68 | 9.31  | 5.37 | 0.24 |
+| Pseudo GT | 10.23 | **6.47** | **10.83** | **6.74** | **0.37** |
+| Weak Cube R-CNN | **12.62** | 4.88 | 8.44 | 3.77 | 0.06 |
+| Time-equalised Cube R-CNN | 3.89 | 3.27 | 5.30 | 3.28 | 0.39 |
+| Cube R-CNN | 16.51 | 15.08 | 21.34   | 16.2   | 4.56 |
+
+# How the code works
+All the models are defined in the different config files. The config files define different meta architectures and ROI heads. A meta architecture is the overall model, while the ROI head is the part doing the processing for each Region of interest. In theory these different components should be possible to swap between each method, such that for instance the weak loss uses the meta architecture of the proposal method, but this is not tested. 
+
+It is possible to train only the 2D detector by using the Base_Omni3D.yaml and setting `MODEL.LOSS_W_3D = 0`. Check out the `.vscode/launch.json` for how to call the different experiments.
+
+
+## Installation <a name="installation"></a>
+Main dependencies
+- Detectron2
+- PyTorch
+- PyTorch3D
+- COCO
+  
+To get all submodules
 ```sh
 # to get the submodules
 git submodule update --init
@@ -17,54 +136,21 @@ cd depth
 cd ..
 ```
 
-## Original readme
+We found it to be a bit finicky to compile Pytorc3D, so we would advise to pick a python version which has a prebuilt pytorch3D available (check their github). Otherwise this worked for us. We Use python 3.10 because then you wont have to build pytorch3d from source, which apparently does not work on the hpc
+Detectron2. First install pytorch, load a corresponding cuda version that matches (check with a python torch.__version__, I used 12.1.1), then load a recent gcc version (>12.3)
 
-<table style="border-collapse: collapse; border: none;">
-<tr>
-	<td width="60%">
-		<p align="center">
-			Zero-shot (+ tracking) on <a href="https://about.facebook.com/realitylabs/projectaria">Project Aria</a> data
-			<img src=".github/generalization_demo.gif" alt="Aria demo video"/ height="300">
-		</p>
-	</td>
-	<td width="40%">
-		<p align="center">
-			Predictions on COCO
-			<img src=".github/generalization_coco.png" alt="COCO demo"/ height="300">
-		</p>
-	</td>
-</tr>
-</table>
+```bash
+pip install wheel ninja
+pip install 'git+https://github.com/facebookresearch/detectron2.git'
+```
+Pytorch3d
+```bash
+module swap nvhpc/23.5-nompi # get the cuda compiler
+pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable"
+pip install --no-index --no-cache-dir pytorch3d -f https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/py310_cu121_pyt210/download.html
+```
 
-<!--
-## Cube R-CNN Overview
-<p align="center">
-<img src=".github/cubercnn_overview.jpg" alt="Cube R-CNN overview" height="300" />
-</p>
--->
-
-## Table of Contents:
-- [Weak supervised 3D Object Detection](#weak-supervised-3d-object-detection)
-- [Setup](#setup)
-  - [Original readme](#original-readme)
-  - [Table of Contents:](#table-of-contents)
-  - [Installation ](#installation-)
-  - [Demo ](#demo-)
-  - [Omni3D Data ](#omni3d-data-)
-  - [Training Cube R-CNN on Omni3D ](#training-cube-r-cnn-on-omni3d-)
-    - [Tips for Tuning Hyperparameters ](#tips-for-tuning-hyperparameters-)
-  - [Inference on Omni3D ](#inference-on-omni3d-)
-  - [Results ](#results-)
-  - [License ](#license-)
-  - [Citing ](#citing-)
-
-
-## Installation <a name="installation"></a>
-
-- [Detectron2][d2]
-- [PyTorch][pyt]
-- [PyTorch3D][py3d]
-- [COCO][coco]
+We used both pytorch 2.0.1 and 2.1 for experiments
 
 ``` bash
 # setup new evironment
@@ -72,18 +158,15 @@ conda create -n cubercnn python=3.10
 source activate cubercnn
 
 # main dependencies
-conda install -c fvcore -c iopath -c conda-forge -c pytorch3d -c pytorch fvcore iopath pytorch3d pytorch=1.8 torchvision=0.9.1 cudatoolkit=10.1
+conda install -c fvcore -c iopath -c conda-forge -c pytorch3d -c pytorch fvcore iopath pytorch3d pytorch torchvision cudatoolkit
 
 # OpenCV, COCO, detectron2
 pip install cython opencv-python
 pip install 'git+https://github.com/cocodataset/cocoapi.git#subdirectory=PythonAPI'
-python -m pip install detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cu101/torch1.8/index.html
 
 # other dependencies
 conda install -c conda-forge scipy seaborn
 ```
-
-For reference, we used `cuda/10.1` and `cudnn/v7.6.5.32` for our experiments. We expect that slight variations in versions are also compatible. 
 
 ## Demo <a name="demo"></a>
 
@@ -101,7 +184,7 @@ python demo/demo.py \
 MODEL.WEIGHTS cubercnn://omni3d/cubercnn_DLA34_FPN.pth \
 OUTPUT_DIR output/demo 
 ```
-locally
+locally on the HPC we found some problems with the FVCORE_CACHE, setting it manually resolves these issues.
 ```bash
 export FVCORE_CACHE='/work3/s194235'
 python demo/demo.py \
@@ -115,7 +198,7 @@ OUTPUT_DIR output/demo
 See [`demo.py`](demo/demo.py) for more details. For example, if you know the camera intrinsics you may input them as arguments with the convention `--focal-length <float>` and `--principal-point <float> <float>`. See our [`MODEL_ZOO.md`](MODEL_ZOO.md) for more model checkpoints. 
 
 ## Omni3D Data <a name="data"></a>
-See [`DATA.md`](DATA.md) for instructions on how to download and set up images and annotations of our Omni3D benchmark for training and evaluating Cube R-CNN. 
+See [`DATA.md`](DATA.md) for instructions on how to download and set up images and annotations for training and evaluating Cube R-CNN. We only used the SUNRGBD dataset, but it is very easy to extend to other datasets listed in the datasets folder.
 
 ## Training Cube R-CNN on Omni3D <a name="training"></a>
 
@@ -204,99 +287,3 @@ In summary, the evaluator expects a list of image-level predictions in the forma
     ]
 }
 ```
-
-## Results <a name="results"></a>
-
-See [`RESULTS.md`](RESULTS.md) for detailed Cube R-CNN performance and comparison with other methods.
-
-## License <a name="license"></a>
-Cube R-CNN is released under [CC-BY-NC 4.0](LICENSE.md).
-
-## Citing <a name="citing"></a>
-
-Please use the following BibTeX entry if you use Omni3D and/or Cube R-CNN in your research or refer to our results.
-
-```BibTeX
-@inproceedings{brazil2023omni3d,
-  author =       {Garrick Brazil and Abhinav Kumar and Julian Straub and Nikhila Ravi and Justin Johnson and Georgia Gkioxari},
-  title =        {{Omni3D}: A Large Benchmark and Model for {3D} Object Detection in the Wild},
-  booktitle =    {CVPR},
-  address =      {Vancouver, Canada},
-  month =        {June},
-  year =         {2023},
-  organization = {IEEE},
-}
-```
-
-If you use the Omni3D benchmark, we kindly ask you to additionally cite all datasets. BibTex entries are provided below.
-
-<details><summary>Dataset BibTex</summary>
-
-```BibTex
-@inproceedings{Geiger2012CVPR,
-  author = {Andreas Geiger and Philip Lenz and Raquel Urtasun},
-  title = {Are we ready for Autonomous Driving? The KITTI Vision Benchmark Suite},
-  booktitle = {CVPR},
-  year = {2012}
-}
-``` 
-
-```BibTex
-@inproceedings{caesar2020nuscenes,
-  title={nuscenes: A multimodal dataset for autonomous driving},
-  author={Caesar, Holger and Bankiti, Varun and Lang, Alex H and Vora, Sourabh and Liong, Venice Erin and Xu, Qiang and Krishnan, Anush and Pan, Yu and Baldan, Giancarlo and Beijbom, Oscar},
-  booktitle={CVPR},
-  year={2020}
-}
-```
-
-```BibTex
-@inproceedings{song2015sun,
-  title={Sun rgb-d: A rgb-d scene understanding benchmark suite},
-  author={Song, Shuran and Lichtenberg, Samuel P and Xiao, Jianxiong},
-  booktitle={CVPR},
-  year={2015}
-}
-```
-
-```BibTex
-@inproceedings{dehghan2021arkitscenes,
-  title={{ARK}itScenes - A Diverse Real-World Dataset for 3D Indoor Scene Understanding Using Mobile {RGB}-D Data},
-  author={Gilad Baruch and Zhuoyuan Chen and Afshin Dehghan and Tal Dimry and Yuri Feigin and Peter Fu and Thomas Gebauer and Brandon Joffe and Daniel Kurz and Arik Schwartz and Elad Shulman},
-  booktitle={NeurIPS Datasets and Benchmarks Track (Round 1)},
-  year={2021},
-}
-```
-
-```BibTex
-@inproceedings{hypersim,
-  author    = {Mike Roberts AND Jason Ramapuram AND Anurag Ranjan AND Atulit Kumar AND
-                 Miguel Angel Bautista AND Nathan Paczan AND Russ Webb AND Joshua M. Susskind},
-  title     = {{Hypersim}: {A} Photorealistic Synthetic Dataset for Holistic Indoor Scene Understanding},
-  booktitle = {ICCV},
-  year      = {2021},
-}
-```
-
-```BibTex
-@article{objectron2021,
-  title={Objectron: A Large Scale Dataset of Object-Centric Videos in the Wild with Pose Annotations},
-  author={Ahmadyan, Adel and Zhang, Liangkai and Ablavatski, Artsiom and Wei, Jianing and Grundmann, Matthias},
-  journal={CVPR},
-  year={2021},
-}
-```
-
-</details>
-
-[gg]: https://github.com/gkioxari
-[jj]: https://github.com/jcjohnson
-[gb]: https://github.com/garrickbrazil
-[ak]: https://github.com/abhi1kumar
-[nr]: https://github.com/nikhilaravi
-[js]: https://github.com/jstraub
-[d2]: https://github.com/facebookresearch/detectron2
-[py3d]: https://github.com/facebookresearch/pytorch3d
-[pyt]: https://pytorch.org/
-[coco]: https://cocodataset.org/
-
