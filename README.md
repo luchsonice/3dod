@@ -103,9 +103,9 @@ We found some weird inconsistencies in our testing, namely the postprocessing of
 | | **AP2D**    | **AP3D**    | **AP3D@15** | **AP3D@25**   | **AP3D@50**   |
 |-----|----:|----:|----:|----:|----:|
 | Proposal method | 8.26 | 5.68 | 9.31  | 5.37 | 0.24 |
-| Pseudo GT | 10.23 | **6.47** | **10.83** | **6.74** | **0.37** |
+| Pseudo GT | 10.23 | **6.47** | **10.83** | **6.74** | 0.37 |
 | Weak Cube R-CNN | **12.62** | 4.88 | 8.44 | 3.77 | 0.06 |
-| Time-equalised Cube R-CNN | 3.89 | 3.27 | 5.30 | 3.28 | 0.39 |
+| Time-equalised Cube R-CNN | 3.89 | 3.27 | 5.30 | 3.28 | **0.39** |
 | Cube R-CNN | 16.51 | 15.08 | 21.34   | 16.2   | 4.56 |
 
 # How the code works
