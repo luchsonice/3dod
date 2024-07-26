@@ -1,6 +1,14 @@
+from segment_anything.utils.transforms import ResizeLongestSide
+from groundingdino.util.inference import load_image, load_model, predict
+from torchvision.ops import box_convert
+import numpy as np
+import torch
 from segment_anything import sam_model_registry
 from segment_anything.modeling import Sam
 import os
+import torchvision.transforms as T2
+import groundingdino.datasets.transforms as T
+from PIL import Image
 
 def init_segmentation(device='cpu') -> Sam:
     # 1) first cd into the segment_anything and pip install -e .
@@ -19,22 +27,60 @@ def init_segmentation(device='cpu') -> Sam:
     sam.to(device=device)
     return sam
 
+def find_ground(image_source, image, model, segmentor, device='cpu', TEXT_PROMPT="ground", BOX_TRESHOLD=0.35, TEXT_TRESHOLD=0.25):
+    boxes, logits, _ = predict(
+            model=model,
+            image=image,
+            caption=TEXT_PROMPT,
+            box_threshold=BOX_TRESHOLD,
+            text_threshold=TEXT_TRESHOLD,
+            device=device
+        )
+    if len(boxes) == 0:
+        return None
+    # only want box corresponding to max logit
+    max_logit_idx = torch.argmax(logits)
+    box = boxes[max_logit_idx].unsqueeze(0)
+
+    _, h, w = image_source.shape
+    box = box * torch.tensor([w, h, w, h], device=device)
+    xyxy = box_convert(boxes=box, in_fmt="cxcywh", out_fmt="xyxy")
+
+    image = image.unsqueeze(0)
+    org_shape = image.shape[-2:]
+    resize_transform = ResizeLongestSide(segmentor.image_encoder.img_size)
+    batched_input = []
+    images = resize_transform.apply_image_torch(image*1.0)# .permute(2, 0, 1).contiguous()
+    for image, boxes in zip(images, xyxy):
+        transformed_boxes = resize_transform.apply_boxes_torch(boxes, org_shape) # Bx4
+        batched_input.append({'image': image, 'boxes': transformed_boxes, 'original_size':org_shape})
+
+    seg_out = segmentor(batched_input, multimask_output=False)
+    mask_per_image = seg_out[0]['masks']
+    return mask_per_image[0,0,:,:].cpu().numpy()
+
+def load_image2(image:np.ndarray, device) -> tuple[torch.Tensor, torch.Tensor]:
+    transform = T.Compose(
+        [
+            # T.RandomResize([800], max_size=1333),
+            T.ToTensor(),
+            T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        ]
+    )
+    transform2 = T2.ToTensor()
+    image_source = Image.fromarray(image).convert("RGB")
+    image = transform2(image_source).to(device)
+    image_transformed, _ = transform(image_source, None)
+    return image, image_transformed
+
 
 if __name__ == '__main__':
-    from segment_anything.utils.transforms import ResizeLongestSide
-    import numpy as np
     import pandas as pd
-    import torch
-    import torchvision.transforms as T2
     from matplotlib import pyplot as plt
-    from PIL import Image
     from tqdm import tqdm
-    from torchvision.ops import box_convert
 
-    import groundingdino.datasets.transforms as T
     from cubercnn import data
     from detectron2.data.catalog import MetadataCatalog
-    from groundingdino.util.inference import load_image, load_model, predict
     from priors import get_config_and_filter_settings
     import supervision as sv
     

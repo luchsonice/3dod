@@ -20,3 +20,4 @@ MODEL:
   ROI_CUBE_HEAD:
     NUMBER_OF_PROPOSALS: 1000
   META_ARCHITECTURE: 'BoxNet' # name of the overall arch that calls the ROI_HEADS.NAME and ROI_CUBE_HEAD.NAME
+  DEVICE: 'cpu'

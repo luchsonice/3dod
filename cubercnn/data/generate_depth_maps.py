@@ -1,4 +1,7 @@
+import numpy as np
+import torchvision.transforms as transforms
 import torch
+from PIL import Image
 from depth.metric_depth.zoedepth.models.builder import build_model
 from depth.metric_depth.zoedepth.utils.config import get_config
 
@@ -85,12 +88,9 @@ def init_dataset():
 if __name__ == '__main__':
     import os
     from detectron2.data.catalog import MetadataCatalog
-    import numpy as np
-    from PIL import Image
 
     from cubercnn import data
     from priors import get_config_and_filter_settings
-    import torchvision.transforms as transforms
 
     import torch.nn.functional as F
 
