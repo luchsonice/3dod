@@ -24,7 +24,7 @@ from detectron2.utils.logger import setup_logger
 color = '#384860'
 second_color = '#97a6c4'
 
-def load_gt(dataset='SUNRGBD', mode='test', single_im=True, filter=False, img_idx=150):
+def load_gt(dataset='SUNRGBD', mode='test', single_im=True, filter=False, img_idx=730):
 
     # we can do this block of code to get the categories reduced number of categories in the sunrgbd dataset as there normally is 83 categories, however we only work with 38.
     config_file = 'configs/Base_Omni3D.yaml'
@@ -255,7 +255,7 @@ def spatial_statistics(dataset):
     plt.close()
     return
 
-def AP_vs_no_of_classes(dataset, files:list=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/proposal_AP/log.txt','output/exp_10_iou_zpseudogt_dims_depthrange_rotalign_ground/log.txt']):
+def AP_vs_no_of_classes(dataset, files:list=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/proposal_AP_fixed_AP2D/log.txt','output/exp_10_iou_zpseudogt_dims_depthrange_rotalign_ground/log.txt']):
     '''Search the log file for the precision numbers corresponding to the last iteration
     then parse it in as a pd.DataFrame and plot the AP vs number of classes'''
     # search the file from the back until the line 
@@ -315,7 +315,7 @@ def AP_vs_no_of_classes(dataset, files:list=['output/Baseline_sgd/log.txt','outp
 
     return
 
-def AP3D_vs_AP2D(dataset, mode = 'standard', files=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/proposal_AP/log.txt','output/exp_10_iou_zpseudogt_dims_depthrange_rotalign_ground/log.txt']):
+def AP3D_vs_AP2D(dataset, mode = 'standard', files=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/proposal_AP_fixed_AP2D/log.txt','output/exp_10_iou_zpseudogt_dims_depthrange_rotalign_ground/log.txt']):
     '''Search the log file for the precision numbers corresponding to the last iteration
     then parse it in as a pd.DataFrame and plot the AP vs number of classes'''
 
@@ -746,7 +746,7 @@ def gt_stats_in_terms_of_sigma(dataset):
 
     return True
 
-def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/proposal_AP/log.txt','output/exp_10_iou_zpseudogt_dims_depthrange_rotalign_ground/log.txt']):
+def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd/log.txt','output/omni_equalised/log.txt','output/omni_pseudo_gt/log.txt','output/proposal_AP_fixed_AP2D/log.txt','output/exp_10_iou_zpseudogt_dims_depthrange_rotalign_ground/log.txt']):
     '''Search the log file for the precision numbers corresponding to the last iteration
     then parse it in as a pd.DataFrame and plot the AP vs number of classes'''
     import plotly.graph_objects as go
@@ -813,12 +813,13 @@ def parallel_coordinate_plot(dataset='SUNRGBD', files:list=['output/Baseline_sgd
 
 if __name__ == '__main__':
     # show_data('SUNRGBD', filter_invalid=False, output_dir='output/playground/no_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
-    # show_data('SUNRGBD', filter_invalid=True, output_dir='output/playground/with_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
+    show_data('SUNRGBD', filter_invalid=True, output_dir='output/playground/with_filter')  #{SUNRGBD,ARKitScenes,KITTI,nuScenes,Objectron,Hypersim}
+
     # _ = category_distribution('SUNRGBD')
     AP_vs_no_of_classes('SUNRGBD')
     #spatial_statistics('SUNRGBD')
-    # AP3D_vs_AP2D('SUNRGBD')
-    # AP3D_vs_AP2D('SUNRGBD', mode='log')
+    AP3D_vs_AP2D('SUNRGBD')
+    AP3D_vs_AP2D('SUNRGBD', mode='log')
     # init_dataloader()
     # vol_over_cat('SUNRGBD')
     # gt_stats('SUNRGBD')

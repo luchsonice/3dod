@@ -10,9 +10,10 @@ TEST:
   EVAL_PERIOD: 7200 #29000
 VIS_PERIOD: 1 #2320
 DATASETS:
-  TRAIN: ('SUNRGBD_train_mini', 'SUNRGBD_val_mini')
-  TEST: ('SUNRGBD_test_mini',) 
+  TRAIN: ('SUNRGBD_train_mini_equalised', 'SUNRGBD_val_mini_equalised')
+  TEST: ('SUNRGBD_test',) 
   CATEGORY_NAMES: ('chair', 'table', 'cabinet', 'car', 'lamp', 'books', 'sofa', 'pedestrian', 'picture', 'window', 'pillow', 'truck', 'door', 'blinds', 'sink', 'shelves', 'television', 'shoes', 'cup', 'bottle', 'bookcase', 'laptop', 'desk', 'cereal box', 'floor mat', 'traffic cone', 'mirror', 'barrier', 'counter', 'camera', 'bicycle', 'toilet', 'bus', 'bed', 'refrigerator', 'trailer', 'box', 'oven', 'clothes', 'van', 'towel', 'motorcycle', 'night stand', 'stove', 'machine', 'stationery', 'bathtub', 'cyclist', 'curtain', 'bin')
 MODEL:
   ROI_HEADS:
     NUM_CLASSES: 50
+  DEVICE: 'cpu' # forced to cpu in inference for now
