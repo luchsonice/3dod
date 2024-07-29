@@ -4,6 +4,9 @@ Based on the Omni3D dataset & Cube R-CNN model
 
 This is the code accompanying our thesis which focuses on weakly-supervised 3D object detection, extinguishing the need for such data. By specifically investigating monocular methods, we leverage the high accessibility of single-camera systems over costly LiDAR sensors or complex multi-camera setups. We create three methods using 2D box annotations: A **proposal-and-scoring method**, a **pseudo-ground-truth method**, and a **weak Cube R-CNN**. The proposal method generates 1000 cubes per object and scores them. The prediction of this method is used as a pseudo ground truth in the [[`Cube R-CNN framework`](https://garrickbrazil.com/omni3d)]. To create a weak Cube RCNN, we modify the framework by replacing its 3D loss functions with ones based solely on 2D annotations. Our methods rely heavily on external, strong generalised deep learning models to infer spatial information in scenes. Experimental results show that all models perform comparably to an annotation time-equalised Cube R-CNN, whereof the pseudo ground truth method achieves the highest accuracy. The results show the methods’ ability to understand scenes in 3D, providing satisfactory visual results. Although not precise enough for centimetre accurate measurements, the methods provide a solid foundation for further research.
 
+A **HuggingFace 🤗 demo** is now [live](https://huggingface.co/spaces/AndreasLH/Weakly-Supervised-3DOD) 
+
+
 # Brief outline of method
 We use rely heavily on the [Depth Anything]([github.com/](https://github.com/LiheYoung/Depth-Anything)) for processing the depth of images. An example of which can be seen below. 
 <p align="center">
