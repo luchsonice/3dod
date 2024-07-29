@@ -139,7 +139,7 @@ def do_test(im, threshold, model_str):
             box_mesh = util.mesh_cuboid(bbox3D, pose.tolist(), color=color)
             meshes.append(box_mesh)
     
-    print('File with {} dets'.format(len(meshes)))
+    # print('File with {} dets'.format(len(meshes)))
 
     if len(meshes) > 0:
         im_drawn_rgb, im_topdown, _ = vis.draw_scene_view(im, K, meshes, text=meshes_text, scale=im.shape[0], blend_weight=0.5, blend_weight_overlay=0.85)

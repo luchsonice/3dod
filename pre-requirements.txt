@@ -1,0 +1,14 @@
+ninja
+iopath
+fvcore
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch 
+torchvision 
+torchaudio 
+
+gradio
+matplotlib
+numpy
+opencv-python
+pyransac3d

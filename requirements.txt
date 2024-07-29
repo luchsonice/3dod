@@ -1,20 +1,10 @@
-# load a recent gcc version (>12.3) first
-# and cuda matching pytorch installation
-torch==2.1.2 
-torchvision==0.16.2 
-torchaudio==2.1.2 
---index-url https://download.pytorch.org/whl/cu121
+GroundingDINO/
+sam-hq/
 
-scipy
-fvcore
-iopath
+git+https://github.com/facebookresearch/pytorch3d.git@stable
+git+https://github.com/facebookresearch/detectron2.git
+
+gradio
+matplotlib
+numpy
 opencv-python
-wheel
-ninja
-pytorch3d -f https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/py310_cu121_pyt210/download.html
-'git+https://github.com/facebookresearch/detectron2.git'
-
-rich
-scipy
-pandas
-pyransac3d
