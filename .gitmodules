@@ -4,3 +4,6 @@
 [submodule "sam-hq"]
 	path = sam-hq
 	url = https://github.com/SysCV/sam-hq.git
+[submodule "Depth-Anything-V2"]
+	path = Depth-Anything-V2
+	url = https://github.com/DepthAnything/Depth-Anything-V2

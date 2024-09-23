@@ -1,42 +1,22 @@
 import torch
-from depth.metric_depth.zoedepth.models.builder import build_model
-from depth.metric_depth.zoedepth.utils.config import get_config
-
-def depth_of_images(image, model):
+import cv2
+from depth.depth_anything_v2.dpt import DepthAnythingV2
+def depth_of_images(encoder='vitl', dataset='hypersim', max_depth=20, device='cpu'):
     """
-    This function takes in a list of images and returns the depth of the images"""
-    # Born out of Issue 36. 
-    # Allows  the user to set up own test files to infer on (Create a folder my_test and add subfolder input and output in the metric_depth directory before running this script.)
-    # Make sure you have the necessary libraries
-    # Code by @1ssb
+    This function takes in a list of images and returns the depth of the images
+    
+    encoder = 'vitl' # or 'vits', 'vitb'
+    dataset = 'hypersim' # 'hypersim' for indoor model, 'vkitti' for outdoor model
+    max_depth = 20 # 20 for indoor model, 80 for outdoor model
+    """
+    model_configs = {
+        'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]},
+        'vitb': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768]},
+        'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]}
+    }
 
-    # Global settings
-    DATASET = 'nyu' # Lets not pick a fight with the model's dataloader
-
-    color_image = Image.fromarray(image).convert('RGB')
-    original_width, original_height = color_image.size
-    image_tensor = transforms.ToTensor()(color_image).unsqueeze(0).to('cuda' if torch.cuda.is_available() else 'cpu')
-
-    # input as bx3xhxw (unnormalized image)
-    pred_o = model(image_tensor, dataset=DATASET)
-    if isinstance(pred_o, dict):
-        pred = pred_o.get('metric_depth', pred_o.get('out'))
-        features = pred_o.get('depth_features', None)
-    elif isinstance(pred_o, (list, tuple)):
-        pred = pred[-1]
-    pred = pred.squeeze().detach().cpu().numpy()
-
-    # Resize color image and depth to final size
-    resized_pred = Image.fromarray(pred).resize((original_width, original_height), Image.NEAREST)
-
-    # resized_pred is the image shaped to the original image size, depth is in meters
-    return np.array(resized_pred)
-
-def setup_depth_model(model_name, pretrained_resource):
-    DATASET = 'nyu' # Lets not pick a fight with the model's dataloader
-    config = get_config(model_name, "eval", DATASET)
-    config.pretrained_resource = pretrained_resource
-    model = build_model(config).to('cuda' if torch.cuda.is_available() else 'cpu')
+    model = DepthAnythingV2(**{**model_configs[encoder], 'max_depth': max_depth})
+    model.load_state_dict(torch.load(f'checkpoints/depth_anything_v2_metric_{dataset}_{encoder}.pth', map_location=device))
     model.eval()
     return model
 
@@ -45,7 +25,7 @@ def init_dataset():
      I'm not sure what the difference between the omni3d dataset and load omni3D json functions are. this is a 3rd alternative to this. The train script calls something similar to this.'''
     cfg, filter_settings = get_config_and_filter_settings()
 
-    dataset_names = ['SUNRGBD_train','SUNRGBD_val','SUNRGBD_test']
+    dataset_names = ['SUNRGBD_train','SUNRGBD_val','SUNRGBD_test', 'KITTI_train', 'KITTI_val', 'KITTI_test',]
     dataset_paths_to_json = ['datasets/Omni3D/'+dataset_name+'.json' for dataset_name in dataset_names]
     # for dataset_name in dataset_names:
     #     simple_register(dataset_name, filter_settings, filter_empty=True)
@@ -53,7 +33,6 @@ def init_dataset():
     # Get Image and annotations
     datasets = data.Omni3D(dataset_paths_to_json, filter_settings=filter_settings)
     data.register_and_store_model_metadata(datasets, cfg.OUTPUT_DIR, filter_settings)
-
 
     thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
     dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
@@ -86,26 +65,20 @@ if __name__ == '__main__':
     import os
     from detectron2.data.catalog import MetadataCatalog
     import numpy as np
-    from PIL import Image
 
     from cubercnn import data
     from priors import get_config_and_filter_settings
-    import torchvision.transforms as transforms
-
-    import torch.nn.functional as F
 
     from tqdm import tqdm
-    # datasets = init_dataset()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    datasets = init_dataset()
 
     os.makedirs('datasets/depth_maps', exist_ok=True)
 
-    depth_model = 'zoedepth'
-    pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
-    model = setup_depth_model(depth_model, pretrained_resource)
-    for img_id in tqdm(os.listdir('datasets/coco_examples')):
-        file_path = 'coco_examples/'+img_id
-    # for img_id, img_info in track(datasets.imgs.items()):
-    #     file_path = img_info['file_path']
-        img = np.array(Image.open('datasets/'+file_path))
-        depth = depth_of_images(img, model)
+    model = depth_of_images(device=device)
+
+    for img_id, img_info in tqdm(datasets.imgs.items()):
+        file_path = img_info['file_path']
+        img = cv2.imread('datasets/'+file_path)
+        depth = model.infer_image(img) # HxW depth map in meters in numpy
         np.savez_compressed(f'datasets/depth_maps/{img_id}.npz', depth=depth)
