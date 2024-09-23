@@ -1,6 +1,7 @@
 import torch
 import cv2
-from depth.depth_anything_v2.dpt import DepthAnythingV2
+# might need to export PYTHONPATH=/work3/$username/3dod/
+from depth.metric_depth.depth_anything_v2.dpt import DepthAnythingV2
 def depth_of_images(encoder='vitl', dataset='hypersim', max_depth=20, device='cpu'):
     """
     This function takes in a list of images and returns the depth of the images
@@ -16,8 +17,9 @@ def depth_of_images(encoder='vitl', dataset='hypersim', max_depth=20, device='cp
     }
 
     model = DepthAnythingV2(**{**model_configs[encoder], 'max_depth': max_depth})
-    model.load_state_dict(torch.load(f'checkpoints/depth_anything_v2_metric_{dataset}_{encoder}.pth', map_location=device))
+    model.load_state_dict(torch.load(f'depth/checkpoints/depth_anything_v2_metric_{dataset}_{encoder}.pth', map_location=device, weights_only=False))
     model.eval()
+    model.to(device)
     return model
 
 def init_dataset():
