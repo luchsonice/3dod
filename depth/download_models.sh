@@ -8,5 +8,4 @@ fi
 
 cd checkpoints
 
-wget https://huggingface.co/spaces/LiheYoung/Depth-Anything/resolve/main/checkpoints_metric_depth/depth_anything_metric_depth_indoor.pt?download=true -O depth_anything_metric_depth_indoor.pt
-wget https://huggingface.co/spaces/LiheYoung/Depth-Anything/resolve/main/checkpoints/depth_anything_vitl14.pth?download=true -O depth_anything_vitl14.pth
+wget https://huggingface.co/depth-anything/Depth-Anything-V2-Metric-Hypersim-Large/resolve/main/depth_anything_v2_metric_hypersim_vitl.pth?download=true -O depth_anything_v2_metric_hypersim_vitl.pth
