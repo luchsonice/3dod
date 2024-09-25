@@ -419,31 +419,32 @@ class Omni3DEvaluationHelper:
             ap = np.mean(precision) if precision.size else float("nan")
             results2D.update({"AP-" + "{}".format(name): float(ap * 100)})
 
-        evaluator3D = Omni3Deval(mode='3D')
-        evaluator3D.params.catIds = list(self.overall_catIds)
-        evaluator3D.params.imgIds = list(self.overall_imgIds)
-        evaluator3D.evalImgs = True
-        evaluator3D.evals_per_cat_area = self.evals_per_cat_area3D
-        evaluator3D._paramsEval = copy.deepcopy(evaluator3D.params)
-        evaluator3D.accumulate()
-        summarize_str3D = evaluator3D.summarize()
-        
-        precisions = evaluator3D.eval['precision']
+        if not self.only_2d:
+            evaluator3D = Omni3Deval(mode='3D')
+            evaluator3D.params.catIds = list(self.overall_catIds)
+            evaluator3D.params.imgIds = list(self.overall_imgIds)
+            evaluator3D.evalImgs = True
+            evaluator3D.evals_per_cat_area = self.evals_per_cat_area3D
+            evaluator3D._paramsEval = copy.deepcopy(evaluator3D.params)
+            evaluator3D.accumulate()
+            summarize_str3D = evaluator3D.summarize()
+            
+            precisions = evaluator3D.eval['precision']
 
-        metrics = ["AP", "AP15", "AP25", "AP50", "APn", "APm", "APf"]
+            metrics = ["AP", "AP15", "AP25", "AP50", "APn", "APm", "APf"]
 
-        results3D = {
-            metric: float(
-                evaluator3D.stats[idx] * 100 if evaluator3D.stats[idx] >= 0 else "nan"
-            )
-            for idx, metric in enumerate(metrics)
-        }
+            results3D = {
+                metric: float(
+                    evaluator3D.stats[idx] * 100 if evaluator3D.stats[idx] >= 0 else "nan"
+                )
+                for idx, metric in enumerate(metrics)
+            }
 
-        for idx, name in enumerate(ordered_things):
-            precision = precisions[:, :, idx, 0, -1]
-            precision = precision[precision > -1]
-            ap = np.mean(precision) if precision.size else float("nan")
-            results3D.update({"AP-" + "{}".format(name): float(ap * 100)})
+            for idx, name in enumerate(ordered_things):
+                precision = precisions[:, :, idx, 0, -1]
+                precision = precision[precision > -1]
+                ap = np.mean(precision) if precision.size else float("nan")
+                results3D.update({"AP-" + "{}".format(name): float(ap * 100)})
 
 
         # All concat categories
