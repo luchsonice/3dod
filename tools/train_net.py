@@ -108,7 +108,7 @@ def do_test(cfg, model, iteration='final', storage=None):
             '''
             Optionally, visualize some instances
             '''
-            instances = torch.load(os.path.join(output_folder, dataset_name, 'instances_predictions.pth'))
+            instances = torch.load(os.path.join(output_folder, dataset_name, 'instances_predictions.pth'), weights_only=False)
             log_str = vis.visualize_from_instances(
                 instances, data_loader.dataset, dataset_name, 
                 cfg.INPUT.MIN_SIZE_TEST, os.path.join(output_folder, dataset_name), 

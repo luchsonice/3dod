@@ -2081,6 +2081,8 @@ class ROIHeads3D(StandardROIHeads):
             if self.loss_w_3d > 0:
                 instances_3d, losses_cube = self._forward_cube(features, proposals, Ks, im_dims, im_scales_ratio)
                 losses.update(losses_cube)
+            else:
+                instances_3d = None
 
             return instances_3d, losses
         
