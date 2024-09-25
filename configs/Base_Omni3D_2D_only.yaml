@@ -1,0 +1,20 @@
+_BASE_: "Base.yaml"
+SOLVER:
+  TYPE: "sgd"
+  IMS_PER_BATCH: 6 #196 -> r=5,6 -> because of dataset size r=5,6 * 10,335/233 = 0,248
+  BASE_LR: 0.0214 #0.12
+  STEPS: (30000, 40000)
+  MAX_ITER: 50000 #116000
+  WARMUP_ITERS: 0 #3625
+TEST:
+  EVAL_PERIOD: 25000 #29000
+VIS_PERIOD: 50000 #2320
+DATASETS:
+  TRAIN: ('SUNRGBD_train', 'SUNRGBD_val')
+  TEST: ('SUNRGBD_test',) 
+  CATEGORY_NAMES: ('chair', 'table', 'cabinet', 'car', 'lamp', 'books', 'sofa', 'pedestrian', 'picture', 'window', 'pillow', 'truck', 'door', 'blinds', 'sink', 'shelves', 'television', 'shoes', 'cup', 'bottle', 'bookcase', 'laptop', 'desk', 'cereal box', 'floor mat', 'traffic cone', 'mirror', 'barrier', 'counter', 'camera', 'bicycle', 'toilet', 'bus', 'bed', 'refrigerator', 'trailer', 'box', 'oven', 'clothes', 'van', 'towel', 'motorcycle', 'night stand', 'stove', 'machine', 'stationery', 'bathtub', 'cyclist', 'curtain', 'bin')
+MODEL:
+  ROI_HEADS:
+    NUM_CLASSES: 50
+  ROI_CUBE_HEAD:
+    LOSS_W_3D: 0.0

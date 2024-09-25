@@ -18,7 +18,7 @@ from detectron2.utils.logger import _log_api_usage
 from detectron2.modeling.meta_arch import (
     META_ARCH_REGISTRY, GeneralizedRCNN
 )
-from cubercnn.data.generate_depth_maps import setup_depth_model
+# from cubercnn.data.generate_depth_maps import setup_depth_model
 from cubercnn.modeling.roi_heads import build_roi_heads
 
 from detectron2.data import MetadataCatalog
@@ -278,7 +278,7 @@ class RCNN3D_combined_features(nn.Module):
     @classmethod
     def from_config(cls, cfg, priors=None):
         backbone = build_backbone(cfg, priors=priors)
-        if cfg.MODEL.DEPTH_ON:
+        if False: # TODO
             depth_model = 'zoedepth'
             pretrained_resource = 'local::depth/checkpoints/depth_anything_metric_depth_indoor.pt'
             d_model = setup_depth_model(depth_model, pretrained_resource) #NOTE maybe make the depth model be learnable as well

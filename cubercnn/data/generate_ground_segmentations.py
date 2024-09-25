@@ -43,7 +43,7 @@ if __name__ == '__main__':
         currently not used anywhere, because I'm not sure what the difference between the omni3d dataset and load omni3D json functions are. this is a 3rd alternative to this. The train script calls something similar to this.'''
         cfg, filter_settings = get_config_and_filter_settings()
 
-        dataset_names = ['SUNRGBD_train','SUNRGBD_val','SUNRGBD_test']
+        dataset_names = ['SUNRGBD_train','SUNRGBD_val','SUNRGBD_test', 'KITTI_train', 'KITTI_val', 'KITTI_test',]
         dataset_paths_to_json = ['datasets/Omni3D/'+dataset_name+'.json' for dataset_name in dataset_names]
         # for dataset_name in dataset_names:
         #     simple_register(dataset_name, filter_settings, filter_empty=True)
@@ -126,7 +126,7 @@ if __name__ == '__main__':
         return annotated_frame
 
 
-    # datasets = init_dataset()
+    datasets = init_dataset()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     # model.to(device)
@@ -143,14 +143,14 @@ if __name__ == '__main__':
     no_ground_idx = []
 
     #  **** to annotate full dataset ****
-    # for img_id, img_info in tqdm(datasets.imgs.items()):
-    #     file_path = img_info['file_path']
-    #     width = img_info['width']
-    #     height = img_info['height']
+    for img_id, img_info in tqdm(datasets.imgs.items()):
+        file_path = img_info['file_path']
+        w = img_info['width']
+        h = img_info['height']
     #  **** to annotate full dataset ****
     #  **** to annotate demo images ****
-    for img_id in tqdm(os.listdir('datasets/coco_examples')):
-        file_path = 'coco_examples/'+img_id
+    # for img_id in tqdm(os.listdir('datasets/coco_examples')):
+    #     file_path = 'coco_examples/'+img_id
         image_source, image = load_image('datasets/'+file_path, device=device)
     #  **** to annotate demo images ****
 
