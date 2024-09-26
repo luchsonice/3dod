@@ -279,11 +279,11 @@ class Omni3D(COCO):
             self.dataset['annotations'] = valid_anns
 
             # append depth image path to each image corresponding to the id
-            for img in self.dataset['images']:
-                img_id = img['id']
-                img['depth_image_path'] = f'datasets/depth_maps/{img_id}.npz'
-                if not img_id in self.idx_without_ground:
-                    img['ground_image_path'] = f'datasets/ground_maps/{img_id}.npz'
+            # for img in self.dataset['images']:
+            #     img_id = img['id']
+            #     img['depth_image_path'] = f'datasets/depth_maps/{img_id}.npz'
+            #     if not img_id in self.idx_without_ground:
+            #         img['ground_image_path'] = f'datasets/ground_maps/{img_id}.npz'
 
         self.createIndex()
 
@@ -351,6 +351,14 @@ def load_omni3d_json(json_file, image_root, dataset_name, filter_settings, filte
             ground_idx.append(idx)
         except:
             pass
+    depth_map_files = os.listdir('datasets/depth_maps')
+    depth_idx = []
+    for file in depth_map_files:
+        try:
+            idx = int(file.split('.')[0])
+            depth_idx.append(idx)
+        except:
+            pass
     if timer.seconds() > 1:
         logger.info("Loading {} takes {:.2f} seconds.".format(json_file, timer.seconds()))
 
@@ -415,7 +423,8 @@ def load_omni3d_json(json_file, image_root, dataset_name, filter_settings, filte
 
         image_id = record["image_id"] = img_dict["id"]
 
-        record["depth_image_path"] = f'datasets/depth_maps/{image_id}.npz'
+        if image_id in depth_idx:
+            record["depth_image_path"] = f'datasets/depth_maps/{image_id}.npz'
         if image_id in ground_idx:
             record["ground_image_path"] = f'datasets/ground_maps/{image_id}.npz'
         objs = []
@@ -453,13 +462,16 @@ def load_omni3d_json(json_file, image_root, dataset_name, filter_settings, filte
 
             # store category as -1 for ignores!
             # OLD Logic
-            # obj["category_id"] = -1 if ignore else id_map[annotation_category_id]
-            if filter_empty:
-                obj["category_id"] = id_map[annotation_category_id]
-                if not ignore:
-                    objs.append(obj)
-            else:
-                obj["category_id"] = -1 if ignore else id_map[annotation_category_id]
+            obj["category_id"] = -1 if ignore else id_map[annotation_category_id]
+
+            objs.append(obj)
+
+            # if filter_empty:
+            #     obj["category_id"] = id_map[annotation_category_id]
+            #     if not ignore:
+            #         objs.append(obj)
+            # else:
+                # obj["category_id"] = -1 if ignore else id_map[annotation_category_id]
 
             has_valid_annotation |= (not ignore)
 

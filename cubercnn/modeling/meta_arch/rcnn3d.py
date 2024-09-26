@@ -266,7 +266,7 @@ class RCNN3D(GeneralizedRCNN):
 class RCNN3D_combined_features(nn.Module):
 
     @configurable
-    def __init__(self, *, backbone, proposal_generator, roi_heads, input_format, vis_period, pixel_mean, pixel_std, depth_model):
+    def __init__(self, *, backbone, proposal_generator, roi_heads, input_format, vis_period, pixel_mean, pixel_std, depth_model, only_2d):
         super().__init__()
         self.backbone = backbone
         self.proposal_generator = proposal_generator
@@ -274,6 +274,7 @@ class RCNN3D_combined_features(nn.Module):
         self.input_format = input_format
         self.vis_period = vis_period
         self.depth_model = depth_model
+        self.only_2d = only_2d
 
         self.register_buffer("pixel_mean", torch.tensor(pixel_mean).view(-1, 1, 1), False)
         self.register_buffer("pixel_std", torch.tensor(pixel_std).view(-1, 1, 1), False)
@@ -303,6 +304,7 @@ class RCNN3D_combined_features(nn.Module):
             "pixel_mean": cfg.MODEL.PIXEL_MEAN,
             "pixel_std": cfg.MODEL.PIXEL_STD,
             "depth_model": d_model,
+            "only_2d": cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_3D == 0.0,
         }
     
                 
@@ -367,13 +369,18 @@ class RCNN3D_combined_features(nn.Module):
         # This is necessary because the images are of different sizes, so to batch them they must each be the same size.
         images_raw = self.preprocess_image(batched_inputs, img_type='image', convert=True, normalise=False, NoOp=True)
         # if we want depth maps they are there
-        depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False, NoOp=True)
-        # Note if a single ground map in a batch is missing, we skip the ground map for the entire batch 
-        ground_maps_fail = [i['ground_map'] is None for i in batched_inputs]
-        ground_maps_fail_idx = [i for i, x in enumerate(ground_maps_fail) if x]
-        for idx in ground_maps_fail_idx:
-            batched_inputs[idx]['ground_map'] = torch.tensor([[1]]) # make a dummy to indicate a fail
-        ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
+        if not self.only_2d:
+            depth_maps = self.preprocess_image(batched_inputs, img_type="depth_map", normalise=False, NoOp=True)
+
+            ground_maps_fail = [i['ground_map'] is None for i in batched_inputs]
+            ground_maps_fail_idx = [i for i, x in enumerate(ground_maps_fail) if x]
+            for idx in ground_maps_fail_idx:
+                batched_inputs[idx]['ground_map'] = torch.tensor([[1]]) # make a dummy to indicate a fail
+            ground_maps = self.preprocess_image(batched_inputs, img_type="ground_map", normalise=False, NoOp=True)
+        else:
+            ground_maps = None
+            depth_maps = None
+
         # scaling factor for the sample relative to its original scale
         # e.g., how much has the image been upsampled by? or downsampled?
         im_scales_ratio = [info['height'] / im.shape[1] for (info, im) in zip(batched_inputs, images)]

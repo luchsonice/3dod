@@ -19,9 +19,13 @@ def minify_dataset(path, num_images=10):
 
 cats = set({'bicycle', 'books', 'bottle', 'chair', 'cup', 'laptop', 'shoes', 'towel', 'blinds', 'window', 'lamp', 'shelves', 'mirror', 'sink', 'cabinet', 'bathtub', 'door', 'toilet', 'desk', 'box', 'bookcase', 'picture', 'table', 'counter', 'bed', 'night stand', 'pillow', 'sofa', 'television', 'floor mat', 'curtain', 'clothes', 'stationery', 'refrigerator', 'bin', 'stove', 'oven', 'machine'})
 n_images = 103
-minify_dataset('datasets/Omni3D/SUNRGBD_test.json', n_images*2)
-minify_dataset('datasets/Omni3D/SUNRGBD_train.json', n_images)
-minify_dataset('datasets/Omni3D/SUNRGBD_val.json', n_images)
+# minify_dataset('datasets/Omni3D/SUNRGBD_test.json', n_images*2)
+# minify_dataset('datasets/Omni3D/SUNRGBD_train.json', n_images)
+# minify_dataset('datasets/Omni3D/SUNRGBD_val.json', n_images)
+
+minify_dataset('datasets/Omni3D/KITTI_test.json', n_images*2)
+minify_dataset('datasets/Omni3D/KITTI_train.json', n_images)
+minify_dataset('datasets/Omni3D/KITTI_val.json', n_images)
 
 def minify_dataset_cats(path, cats):
     '''make a mini dataset which has all the specified categories'''

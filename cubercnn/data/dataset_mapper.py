@@ -37,6 +37,7 @@ class DatasetMapper3D(DatasetMapper):
         keypoint_hflip_indices: Optional[np.ndarray] = None,
         precomputed_proposal_topk: Optional[int] = None,
         recompute_boxes: bool = False,
+        only_2d: bool = False,
     ):
         """
         NOTE: this interface is experimental.
@@ -68,11 +69,12 @@ class DatasetMapper3D(DatasetMapper):
         self.keypoint_hflip_indices = keypoint_hflip_indices
         self.proposal_topk          = precomputed_proposal_topk
         self.recompute_boxes        = recompute_boxes
+        self.only_2d                = only_2d
+        self.mode                   = mode
         # fmt: on
         logger = logging.getLogger(__name__)
         mode_out = "training" if is_train else "inference"
         logger.info(f"[DatasetMapper] Augmentations used in {mode_out}: {augmentations}")
-        self.mode = mode
 
     @classmethod
     def from_config(cls, cfg, is_train: bool = True, mode='get_depth_maps'):
@@ -92,6 +94,7 @@ class DatasetMapper3D(DatasetMapper):
             "instance_mask_format": cfg.INPUT.MASK_FORMAT,
             "use_keypoint": cfg.MODEL.KEYPOINT_ON,
             "recompute_boxes": recompute_boxes,
+            "only_2d": cfg.MODEL.ROI_CUBE_HEAD.LOSS_W_3D == 0.0,
         }
 
         if cfg.MODEL.KEYPOINT_ON:
@@ -119,25 +122,29 @@ class DatasetMapper3D(DatasetMapper):
         image_shape = image.shape[:2]  # h, w
 
         # dont load ground map and depth map when 
-        dp_img = Image.fromarray(np.load(dataset_dict["depth_image_path"])['depth'])
-        dp_img = np.array(dp_img.resize(image.shape[:2][::-1], Image.NEAREST))
-        aug_input_dp = T.AugInput(dp_img)
-        aug_only_flip = AugmentationList(transforms[-1:])
-        # torch.set_rng_state(state)
-        #transforms_dp = aug_only_flip(aug_input_dp)
-        dp_image = aug_input_dp.image
-        dataset_dict["depth_map"] = torch.as_tensor(np.ascontiguousarray(dp_image))
+        if not self.only_2d:
+            if 'depth_image_path' in dataset_dict:
+                dp_img = Image.fromarray(np.load(dataset_dict["depth_image_path"])['depth'])
+                dp_img = np.array(dp_img.resize(image.shape[:2][::-1], Image.NEAREST))
+                aug_input_dp = T.AugInput(dp_img)
+                aug_only_flip = AugmentationList(transforms[-1:])
+                # torch.set_rng_state(state)
+                #transforms_dp = aug_only_flip(aug_input_dp)
+                dp_image = aug_input_dp.image
+                dataset_dict["depth_map"] = torch.as_tensor(np.ascontiguousarray(dp_image))
+            else:
+                dataset_dict["depth_map"] = None
 
-        #  ground image
-        if 'ground_image_path' in dataset_dict:
-            ground_img = Image.fromarray(np.load(dataset_dict["ground_image_path"])['mask'])
-            ground_img = np.array(ground_img.resize(image.shape[:2][::-1], Image.NEAREST))
-            aug_input_gr = T.AugInput(ground_img)
-            #transforms_gr = aug_only_flip(aug_input_gr)
-            gr_image = aug_input_gr.image
-            dataset_dict["ground_map"] = torch.as_tensor(np.ascontiguousarray(gr_image))
-        else:
-            dataset_dict["ground_map"] = None
+            #  ground image
+            if 'ground_image_path' in dataset_dict:
+                ground_img = Image.fromarray(np.load(dataset_dict["ground_image_path"])['mask'])
+                ground_img = np.array(ground_img.resize(image.shape[:2][::-1], Image.NEAREST))
+                aug_input_gr = T.AugInput(ground_img)
+                #transforms_gr = aug_only_flip(aug_input_gr)
+                gr_image = aug_input_gr.image
+                dataset_dict["ground_map"] = torch.as_tensor(np.ascontiguousarray(gr_image))
+            else:
+                dataset_dict["ground_map"] = None
 
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
@@ -145,10 +152,8 @@ class DatasetMapper3D(DatasetMapper):
         dataset_dict["image"] = torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1)))
 
         # no need for additional processing at inference
-        # if not self.mode == 'eval_with_gt':
-        if self.mode == 'cube_rcnn':
-            if not self.is_train:
-                return dataset_dict
+        if not self.is_train:
+            return dataset_dict
 
         if "annotations" in dataset_dict:
 
