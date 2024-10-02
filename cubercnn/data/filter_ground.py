@@ -1,4 +1,5 @@
 # Basically a hotfix script to avoid having to run the ground segemntation script again
+# this will filter out empty ground maps and add the indices to the no_ground_idx.csv file
 import os
 import torch
 import numpy as np

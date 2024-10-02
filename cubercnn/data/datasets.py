@@ -466,13 +466,6 @@ def load_omni3d_json(json_file, image_root, dataset_name, filter_settings, filte
 
             objs.append(obj)
 
-            # if filter_empty:
-            #     obj["category_id"] = id_map[annotation_category_id]
-            #     if not ignore:
-            #         objs.append(obj)
-            # else:
-                # obj["category_id"] = -1 if ignore else id_map[annotation_category_id]
-
             has_valid_annotation |= (not ignore)
 
         if has_valid_annotation or (not filter_empty):

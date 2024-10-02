@@ -4,15 +4,15 @@ SOLVER:
   IMS_PER_BATCH: 2
   BASE_LR: 0.0001
   STEPS: (5000, 12000)
-  MAX_ITER: 10000 #4972
+  MAX_ITER: 12001 #4972
   WARMUP_ITERS: 0
   CHECKPOINT_PERIOD: 1000
 TEST:
   EVAL_PERIOD: 100000
 VIS_PERIOD: 100
 DATASETS:
-  TRAIN: ('SUNRGBD_train', 'SUNRGBD_val')
-  TEST: ('SUNRGBD_test',)
+  TRAIN: ('SUNRGBD_train_mini', 'SUNRGBD_val_mini', 'KITTI_train_mini', 'KITTI_val_mini')
+  TEST: ('SUNRGBD_test_mini2', 'KITTI_test_mini') 
   CATEGORY_NAMES: ('chair', 'table', 'cabinet', 'car', 'lamp', 'books', 'sofa', 'pedestrian', 'picture', 'window', 'pillow', 'truck', 'door', 'blinds', 'sink', 'shelves', 'television', 'shoes', 'cup', 'bottle', 'bookcase', 'laptop', 'desk', 'cereal box', 'floor mat', 'traffic cone', 'mirror', 'barrier', 'counter', 'camera', 'bicycle', 'toilet', 'bus', 'bed', 'refrigerator', 'trailer', 'box', 'oven', 'clothes', 'van', 'towel', 'motorcycle', 'night stand', 'stove', 'machine', 'stationery', 'bathtub', 'cyclist', 'curtain', 'bin')
 MODEL:
   DEPTH_ON: False #whether to use the depth anything concated features # if do not use this, then we can use ["p2", "p3", "p4", "p5", "p6"], [[32], [64], [128], [256], [512]], otherwise only ["p2", "p3", "p4", "p5"], [[32], [64], [128], [256]]
@@ -32,4 +32,5 @@ MODEL:
     DIMS_PRIORS_ENABLED: True
     POOLER_TYPE: 'ROIAlignV2'
     POOLER_RESOLUTION: 7
+    LOSS_W_3D: 1.0
   META_ARCHITECTURE: 'RCNN3D_combined_features' # name of the overall arch that calls the ROI_HEADS.NAME and ROI_CUBE_HEAD.NAME

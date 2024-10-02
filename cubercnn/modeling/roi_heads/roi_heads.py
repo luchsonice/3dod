@@ -1082,9 +1082,14 @@ class ROIHeads3DScore(StandardROIHeads):
         for ground_map, depth_map, org_image_size, K in zip(ground_maps, depth_maps, depth_maps.image_sizes, Ks):
             if ground_map.shape == (1,1): ground_map = None
             z = depth_map[::use_nth,::use_nth]
+            # i don't know if it makes sense to use the image shape as the 
+            # this way it looks much more correct
+            # https://github.com/DepthAnything/Depth-Anything-V2/blob/31dc97708961675ce6b3a8d8ffa729170a4aa273/metric_depth/depth_to_pointcloud.py#L100
+            width, height = z.shape[1], z.shape[0]
             focal_length_x, focal_length_y = K[0,0], K[1,1]
-            u, v = torch.meshgrid(torch.arange(focal_length_x, device=dvc), torch.arange(focal_length_y,device=dvc), indexing='xy')
-            cx, cy = K[0,2], K[1,2] # principal point of camera
+
+            u, v = torch.meshgrid(torch.arange(width, device=dvc), torch.arange(height,device=dvc), indexing='xy')
+            cx, cy = width / 2, height / 2 # principal point of camera
             # https://www.open3d.org/docs/0.7.0/python_api/open3d.geometry.create_point_cloud_from_depth_image.html
             x = (u - cx) * z / focal_length_x
             y = (v - cy) * z / focal_length_y
@@ -1105,6 +1110,10 @@ class ROIHeads3DScore(StandardROIHeads):
 
             # normalise the points
             points = torch.stack((xg, yg, zg), axis=-1)
+            # for visualisation
+            # pcd = o3d.geometry.PointCloud()
+            # pcd.points = o3d.utility.Vector3dVector(points)
+            # o3d.visualization.draw_geometries([pcd])
             plane = Plane_cuda()
             # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
             best_eq, best_inliers = plane.fit_parallel(points, thresh=0.05, maxIteration=1000)
