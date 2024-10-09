@@ -1,5 +1,6 @@
 # Basically a hotfix script to avoid having to run the ground segemntation script again
 # this will filter out empty ground maps and add the indices to the no_ground_idx.csv file
+# It removes ground maps with very little ground, because we assume that it has found something wrong
 import os
 import torch
 import numpy as np
@@ -10,10 +11,11 @@ files = os.listdir('datasets/ground_maps')
 no_ground = []
 for file in tqdm(files):
     mask = np.load(f'datasets/ground_maps/{file}')['mask']
-    ground_map = torch.as_tensor(mask).unsqueeze(0)
-    nnz = torch.count_nonzero(ground_map, dim=(-2, -1))
-    indices = torch.nonzero(nnz <= 1000).flatten()
-    if len(indices) > 0:
+    ground_map = torch.as_tensor(mask)[::5,::5]
+    nnz = torch.count_nonzero(ground_map).item()
+    # 100 is determined from looking at the pictures
+    if nnz < 100:
+        print(nnz)
         print('indices', file[:-4])
         no_ground.append(int(file[:-4]))
         os.remove(f'datasets/ground_maps/{file}')

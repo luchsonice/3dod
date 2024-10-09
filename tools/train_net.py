@@ -375,7 +375,7 @@ def main(args):
     
     if cfg.log:
         idx = cfg.OUTPUT_DIR.find('/')
-        name = f'{cfg.OUTPUT_DIR[idx+1:]} cube rcnn {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
+        name = f'{cfg.OUTPUT_DIR[idx+1:]} {datetime.datetime.now():%Y-%m-%d %H:%M:%S%z}'
         wandb.init(project="cube", sync_tensorboard=True, name=name, config=cfg)
 
     logger.info('Preprocessing Training Datasets')
