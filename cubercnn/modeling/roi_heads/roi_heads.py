@@ -1642,11 +1642,17 @@ class ROIHeads3DScore(StandardROIHeads):
             
             # compute errors for tracking purposes
             xy_error = (cube_xy - gt_2d).detach().abs()
+            z_error = (cube_z - gt_z).detach().abs()
+            dims_error = (cube_dims - gt_dims).detach().abs()
+
+            storage.put_scalar(prefix + 'z_error', z_error.mean().item(), smoothing_hint=False)
+            storage.put_scalar(prefix + 'dims_error', dims_error.mean().item(), smoothing_hint=False)
+            storage.put_scalar(prefix + 'xy_error', xy_error.mean().item(), smoothing_hint=False)
+            storage.put_scalar(prefix + 'z_close', (z_error<0.20).float().mean().item(), smoothing_hint=False)
 
             IoU2D = iou_2d(gt_boxes, proj_boxes).detach()
             IoU2D = torch.diag(IoU2D.view(n, n))
 
-            storage.put_scalar(prefix + 'xy_error', xy_error.mean().item(), smoothing_hint=False)
             if IoU3Ds is not None:
                 storage.put_scalar(prefix + '3D IoU', IoU3Ds.detach().mean().item(), smoothing_hint=False)
             storage.put_scalar(prefix + '2D IoU', IoU2D.mean().item(), smoothing_hint=False)
