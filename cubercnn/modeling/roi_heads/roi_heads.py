@@ -1236,7 +1236,7 @@ class ROIHeads3DScore(StandardROIHeads):
             return None, None, None
         prior_mean = prior_mean[mask]
         prior_std = prior_std[mask]
-        dimensions = dimensions[mask]
+        #dimensions = dimensions[mask]
 
         # z-score ie how many std's we are from the mean
         dimensions_scores = (dimensions - prior_mean).abs()/prior_std
@@ -1255,7 +1255,7 @@ class ROIHeads3DScore(StandardROIHeads):
         Returns:
             z_loss: torch.Tensor of shape (N, 1)'''
         gt_z = []
-        for depth_map, xy in zip(depth_maps, pred_xy.split(num_boxes_per_image)):
+        for depth_map, xy in zip(depth_maps, pred_xy.squeeze().split(num_boxes_per_image)):
             h, w = depth_map.shape
             y, x = xy[:,1], xy[:,0]
             # clamp points outside the image
@@ -1263,7 +1263,7 @@ class ROIHeads3DScore(StandardROIHeads):
             y = torch.clamp(y,10,h-11)
             gt_z.append(depth_map[y.long(), x.long()])
         gt_z_o = torch.cat(gt_z)
-        l1loss = self.l1_loss(pred_z, gt_z_o)
+        l1loss = 1-self.l1_loss(pred_z.squeeze(), gt_z_o)
         return l1loss
 
     def depth_range_loss(self, gt_mask, at_which_mask_idx, depth_maps, cubes, gt_boxes, num_instances):
@@ -1530,8 +1530,39 @@ class ROIHeads3DScore(StandardROIHeads):
             cubes_tensor = torch.cat((cube_x3d.unsqueeze(1),cube_y3d.unsqueeze(1),cube_z.unsqueeze(1),cube_dims,cube_pose.reshape(n,9)),axis=1).unsqueeze(1)
             cubes = Cubes(cubes_tensor)
             
+            loss_plot = True
+            if loss_plot:
+                cubes_tensor = torch.cat((cube_x3d.unsqueeze(1),cube_y3d.unsqueeze(1),cube_z.unsqueeze(1),cube_dims,cube_pose.reshape(n,9)),axis=1).unsqueeze(1)
+                
+                n_steps = 500
+                interpolated_tensors = torch.zeros(n_steps, 1, 15)
+                for i in range(n_steps):
+                    alpha = i / (n_steps - 1)
+                    interpolated_tensors[i] = (1 - alpha) * cubes_tensor + alpha * gt_cubes.tensor
+                
+                # shuffle
+                shuffled_tensor = interpolated_tensors.clone()
 
-            # 3d iou
+                # Loop over each slice along the third axis (the 15th dimension)
+                for i in range(interpolated_tensors.size(2)):  # tensor.size(2) is 15
+                    indices = torch.randperm(interpolated_tensors.size(0))  # Random permutation for 100 axis
+                    shuffled_tensor[:, :, i] = interpolated_tensors[indices, :, i]
+                
+                interpolated_tensors = shuffled_tensor
+
+                cubes = Cubes(interpolated_tensors)
+                cube_pose = interpolated_tensors[:, :, 6:].reshape(n_steps,3,3)
+
+                # other stuff that needed to be changed
+                Ks_scaled_per_box =  Ks_scaled_per_box.repeat(n_steps, 1, 1)
+                im_sizes *= n_steps
+                num_boxes_per_image[0] = n_steps
+                cube_xy = interpolated_tensors[:,:,:2]
+                cube_z = interpolated_tensors[:,:,2]
+                at_which_mask_idx *= n_steps
+
+
+             # 3d iou
             IoU3Ds = None
             storage = get_event_storage()
             # log 3d iou less frequently because it is slow
@@ -1540,7 +1571,7 @@ class ROIHeads3DScore(StandardROIHeads):
                 proposal_corners = cubes.get_all_corners().squeeze(1)
                 try:
                     vol, iou = box3d_overlap(gt_corners.cpu(),proposal_corners.cpu())
-                    IoU3Ds = torch.diag(iou)
+                    IoU3Ds = iou[0] #torch.diag(iou)
                 except ValueError:
                     IoU3Ds = torch.zeros(n, device=cubes.device)
 
@@ -1572,11 +1603,15 @@ class ROIHeads3DScore(StandardROIHeads):
             # 2D IoU
             gt_boxes = [x.gt_boxes for x in proposals]
             gt_boxes = Boxes(torch.cat([gt_boxes[i].tensor for i in range(len(gt_boxes))]))
+
+            if loss_plot:
+                gt_boxes.tensor = gt_boxes.tensor.repeat(n_steps, 1)
             
             # 2D IoU
             if 'iou' in self.loss_functions:
                 loss_iou = generalized_box_iou_loss(gt_boxes.tensor, proj_boxes.tensor, reduction='none').view(n, -1).mean(dim=1)
-
+                if loss_plot:
+                    loss_iou = generalized_box_iou_loss(gt_boxes.tensor, proj_boxes.tensor, reduction='none')
             # Pose
             if 'pose_alignment' in self.loss_functions:
                 loss_pose = self.pose_loss(cube_pose, num_boxes_per_image)
@@ -1616,6 +1651,55 @@ class ROIHeads3DScore(StandardROIHeads):
             if 'depth' in self.loss_functions:
                 loss_depth = self.depth_range_loss(masks_all_images, at_which_mask_idx, depth_maps, cubes, gt_boxes, num_boxes_per_image)
             
+            if loss_plot:
+                # make plot
+                # savefig
+                import matplotlib.pyplot as plt
+
+                # Create a subplot with two plots
+                fig, (ax1, ax2, ax3, ax4, ax5, ax6) = plt.subplots(6, 1, figsize=(8, 12))
+
+                # Plot loss_iou over IoU3Ds
+                ax1.scatter(IoU3Ds.detach().numpy(), loss_iou.detach().numpy())
+                ax1.set_xlabel('IoU3Ds')
+                ax1.set_ylabel('loss_iou')
+
+                # Plot loss_ground_rot over IoU3Ds
+                ax2.scatter(IoU3Ds.detach().numpy(), loss_ground_rot.detach().numpy())
+                ax2.set_xlabel('IoU3Ds')
+                ax2.set_ylabel('loss_ground_rot')
+
+                # Plot loss_pseudo_gt_z over IoU3Ds
+                ax3.scatter(IoU3Ds.detach().numpy(), loss_pseudo_gt_z.detach().numpy())
+                ax3.set_xlabel('IoU3Ds')
+                ax3.set_ylabel('loss_pseudo_gt_z')
+
+                # Plot loss_dims over IoU3Ds
+                ax4.scatter(IoU3Ds.detach().numpy(), (loss_dims_w+loss_dims_h+loss_dims_l).detach().numpy())
+                ax4.set_xlabel('IoU3Ds')
+                ax4.set_ylabel('loss_dims')
+
+                # Plot loss_depth over IoU3Ds
+                ax5.scatter(IoU3Ds.detach().numpy(), loss_depth.detach().numpy())
+                ax5.set_xlabel('IoU3Ds')
+                ax5.set_ylabel('loss_depth_range')
+
+                # Plot combine over IoU3Ds
+                ax6.scatter(IoU3Ds.detach().numpy(), (loss_iou+loss_depth).detach().numpy())
+                ax6.set_xlabel('IoU3Ds')
+                ax6.set_ylabel('loss_combined')
+
+                # Adjust the spacing between subplots
+                plt.tight_layout()
+
+                # Save the plot
+                plt.savefig('loss_plot.png')
+
+                # Show the plot
+                plt.show()
+                exit()
+
+
             total_3D_loss_for_reporting = 0
             if loss_iou is not None:
                 total_3D_loss_for_reporting += loss_iou*self.loss_w_iou

@@ -13,3 +13,4 @@ numpy
 opencv-python
 pyransac3d
 pandas
+wandb

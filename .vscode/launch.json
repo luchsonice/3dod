@@ -183,7 +183,7 @@
             "program": "tools/train_net.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--config-file", "configs/Omni_combined.yaml", "OUTPUT_DIR", "output/omni3d_combined_test", "log", "False", "loss_functions", "['iou', 'z_pseudo_gt_center', 'pose_alignment', 'pose_ground']"]
+            "args": ["--config-file", "configs/Omni_combined.yaml", "OUTPUT_DIR", "output/omni3d_combined_test", "log", "False", "loss_functions", "['iou', 'z_pseudo_gt_center', 'dims', 'depth', 'pose_alignment', 'pose_ground']"]
         },
         
     ]
