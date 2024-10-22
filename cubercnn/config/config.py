@@ -183,5 +183,5 @@ def get_cfg_defaults(cfg):
     # these are meant to be overwritten as an argument
     cfg.log = True
     # (these 2 are mutually exclusive) z_pseudo_gt_patch or z_pseudo_gt_center 
-    cfg.loss_functions = ['dims', 'pose_alignment', 'pose_ground', 'iou', 'z', 'z_pseudo_gt_patch', 'depth']
+    cfg.loss_functions = ['dims', 'pose_alignment', 'pose_ground', 'iou', 'z_pseudo_gt_center']
     cfg.MODEL.DEPTH_ON = False #whether to use the depth anything concated features

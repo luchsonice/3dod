@@ -17,11 +17,11 @@ python tools/train_net.py \
     --resume \
     --config-file configs/Omni_combined.yaml \
     OUTPUT_DIR output/weak-cube-2_20_2_001_2 \
-    log True \
-    loss_functions "['iou', 'z_pseudo_gt_center', 'pose_alignment', 'pose_ground']" \
+    log False \
+    loss_functions "['iou', 'z_pseudo_gt_center', 'dims', 'pose_alignment', 'pose_ground']" \
     MODEL.WEIGHTS output/omni3d-2d-only/model_final.pth \
-    MODEL.ROI_CUBE_HEAD.LOSS_W_IOU 2.0 \
-    MODEL.ROI_CUBE_HEAD.LOSS_W_NORMAL_VEC 20.0 \
-    MODEL.ROI_CUBE_HEAD.LOSS_W_Z 2.0 \
+    MODEL.ROI_CUBE_HEAD.LOSS_W_IOU 5.0 \
+    MODEL.ROI_CUBE_HEAD.LOSS_W_NORMAL_VEC 1.0 \
+    MODEL.ROI_CUBE_HEAD.LOSS_W_Z 5.0 \
     MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS 0.01 \
-    MODEL.ROI_CUBE_HEAD.LOSS_W_POSE 2.0 \
+    MODEL.ROI_CUBE_HEAD.LOSS_W_POSE 1.0 \

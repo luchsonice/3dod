@@ -1263,8 +1263,9 @@ class ROIHeads3DScore(StandardROIHeads):
             y = torch.clamp(y,10,h-11)
             gt_z.append(depth_map[y.long(), x.long()])
         gt_z_o = torch.cat(gt_z)
-        l1loss = 1-self.l1_loss(pred_z.squeeze(), gt_z_o)
+        l1loss = self.l1_loss(pred_z.squeeze(), gt_z_o)
         return l1loss
+        
 
     def depth_range_loss(self, gt_mask, at_which_mask_idx, depth_maps, cubes, gt_boxes, num_instances):
         """
@@ -1533,11 +1534,11 @@ class ROIHeads3DScore(StandardROIHeads):
             loss_plot = True
             if loss_plot:
                 cubes_tensor = torch.cat((cube_x3d.unsqueeze(1),cube_y3d.unsqueeze(1),cube_z.unsqueeze(1),cube_dims,cube_pose.reshape(n,9)),axis=1).unsqueeze(1)
-                
+
                 n_steps = 500
-                interpolated_tensors = torch.zeros(n_steps, 1, 15)
-                for i in range(n_steps):
-                    alpha = i / (n_steps - 1)
+                interpolated_tensors = torch.zeros(n_steps // 2, 1, 15)
+                for i in range(n_steps // 2):
+                    alpha = i / ((n_steps // 2) - 1)
                     interpolated_tensors[i] = (1 - alpha) * cubes_tensor + alpha * gt_cubes.tensor
                 
                 # shuffle
@@ -1548,7 +1549,10 @@ class ROIHeads3DScore(StandardROIHeads):
                     indices = torch.randperm(interpolated_tensors.size(0))  # Random permutation for 100 axis
                     shuffled_tensor[:, :, i] = interpolated_tensors[indices, :, i]
                 
-                interpolated_tensors = shuffled_tensor
+                noise = torch.normal(mean=0, std=0.1, size=interpolated_tensors.size())
+                interpolated_tensors = interpolated_tensors + noise
+
+                interpolated_tensors = torch.cat((shuffled_tensor,interpolated_tensors),dim=0)
 
                 cubes = Cubes(interpolated_tensors)
                 cube_pose = interpolated_tensors[:, :, 6:].reshape(n_steps,3,3)
@@ -1557,7 +1561,7 @@ class ROIHeads3DScore(StandardROIHeads):
                 Ks_scaled_per_box =  Ks_scaled_per_box.repeat(n_steps, 1, 1)
                 im_sizes *= n_steps
                 num_boxes_per_image[0] = n_steps
-                cube_xy = interpolated_tensors[:,:,:2]
+                cube_xy = Boxes.cat(cubes_to_box(cubes,Ks_scaled_per_box[0],im_sizes[0])).get_centers()
                 cube_z = interpolated_tensors[:,:,2]
                 at_which_mask_idx *= n_steps
 
@@ -1685,7 +1689,7 @@ class ROIHeads3DScore(StandardROIHeads):
                 ax5.set_ylabel('loss_depth_range')
 
                 # Plot combine over IoU3Ds
-                ax6.scatter(IoU3Ds.detach().numpy(), (loss_iou+loss_depth).detach().numpy())
+                ax6.scatter(IoU3Ds.detach().numpy(), (loss_iou+1/5*loss_ground_rot+loss_pseudo_gt_z+4*(loss_dims_w+loss_dims_h+loss_dims_l)).detach().numpy())
                 ax6.set_xlabel('IoU3Ds')
                 ax6.set_ylabel('loss_combined')
 
