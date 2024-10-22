@@ -1259,15 +1259,10 @@ class ROIHeads3DScore(StandardROIHeads):
             h, w = depth_map.shape
             y, x = xy[:,1], xy[:,0]
 
-            # Normalize coordinates
-            x_norm = (2.0 * x / (w - 1)) - 1  # Convert to range [-1, 1]
-            y_norm = (2.0 * y / (h - 1)) - 1  # Convert to range [-1, 1]
-
-            # Stack x and y to create a grid
-            grid = torch.stack((x_norm, y_norm), dim=-1).unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, N, 2)
-            # Perform bilinear sampling with grid_sample
-            interpolated_depth = F.grid_sample(depth_map.unsqueeze(0).unsqueeze(0), grid, align_corners=True, mode='bilinear')
-            gt_z.append(interpolated_depth.squeeze().flatten())
+            # clamp points outside the image
+            x = torch.clamp(x,10,w-11)
+            y = torch.clamp(y,10,h-11)
+            gt_z.append(depth_map[y.long(), x.long()])
 
         gt_z_o = torch.cat(gt_z)
         l1loss = self.l1_loss(pred_z, gt_z_o)
