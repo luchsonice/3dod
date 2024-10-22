@@ -1,29 +1,27 @@
 #!/bin/sh
-#BSUB -J omni3d_example_run
+#BSUB -J weak_cube_w_high
 #BSUB -o hpc_logs/%J.out
 #BSUB -e hpc_logs/%J.err
 #BSUB -n 4
-#BSUB -q gpua100
+#BSUB -q gpua40
 #BSUB -gpu 'num=1:mode=exclusive_process'
-#BSUB -W 5:30
+#BSUB -W 20:00
 #BSUB -R 'rusage[mem=8GB]'
 #BSUB -R 'span[hosts=1]'
-#BSUB -B
 
-source /work3/s194369/3dod_hpc_env/bin/activate
+source /work3/s194369/3dod/3dod_paper/bin/activate
 export PYTHONPATH=/work3/s194369/3dod
 
-# Run evaluation
-python tools/eval_boxes.py --eval-only \
-    --config-file configs/BoxNet.yaml \
-    PLOT.EVAL MABO \
-    PLOT.MODE2D GT \
-    PLOT.PROPOSAL_FUNC full_dim \
-    MODEL.WEIGHTS output/Baseline_sgd/model_final.pth \
-    OUTPUT_DIR output/propose_full_dim \
-    PLOT.SCORING_FUNC True
-
-# Run baseline
-#CUDA_VISIBLE_DEVICES=0 python tools/train_net.py \
-#  --config-file configs/Base_Omni3D.yaml \
-#  OUTPUT_DIR output/Baseline_trial
+# Run
+python tools/train_net.py \
+    --resume \
+    --config-file configs/Omni_combined.yaml \
+    OUTPUT_DIR output/weak-cube-2_20_2_001_2_ \
+    log True \
+    loss_functions "['iou', 'z_pseudo_gt_center', 'pose_alignment', 'pose_ground']" \
+    MODEL.WEIGHTS output/omni3d-2d-only/model_final.pth \
+    MODEL.ROI_CUBE_HEAD.LOSS_W_IOU 4.0 \
+    MODEL.ROI_CUBE_HEAD.LOSS_W_NORMAL_VEC 40.0 \
+    MODEL.ROI_CUBE_HEAD.LOSS_W_Z 100.0 \
+    MODEL.ROI_CUBE_HEAD.LOSS_W_DIMS 0.1 \
+    MODEL.ROI_CUBE_HEAD.LOSS_W_POSE 4.0 \

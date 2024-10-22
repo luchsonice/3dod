@@ -1,18 +1,18 @@
 _BASE_: "Base.yaml"
 SOLVER:
   TYPE: "sgd"
-  IMS_PER_BATCH: 2
-  BASE_LR: 0.0001
-  STEPS: (5000, 12000)
-  MAX_ITER: 12001 #4972
+  IMS_PER_BATCH: 25
+  BASE_LR: 0.015
+  STEPS: (35000, 40000)
+  MAX_ITER: 42001
   WARMUP_ITERS: 0
   CHECKPOINT_PERIOD: 1000
 TEST:
   EVAL_PERIOD: 100000
-VIS_PERIOD: 100
+VIS_PERIOD: 1000
 DATASETS:
-  TRAIN: ('SUNRGBD_train_mini', 'SUNRGBD_val_mini', 'KITTI_train_mini', 'KITTI_val_mini')
-  TEST: ('SUNRGBD_test_mini2', 'KITTI_test_mini') 
+  TRAIN: ('SUNRGBD_train', 'SUNRGBD_val') #, 'KITTI_train_mini', 'KITTI_val_mini')
+  TEST: ('SUNRGBD_test',) # 'KITTI_test_mini') 
   CATEGORY_NAMES: ('chair', 'table', 'cabinet', 'car', 'lamp', 'books', 'sofa', 'pedestrian', 'picture', 'window', 'pillow', 'truck', 'door', 'blinds', 'sink', 'shelves', 'television', 'shoes', 'cup', 'bottle', 'bookcase', 'laptop', 'desk', 'cereal box', 'floor mat', 'traffic cone', 'mirror', 'barrier', 'counter', 'camera', 'bicycle', 'toilet', 'bus', 'bed', 'refrigerator', 'trailer', 'box', 'oven', 'clothes', 'van', 'towel', 'motorcycle', 'night stand', 'stove', 'machine', 'stationery', 'bathtub', 'cyclist', 'curtain', 'bin')
 MODEL:
   DEPTH_ON: False #whether to use the depth anything concated features # if do not use this, then we can use ["p2", "p3", "p4", "p5", "p6"], [[32], [64], [128], [256], [512]], otherwise only ["p2", "p3", "p4", "p5"], [[32], [64], [128], [256]]
