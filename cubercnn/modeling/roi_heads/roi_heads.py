@@ -1242,7 +1242,7 @@ class ROIHeads3DScore(StandardROIHeads):
         dimensions_scores = (dimensions - prior_mean).abs()/prior_std
 
         dimensions_scores = torch.max(dimensions_scores - 1.0, torch.zeros_like(dimensions_scores, device=dimensions_scores.device))
-       
+        
         return dimensions_scores[:,0], dimensions_scores[:,1], dimensions_scores[:,2]
     
     def pseudo_gt_z_point_loss(self, depth_maps, pred_xy, pred_z, num_boxes_per_image):
@@ -1549,10 +1549,16 @@ class ROIHeads3DScore(StandardROIHeads):
                     indices = torch.randperm(interpolated_tensors.size(0))  # Random permutation for 100 axis
                     shuffled_tensor[:, :, i] = interpolated_tensors[indices, :, i]
                 
-                noise = torch.normal(mean=0, std=0.1, size=interpolated_tensors.size())
+                noise = torch.normal(mean=0, std=0.03, size=interpolated_tensors.size())
                 interpolated_tensors = interpolated_tensors + noise
 
                 interpolated_tensors = torch.cat((shuffled_tensor,interpolated_tensors),dim=0)
+
+                # test
+                interpolated_tensors = gt_cubes.tensor.repeat(n_steps,1,1)
+                noise = torch.normal(mean=0, std=0.02, size=interpolated_tensors.size())
+                interpolated_tensors = interpolated_tensors + noise
+                interpolated_tensors[-1] = gt_cubes.tensor
 
                 cubes = Cubes(interpolated_tensors)
                 cube_pose = interpolated_tensors[:, :, 6:].reshape(n_steps,3,3)
@@ -1689,7 +1695,7 @@ class ROIHeads3DScore(StandardROIHeads):
                 ax5.set_ylabel('loss_depth_range')
 
                 # Plot combine over IoU3Ds
-                ax6.scatter(IoU3Ds.detach().numpy(), (loss_iou+1/5*loss_ground_rot+loss_pseudo_gt_z+4*(loss_dims_w+loss_dims_h+loss_dims_l)).detach().numpy())
+                ax6.scatter(IoU3Ds.detach().numpy(), (loss_iou+1/5*loss_ground_rot+loss_pseudo_gt_z+1/5*(loss_dims_w+loss_dims_h+loss_dims_l)).detach().numpy())
                 ax6.set_xlabel('IoU3Ds')
                 ax6.set_ylabel('loss_combined')
 
