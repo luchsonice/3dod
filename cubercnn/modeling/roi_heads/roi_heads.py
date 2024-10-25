@@ -812,7 +812,7 @@ class ROIHeads3DScore(StandardROIHeads):
 
         cube_head = build_cube_head(cfg, shape)
         logger.info('Loss functions: %s', cfg.loss_functions)
-        possible_losses = ['dims', 'pose_alignment', 'pose_ground', 'iou', 'segmentation', 'z', 'z_pseudo_gt_patch', 'z_pseudo_gt_center','depth']
+        possible_losses = ['dims', 'pose_alignment', 'pose_ground', 'pose_ground2', 'iou', 'segmentation', 'z', 'z_pseudo_gt_patch', 'z_pseudo_gt_center','depth']
         assert all([x in possible_losses for x in cfg.loss_functions]), f'loss functions must be in {possible_losses}, but was {cfg.loss_functions}'
 
         if 'segmentation' in cfg.loss_functions or 'depth' in cfg.loss_functions:
@@ -1296,6 +1296,15 @@ class ROIHeads3DScore(StandardROIHeads):
 
         return scores
 
+    def normal_to_rotation(self, normal):
+        '''https://gamedev.stackexchange.com/questions/22204/from-normal-to-rotation-matrix'''
+        t0 = torch.cross(normal, torch.tensor([1.0, 0, 0], device=normal.device).repeat(normal.shape[0],1))
+        if torch.bmm(t0.view(normal.shape[0],1,3), t0.view(normal.shape[0], 3, 1)).flatten().any() < 0.001:
+            t0 = torch.cross(normal, torch.tensor([0, 1.0, 0], device=normal.device).repeat(normal.shape[0],1))
+        t0 = t0 / torch.norm(t0)
+        t1t = torch.cross(normal, t0)
+        t1 = t1t / torch.norm(t1t)
+        return torch.cat([t0, t1, normal],dim=1).reshape((normal.shape[0],3,3))#.permute((0,2,1))
 
     def _forward_cube(self, features, instances, Ks, im_current_dims, im_scales_ratio, masks_all_images, first_occurrence_indices, ground_maps, depth_maps):
         
@@ -1594,6 +1603,18 @@ class ROIHeads3DScore(StandardROIHeads):
                 valid_ground_maps_conf = valid_ground_maps_conf.repeat_interleave(num_boxes_per_image_tensor, 0)
                 pred_normal = cube_pose[:, 1, :]
                 loss_ground_rot = 1-F.cosine_similarity(normal_vectors, pred_normal, dim=1).abs()
+                loss_ground_rot = loss_ground_rot * valid_ground_maps_conf
+
+            if 'pose_ground2' in self.loss_functions:
+                valid_ground_maps_conf = torch.tensor([0.1 if shape == (1,1) else 1.0 for shape in ground_maps.image_sizes],device=cube_pose.device)
+                num_boxes_per_image_tensor = torch.tensor(num_boxes_per_image,device=Ks_scaled_per_box.device)
+                normal_vectors = self.normal_vector_from_maps(ground_maps, depth_maps, Ks_scaled_per_box)
+                normal_vectors = normal_vectors.repeat_interleave(num_boxes_per_image_tensor, 0)
+                valid_ground_maps_conf = valid_ground_maps_conf.repeat_interleave(num_boxes_per_image_tensor, 0)
+                ps_gt_rotation_matrix = self.normal_to_rotation(normal_vectors) 
+                # might need to transpose the rotation matrices
+                pred_rotation_matrix = cube_pose
+                loss_ground_rot = 1 - so3_relative_angle(pred_rotation_matrix, ps_gt_rotation_matrix, cos_angle=True)#.abs()
                 loss_ground_rot = loss_ground_rot * valid_ground_maps_conf
 
             # pseudo ground truth z loss
