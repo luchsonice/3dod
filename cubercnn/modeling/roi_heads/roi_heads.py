@@ -1086,7 +1086,7 @@ class ROIHeads3DScore(StandardROIHeads):
             # this way it looks much more correct
             # https://github.com/DepthAnything/Depth-Anything-V2/blob/31dc97708961675ce6b3a8d8ffa729170a4aa273/metric_depth/depth_to_pointcloud.py#L100
             width, height = z.shape[1], z.shape[0]
-            focal_length_x, focal_length_y = K[0,0], K[1,1]
+            focal_length_x, focal_length_y = K[0,0] // use_nth, K[1,1] // use_nth
 
             u, v = torch.meshgrid(torch.arange(width, device=dvc), torch.arange(height,device=dvc), indexing='xy')
             cx, cy = width / 2, height / 2 # principal point of camera
@@ -1110,10 +1110,7 @@ class ROIHeads3DScore(StandardROIHeads):
 
             # normalise the points
             points = torch.stack((xg, yg, zg), axis=-1)
-            # for visualisation
-            # pcd = o3d.geometry.PointCloud()
-            # pcd.points = o3d.utility.Vector3dVector(points)
-            # o3d.visualization.draw_geometries([pcd])
+
             plane = Plane_cuda()
             # best_eq is the ground plane as a,b,c,d in the equation ax + by + cz + d = 0
             # if this errors out, run the filter ground script first
@@ -1137,6 +1134,17 @@ class ROIHeads3DScore(StandardROIHeads):
             if normal_vec @ y_up < 0:
                 normal_vec *= -1
             normal_vecs.append(normal_vec)
+
+            # for visualisation
+            # pcd = o3d.geometry.PointCloud()
+            # pcd.points = o3d.utility.Vector3dVector(points)
+            # plane = pcd.select_by_index(best_inliers.numpy()).paint_uniform_color([1, 0, 0])
+            # not_plane = pcd.select_by_index(best_inliers.numpy(), invert=True)
+            # mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(origin=[0, 0, 0])
+            # obb = plane.get_oriented_bounding_box()
+            
+            # objs = [pcd, plane, not_plane, mesh, obb]
+            # o3d.visualization.draw_geometries(objs)
 
         return torch.stack(normal_vecs)
     
@@ -1298,11 +1306,13 @@ class ROIHeads3DScore(StandardROIHeads):
 
     def normal_to_rotation(self, normal):
         '''https://gamedev.stackexchange.com/questions/22204/from-normal-to-rotation-matrix'''
-        t0 = torch.cross(normal, torch.tensor([1.0, 0, 0], device=normal.device).repeat(normal.shape[0],1))
+        x1 = torch.tensor([1.0, 0, 0], device=normal.device).repeat(normal.shape[0],1)
+        t0 = torch.cross(normal, x1, dim=1)
         if torch.bmm(t0.view(normal.shape[0],1,3), t0.view(normal.shape[0], 3, 1)).flatten().any() < 0.001:
-            t0 = torch.cross(normal, torch.tensor([0, 1.0, 0], device=normal.device).repeat(normal.shape[0],1))
+            y1 = torch.tensor([0, 1.0, 0], device=normal.device).repeat(normal.shape[0],1)
+            t0 = torch.cross(normal, y1, dim=1)
         t0 = t0 / torch.norm(t0)
-        t1t = torch.cross(normal, t0)
+        t1t = torch.cross(normal, t0, dim=1)
         t1 = t1t / torch.norm(t1t)
         return torch.cat([t0, t1, normal],dim=1).reshape((normal.shape[0],3,3))#.permute((0,2,1))
 
