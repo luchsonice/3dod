@@ -1,7 +1,7 @@
-import json
+import torch
 from detectron2.data.catalog import MetadataCatalog
 from cubercnn import data
-from cubercnn.util.math_util import estimate_truncation
+from cubercnn.util.math_util import estimate_truncation, mat2euler, R_to_allocentric
 import os
 import numpy as np
 
@@ -25,29 +25,99 @@ thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
 dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
 
 
-
-with open('output/weak-cube-w_low/inference/iter_final/SUNRGBD_test_mini2/omni_instances_results.json', 'r') as f:
-    data_json = json.load(f)
-
-a = 2
+data_json = torch.load('output/kitti_test/instances_predictions.pth')
 
 types = ['Car', 'Van', 'Truck', 'Pedestrian', 'Person_sitting', 'Cyclist', 'Tram', 'Misc', 'DontCare']
 # omni3d only has these ['pedestrian', 'car', 'cyclist', 'van', 'truck']
 
+def perp_vector(a, b):
+    return np.array([b, -a])  
+
+def rotate_vector(x, y, theta):
+    
+    # Calculate the rotated coordinates
+    x_rotated = x * np.cos(theta) - y * np.sin(theta)
+    y_rotated = x * np.sin(theta) + y * np.cos(theta)
+    
+    return np.array([x_rotated, y_rotated])
+
+
+def calculate_alpha(location, ry):
+    '''
+    location: x, y, z coordinates
+    ry: rotation around y-axis, negative counter-clockwise,
+    
+    positive x-axis is to the right
+    calculate the angle from a line perpendicular to the camera to the center of the bounding box'''
+
+    # get vector from camera to object
+    ry = -ry
+    x, y, z = location
+    vector = np.array([x, y, z])
+    # get angle from z-axis to the vector
+    theta = np.arctan2(x, z)
+    # vector from [0,0,0] to the center of the bounding box
+    # we can do the whole thing in 2D, top down view
+    center = np.array([x, z])
+    # vector perpendicular to center
+    perpendicular = perp_vector(x,z)
+    # vector corresponding to ry
+    ry_vector = np.array([np.cos(ry), np.sin(ry)])
+    # angle between perpendicular and ry_vector
+    alpha = np.arccos(np.dot(perpendicular, ry_vector) / (np.linalg.norm(perpendicular) * np.linalg.norm(ry_vector)))
+  
+    # wrap to -pi to pi
+    if alpha > np.pi:
+        alpha -= 2*np.pi
+    if alpha < -np.pi:
+        alpha += 2*np.pi
+    return alpha
+
+def test_calculate_alpha():
+    location = [-3.67, 1.67, 6.05]
+    ry = -1.24
+    expected = -0.72
+
+    result1 = calculate_alpha(location, ry)
+
+    location = [-9.48, 2.08, 26.41]
+    ry = 1.77
+    expected = 2.11
+    result2 = calculate_alpha(location, ry)
+
+    location = [4.19, 1.46, 44.41]
+    ry = -1.35
+    expected = -1.45
+    result3 = calculate_alpha(location, ry)
+
+    location = [-6.41, 2.04, 46.74]
+    ry = 1.68
+    expected = 1.82
+    result4 = calculate_alpha(location, ry)
+
+    # assert np.isclose(result, expected, atol=0.01)
+    return result1
+
+alpha = test_calculate_alpha()
 # reference
 # https://github.com/ZrrSkywalker/MonoDETR/blob/c724572bddbc067832a0e0d860a411003f36c2fa/lib/helpers/tester_helper.py#L114
-for annotation in data_json:
-    for keys in annotation:
-        for key in keys: #image_id, category_id, bbox, score, depth, bbox3D, center_cam, center_2D, dimensions, pose
-            category = dataset_id_to_contiguous_id[annotation[key]]
-            truncation = estimate_truncation(K, bbox3D, pose, width, height)
-            occluded = 3
-            alpha = 0
-            bbox = bbox
-            dimensions = dimensions
-            location = center_cam
-            rotation_y = np.atan2(pose[0, 0], pose[2, 0])
-            score = score
+for image in data_json:
+    K = image['K']
+    width, height = image['width'], image['height']
+    image_id = image['image_id']
+    for pred in image['instances']:
+
+        category = dataset_id_to_contiguous_id[pred['category_id']]
+        truncation = -1
+        occluded = -1
+        rotation_y = mat2euler(np.array(pred['pose']))[1]
+        bbox = pred['bbox'] # x1, y1, x2, y2 -> convert to left, top, right, bottom
+        bbox = [np.min([bbox[0], bbox[2]]), np.min([bbox[1], bbox[3]]), np.max([bbox[0], bbox[2]]), np.max([bbox[1], bbox[3]])]
+        dimensions = pred['dimensions']
+        location = pred['center_cam']
+        score = pred['score']
+        # alpha is the angle from the z-axis to the center of the bounding box
+        alpha = calculate_alpha(location, rotation_y)
 
 # 7518 test images
 for img_id in range(7518):
