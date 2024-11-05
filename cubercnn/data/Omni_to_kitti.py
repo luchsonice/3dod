@@ -125,8 +125,9 @@ for image in tqdm(data_json):
         alpha = calculate_alpha(location, rotation_y)
 
         # convert to KITTI format
-        str_ += f'{category} {truncation} {occluded} {alpha:.2f} {bbox[0]:.2f} {bbox[1]:.2f} {bbox[2]:.2f} {bbox[3]:.2f} {dimensions[0]:.2f} {dimensions[1]:.2f} {dimensions[2]:.2f} {location[0]:.2f} {location[1]:.2f} {location[2]:.2f} {rotation_y:.2f} {score:.2f}\n'
-        str_ = str_[0].upper() + str_[1:]
+        str_i = f'{category} {truncation} {occluded} {alpha:.2f} {bbox[0]:.2f} {bbox[1]:.2f} {bbox[2]:.2f} {bbox[3]:.2f} {dimensions[0]:.2f} {dimensions[1]:.2f} {dimensions[2]:.2f} {location[0]:.2f} {location[1]:.2f} {location[2]:.2f} {rotation_y:.2f} {score:.2f}\n'
+        str_i = str_i[0].upper() + str_i[1:]
+        str_ += str_i
     files.append(str_)
 
 # 7518 test images
