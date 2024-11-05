@@ -4,9 +4,10 @@ from cubercnn import data
 from cubercnn.util.math_util import estimate_truncation, mat2euler, R_to_allocentric
 import os
 import numpy as np
+from tqdm import tqdm
 
 name = 'KITTI'
-split = 'test_mini'
+split = 'test'
 dataset_paths_to_json = [f'datasets/Omni3D/{name}_{split}.json',]
 os.makedirs('output/KITTI_formatted_predictions', exist_ok=True)
 
@@ -25,11 +26,8 @@ thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
 dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
 
 
-data_json = torch.load('output/kitti_test/instances_predictions.pth')
-
-types = ['Car', 'Van', 'Truck', 'Pedestrian', 'Person_sitting', 'Cyclist', 'Tram', 'Misc', 'DontCare']
-# omni3d only has these ['pedestrian', 'car', 'cyclist', 'van', 'truck']
-
+data_json = torch.load('output/kitti_res/instances_predictions.pth')
+# 
 def perp_vector(a, b):
     return np.array([b, -a])  
 
@@ -51,12 +49,8 @@ def calculate_alpha(location, ry):
     # get vector from camera to object
     ry = -ry
     x, y, z = location
-    vector = np.array([x, y, z])
-    # get angle from z-axis to the vector
-    theta = np.arctan2(x, z)
     # vector from [0,0,0] to the center of the bounding box
     # we can do the whole thing in 2D, top down view
-    center = np.array([x, z])
     # vector perpendicular to center
     perpendicular = perp_vector(x,z)
     # vector corresponding to ry
@@ -111,13 +105,15 @@ alpha = test_calculate_alpha()
 
 # reference
 # https://github.com/ZrrSkywalker/MonoDETR/blob/c724572bddbc067832a0e0d860a411003f36c2fa/lib/helpers/tester_helper.py#L114
-for image in data_json:
+files = []
+for image in tqdm(data_json):
     K = image['K']
     width, height = image['width'], image['height']
     image_id = image['image_id']
+    str_ = ''
     for pred in image['instances']:
 
-        category = dataset_id_to_contiguous_id[pred['category_id']]
+        category = thing_classes[pred['category_id']]
         truncation = -1
         occluded = -1
         rotation_y = mat2euler(np.array(pred['pose']))[1]
@@ -126,15 +122,20 @@ for image in data_json:
         dimensions = pred['dimensions']
         location = pred['center_cam']
         score = pred['score']
-        # alpha is the angle from the z-axis to the center of the bounding box
         alpha = calculate_alpha(location, rotation_y)
 
+        # convert to KITTI format
+        str_ += f'{category} {truncation} {occluded} {alpha:.2f} {bbox[0]:.2f} {bbox[1]:.2f} {bbox[2]:.2f} {bbox[3]:.2f} {dimensions[0]:.2f} {dimensions[1]:.2f} {dimensions[2]:.2f} {location[0]:.2f} {location[1]:.2f} {location[2]:.2f} {rotation_y:.2f} {score:.2f}\n'
+        str_ = str_[0].upper() + str_[1:]
+    files.append(str_)
+
 # 7518 test images
-for img_id in range(7518):
+for img_id, file in enumerate(files):
 
     img_id_str = str(img_id).zfill(6)
     with open(f'output/KITTI_formatted_predictions/{img_id_str}.txt', 'w') as f:
-        f.write()
+        f.write(file)
+
 
 # write to file 
 # #Values    Name      Description
