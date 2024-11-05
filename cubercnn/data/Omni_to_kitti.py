@@ -34,13 +34,11 @@ def perp_vector(a, b):
     return np.array([b, -a])  
 
 def rotate_vector(x, y, theta):
-    
     # Calculate the rotated coordinates
     x_rotated = x * np.cos(theta) - y * np.sin(theta)
     y_rotated = x * np.sin(theta) + y * np.cos(theta)
     
     return np.array([x_rotated, y_rotated])
-
 
 def calculate_alpha(location, ry):
     '''
@@ -64,8 +62,10 @@ def calculate_alpha(location, ry):
     # vector corresponding to ry
     ry_vector = np.array([np.cos(ry), np.sin(ry)])
     # angle between perpendicular and ry_vector
-    alpha = np.arccos(np.dot(perpendicular, ry_vector) / (np.linalg.norm(perpendicular) * np.linalg.norm(ry_vector)))
-  
+    dot = perpendicular[0]*ry_vector[0] + perpendicular[1]*ry_vector[1]      # Dot product between [x1, y1] and [x2, y2]
+    det = perpendicular[0]*ry_vector[1] - perpendicular[1]*ry_vector[0]      # Determinant
+    alpha = -np.arctan2(det, dot)
+
     # wrap to -pi to pi
     if alpha > np.pi:
         alpha -= 2*np.pi
@@ -77,7 +77,6 @@ def test_calculate_alpha():
     location = [-3.67, 1.67, 6.05]
     ry = -1.24
     expected = -0.72
-
     result1 = calculate_alpha(location, ry)
 
     location = [-9.48, 2.08, 26.41]
@@ -95,10 +94,21 @@ def test_calculate_alpha():
     expected = 1.82
     result4 = calculate_alpha(location, ry)
 
+    location = [0.28, 2.08, 17.74]
+    ry = -1.58
+    expected = -1.59
+    result5 = calculate_alpha(location, ry)
+
+    location = [-3.21, 1.97, 11.22]
+    ry = -0.13
+    expected = 0.15
+    result6 = calculate_alpha(location, ry)
+
     # assert np.isclose(result, expected, atol=0.01)
     return result1
 
 alpha = test_calculate_alpha()
+
 # reference
 # https://github.com/ZrrSkywalker/MonoDETR/blob/c724572bddbc067832a0e0d860a411003f36c2fa/lib/helpers/tester_helper.py#L114
 for image in data_json:
