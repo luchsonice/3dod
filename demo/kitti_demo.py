@@ -137,7 +137,6 @@ def do_test(args, cfg, model):
                 box_mesh = util.mesh_cuboid(bbox3D, pose.tolist(), color=color)
                 meshes.append(box_mesh)
         
-        print('File: {} with {} dets'.format(im_name, len(meshes)))
 
         if len(meshes) > 0:
             im_drawn_rgb, im_topdown, _ = vis.draw_scene_view(im, K, meshes, text=meshes_text, scale=im.shape[0], blend_weight=0.5, blend_weight_overlay=0.85)
@@ -154,6 +153,8 @@ def do_test(args, cfg, model):
                 }
 
         # convert to json format
+        # filter out dets with score < thres  
+        dets = dets[dets.scores > thres]
         
         prediction["instances"] = instances_to_coco_json(dets.to('cpu'), im_name)
 
@@ -166,14 +167,14 @@ def do_test(args, cfg, model):
 
     # save 
     eval_helper = Omni3DEvaluationHelper(
-        ['kitti_pred'], 
+        ['KITTI_pred'], 
         None, 
         output_dir, 
         iter_label='final',
     )
 
-    eval_helper.add_predictions('kitti_pred', inference_json)
-    eval_helper.save_predictions('kitti_pred')
+    eval_helper.add_predictions('KITTI_pred', inference_json)
+    eval_helper.save_predictions('KITTI_pred')
         
         
 

@@ -6,28 +6,6 @@ import os
 import numpy as np
 from tqdm import tqdm
 
-name = 'KITTI'
-split = 'test'
-dataset_paths_to_json = [f'datasets/Omni3D/{name}_{split}.json',]
-os.makedirs('output/KITTI_formatted_predictions', exist_ok=True)
-
-# Example 1. load all images
-dataset = data.Omni3D(dataset_paths_to_json)
-imgIds = dataset.getImgIds()
-imgs = dataset.loadImgs(imgIds)
-
-# Example 2. load annotations for image index 0
-annIds = dataset.getAnnIds(imgIds=imgs[0]['id'])
-anns = dataset.loadAnns(annIds)
-
-data.register_and_store_model_metadata(dataset, 'output')
-
-thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
-dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
-
-
-data_json = torch.load('output/kitti_res/instances_predictions.pth')
-# 
 def perp_vector(a, b):
     return np.array([b, -a])  
 
@@ -103,6 +81,29 @@ def test_calculate_alpha():
 
 alpha = test_calculate_alpha()
 
+
+name = 'KITTI'
+split = 'test'
+dataset_paths_to_json = [f'datasets/Omni3D/{name}_{split}.json',]
+os.makedirs('output/KITTI_formatted_predictions', exist_ok=True)
+
+# Example 1. load all images
+dataset = data.Omni3D(dataset_paths_to_json)
+imgIds = dataset.getImgIds()
+imgs = dataset.loadImgs(imgIds)
+
+# Example 2. load annotations for image index 0
+annIds = dataset.getAnnIds(imgIds=imgs[0]['id'])
+anns = dataset.loadAnns(annIds)
+
+data.register_and_store_model_metadata(dataset, 'output')
+
+thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
+dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
+
+
+data_json = torch.load('output/kitti_preds/KITTI_pred_no_thres/instances_predictions.pth')
+# 
 # reference
 # https://github.com/ZrrSkywalker/MonoDETR/blob/c724572bddbc067832a0e0d860a411003f36c2fa/lib/helpers/tester_helper.py#L114
 files = []
@@ -131,11 +132,14 @@ for image in tqdm(data_json):
     files.append(str_)
 
 # 7518 test images
+base_path = 'output/KITTI_formatted_predictions_no_thres/'
+os.makedirs(base_path, exist_ok=True)
 for img_id, file in enumerate(files):
 
     img_id_str = str(img_id).zfill(6)
-    with open(f'output/KITTI_formatted_predictions/{img_id_str}.txt', 'w') as f:
+    with open(base_path+f'{img_id_str}.txt', 'w') as f:
         f.write(file)
+
 
 
 # write to file 
