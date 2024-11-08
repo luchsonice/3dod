@@ -1,6 +1,7 @@
 import torch
 from detectron2.data.catalog import MetadataCatalog
 from cubercnn import data
+from detectron2.structures import Boxes, BoxMode
 from cubercnn.util.math_util import estimate_truncation, mat2euler, R_to_allocentric
 import os
 import numpy as np
@@ -101,12 +102,15 @@ data.register_and_store_model_metadata(dataset, 'output')
 thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
 dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
 
+input_folder = 'kitti_val_omni'
 
-data_json = torch.load('output/kitti_preds/KITTI_pred_no_thres/instances_predictions.pth')
+out_path = 'output/'+input_folder+'/KITTI_formatted_predictions/'
+in_path = 'output/'+input_folder+'/KITTI_pred/instances_predictions.pth'
+data_json = torch.load(in_path)
 # 
 # reference
 # https://github.com/ZrrSkywalker/MonoDETR/blob/c724572bddbc067832a0e0d860a411003f36c2fa/lib/helpers/tester_helper.py#L114
-files = []
+files = {}
 for image in tqdm(data_json):
     K = image['K']
     width, height = image['width'], image['height']
@@ -118,8 +122,7 @@ for image in tqdm(data_json):
         truncation = -1
         occluded = -1
         rotation_y = mat2euler(np.array(pred['pose']))[1]
-        bbox = pred['bbox'] # x1, y1, x2, y2 -> convert to left, top, right, bottom
-        bbox = [np.min([bbox[0], bbox[2]]), np.min([bbox[1], bbox[3]]), np.max([bbox[0], bbox[2]]), np.max([bbox[1], bbox[3]])]
+        bbox = BoxMode.convert(pred['bbox'], BoxMode.XYWH_ABS, BoxMode.XYXY_ABS) # x1, y1, x2, y2 -> convert to left, top, right, bottom
         dimensions = pred['dimensions']
         location = pred['center_cam']
         score = pred['score']
@@ -129,16 +132,15 @@ for image in tqdm(data_json):
         str_i = f'{category} {truncation} {occluded} {alpha:.2f} {bbox[0]:.2f} {bbox[1]:.2f} {bbox[2]:.2f} {bbox[3]:.2f} {dimensions[0]:.2f} {dimensions[1]:.2f} {dimensions[2]:.2f} {location[0]:.2f} {location[1]:.2f} {location[2]:.2f} {rotation_y:.2f} {score:.2f}\n'
         str_i = str_i[0].upper() + str_i[1:]
         str_ += str_i
-    files.append(str_)
+    files[image_id] = str_
 
 # 7518 test images
-base_path = 'output/KITTI_formatted_predictions_no_thres/'
-os.makedirs(base_path, exist_ok=True)
-for img_id, file in enumerate(files):
+os.makedirs(out_path, exist_ok=True)
+for img_id, content in files.items():
 
     img_id_str = str(img_id).zfill(6)
-    with open(base_path+f'{img_id_str}.txt', 'w') as f:
-        f.write(file)
+    with open(out_path+f'{img_id_str}.txt', 'w') as f:
+        f.write(content)
 
 
 
