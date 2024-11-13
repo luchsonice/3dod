@@ -80,69 +80,91 @@ def test_calculate_alpha():
     # assert np.isclose(result, expected, atol=0.01)
     return result1
 
-alpha = test_calculate_alpha()
+
+def main():
+    alpha = test_calculate_alpha()
 
 
-name = 'KITTI'
-split = 'test'
-dataset_paths_to_json = [f'datasets/Omni3D/{name}_{split}.json',]
-os.makedirs('output/KITTI_formatted_predictions', exist_ok=True)
+    name = 'KITTI'
+    split = 'test'
+    dataset_paths_to_json = [f'datasets/Omni3D/{name}_{split}.json',]
+    os.makedirs('output/KITTI_formatted_predictions', exist_ok=True)
 
-# Example 1. load all images
-dataset = data.Omni3D(dataset_paths_to_json)
-imgIds = dataset.getImgIds()
-imgs = dataset.loadImgs(imgIds)
+    # Example 1. load all images
+    dataset = data.Omni3D(dataset_paths_to_json)
+    imgIds = dataset.getImgIds()
+    imgs = dataset.loadImgs(imgIds)
 
-# Example 2. load annotations for image index 0
-annIds = dataset.getAnnIds(imgIds=imgs[0]['id'])
-anns = dataset.loadAnns(annIds)
+    # Example 2. load annotations for image index 0
+    annIds = dataset.getAnnIds(imgIds=imgs[0]['id'])
+    anns = dataset.loadAnns(annIds)
 
-data.register_and_store_model_metadata(dataset, 'output')
+    data.register_and_store_model_metadata(dataset, 'output')
 
-thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
-dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
+    thing_classes = MetadataCatalog.get('omni3d_model').thing_classes
+    dataset_id_to_contiguous_id = MetadataCatalog.get('omni3d_model').thing_dataset_id_to_contiguous_id
+    cats = {'pedestrian', 'car', 'cyclist', 'van', 'truck'}
 
-input_folder = 'kitti_val_omni'
+    input_folder = 'kitti_omni_eq'
 
-out_path = 'output/'+input_folder+'/KITTI_formatted_predictions/'
-in_path = 'output/'+input_folder+'/KITTI_pred/instances_predictions.pth'
-data_json = torch.load(in_path)
-# 
-# reference
-# https://github.com/ZrrSkywalker/MonoDETR/blob/c724572bddbc067832a0e0d860a411003f36c2fa/lib/helpers/tester_helper.py#L114
-files = {}
-for image in tqdm(data_json):
-    K = image['K']
-    width, height = image['width'], image['height']
-    image_id = image['image_id']
-    str_ = ''
-    for pred in image['instances']:
+    out_path = 'output/'+input_folder+'/KITTI_formatted_predictions/'
+    in_path = 'output/'+input_folder+'/KITTI_pred/instances_predictions.pth'
+    print('saving to', out_path)
+    data_json = torch.load(in_path)
+    # 
+    # reference
+    # https://github.com/ZrrSkywalker/MonoDETR/blob/c724572bddbc067832a0e0d860a411003f36c2fa/lib/helpers/tester_helper.py#L114
+    files = {}
+    for image in tqdm(data_json):
+        K = image['K']
+        K_inv = np.linalg.inv(K)
+        width, height = image['width'], image['height']
+        image_id = image['image_id']
+        l = []
+        for pred in image['instances']:
 
-        category = thing_classes[pred['category_id']]
-        truncation = -1
-        occluded = -1
-        rotation_y = mat2euler(np.array(pred['pose']))[1]
-        bbox = BoxMode.convert(pred['bbox'], BoxMode.XYWH_ABS, BoxMode.XYXY_ABS) # x1, y1, x2, y2 -> convert to left, top, right, bottom
-        dimensions = pred['dimensions']
-        location = pred['center_cam']
-        score = pred['score']
-        alpha = calculate_alpha(location, rotation_y)
+            category = thing_classes[pred['category_id']]
+            if category not in cats:
+                continue
+            occluded = 0
+            # truncation = estimate_truncation(K, torch.tensor([x3d, y3d, z3d, w3d, h3d, l3d]), pred['pose'], width, height)
+            truncation = 0.0 # it does not matter
+            rotation_y = mat2euler(np.array(pred['pose']))[1]
+            bbox = BoxMode.convert(pred['bbox'], BoxMode.XYWH_ABS, BoxMode.XYXY_ABS) # x1, y1, x2, y2 -> convert to left, top, right, bottom
+            h3d, w3d, l3d = pred['dimensions']
+            # unproject, this should yield the same 
+            # cen_2d = np.array(pred['center_2D'] + [1])
+            # z3d = pred['center_cam'][2]
+            # x3d, y3d, z3d = (K_inv @ (z3d*cen_2d))
 
-        # convert to KITTI format
-        str_i = f'{category} {truncation} {occluded} {alpha:.2f} {bbox[0]:.2f} {bbox[1]:.2f} {bbox[2]:.2f} {bbox[3]:.2f} {dimensions[0]:.2f} {dimensions[1]:.2f} {dimensions[2]:.2f} {location[0]:.2f} {location[1]:.2f} {location[2]:.2f} {rotation_y:.2f} {score:.2f}\n'
-        str_i = str_i[0].upper() + str_i[1:]
-        str_ += str_i
-    files[image_id] = str_
+            x3d, y3d, z3d = pred['center_cam']
 
-# 7518 test images
-os.makedirs(out_path, exist_ok=True)
-for img_id, content in files.items():
+            location = pred['center_cam']
+            score = pred['score']
+            alpha = calculate_alpha(location, rotation_y)
 
-    img_id_str = str(img_id).zfill(6)
-    with open(out_path+f'{img_id_str}.txt', 'w') as f:
-        f.write(content)
+            # convert to KITTI format
+            li = [category, truncation, occluded, alpha, bbox[0], bbox[1], bbox[2], bbox[3], h3d, w3d, l3d, x3d, y3d, z3d, rotation_y, score]
+            l.append(li)
+        # sort l by z3d
+        l = sorted(l, key=lambda x: x[13])
+        files[image_id] = l
 
+    # 7518 test images
+    os.makedirs(out_path, exist_ok=True)
+    for img_id, content in files.items():
 
+        img_id_str = str(img_id).zfill(6)
+        with open(out_path+f'{img_id_str}.txt', 'w') as f:
+            str_i = ''
+            for i in content:
+                # t = f'{category} {truncation:.2f} {occluded} {alpha:.2f} {bbox[0]:.2f} {bbox[1]:.2f} {bbox[2]:.2f} {bbox[3]:.2f} {w3d:.2f} {h3d:.2f} {l3d:.2f} {x3d:.2f} {y3d:.2f} {z3d:.2f} {rotation_y:.2f} {score:.2f}\n'
+                t = f'{i[0][0].upper() + i[0][1:]} {i[1]:.2f} {i[2]} {i[3]:.2f} {i[4]:.2f} {i[5]:.2f} {i[6]:.2f} {i[7]:.2f} {i[8]:.2f} {i[9]:.2f} {i[10]:.2f} {i[11]:.2f} {i[12]:.2f} {i[13]:.2f} {i[14]:.2f} {i[15]:.2f}\n'
+                str_i += t
+            f.write(str_i)
+
+if __name__ == '__main__':
+    main()
 
 # write to file 
 # #Values    Name      Description
@@ -162,7 +184,7 @@ for img_id, content in files.items():
 #    3    location     3D object location x,y,z in camera coordinates (in meters)
 #    1    rotation_y   Rotation ry around Y-axis in camera coordinates [-pi..pi]
 #    1    score        Only for results: Float, indicating confidence in
-#                      detection, needed for p/r curves, higher is better.
+#                      detection, needuhued for p/r curves, higher is better.
 
 # output to files 000000.txt 000001.txt ... 
 
