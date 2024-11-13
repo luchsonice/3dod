@@ -11,6 +11,10 @@ from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.engine import default_argument_parser, default_setup, launch
 from detectron2.data import transforms as T
+from detectron2.structures import Boxes
+from detectron2.utils.visualizer import Visualizer
+from cubercnn import data
+
 
 from cubercnn.evaluation.omni3d_evaluation import Omni3DEvaluationHelper, instances_to_coco_json
 
@@ -45,6 +49,7 @@ def do_test(args, cfg, model):
     augmentations = T.AugmentationList([T.ResizeShortestEdge(min_size, max_size, "choice")])
 
     util.mkdir_if_missing(output_dir)
+    print('saving to', output_dir)
 
     category_path = os.path.join(util.file_parts(args.config_file)[0], 'category_meta.json')
         
@@ -55,17 +60,27 @@ def do_test(args, cfg, model):
     metadata = util.load_json(category_path)
     cats = metadata['thing_classes']
 
+    name = 'KITTI' # 'KITTI' or 'SUNRGBD'
+    split = 'test'
+    dataset_paths_to_json = [f'datasets/Omni3D/{name}_{split}.json',]
+
+    # Example 1. load all images
+    dataset = data.Omni3D(dataset_paths_to_json)
+    imgIds = dataset.getImgIds()
+    imgs = dataset.loadImgs(imgIds)
+
     inference_json = [] 
 
-    i = 0
-
-    for path in tqdm(list_of_ims):
-
+    for i, path in enumerate(tqdm(imgs)):
+        path = 'datasets/'+path['file_path']
         im_name = util.file_parts(path)[1]
         im = util.imread(path)
 
         if im is None:
             continue
+
+        img_id = imgs[i]['id']
+        K = np.array(imgs[i]['K'])
         
         image_shape = im.shape[:2]  # h, w
 
@@ -80,11 +95,11 @@ def do_test(args, cfg, model):
         else:
             px, py = principal_point
 
-        K = np.array([
-            [focal_length, 0.0, px], 
-            [0.0, focal_length, py], 
-            [0.0, 0.0, 1.0]
-        ])
+        # K = np.array([
+        #     [focal_length, 0.0, px], 
+        #     [0.0, focal_length, py], 
+        #     [0.0, 0.0, 1.0]
+        # ])
         # is_ground = os.path.exists(f'datasets/ground_maps/{im_name}.npz')
         # if is_ground:
             # ground_map = np.load(f'datasets/ground_maps/{im_name}.npz')['mask']
@@ -116,13 +131,14 @@ def do_test(args, cfg, model):
 
         n_det = len(dets)
 
-        meshes = []
+        meshes_pred = []
         meshes_text = []
+        bboxes = []
 
         if n_det > 0:
-            for idx, (corners3D, center_cam, center_2D, dimensions, pose, score, cat_idx) in enumerate(zip(
+            for idx, (corners3D, center_cam, center_2D, dimensions, pose, score, cat_idx, bbox) in enumerate(zip(
                     dets.pred_bbox3D, dets.pred_center_cam, dets.pred_center_2D, dets.pred_dimensions, 
-                    dets.pred_pose, dets.scores, dets.pred_classes
+                    dets.pred_pose, dets.scores, dets.pred_classes, dets.pred_boxes
                 )):
 
                 # skip
@@ -135,14 +151,47 @@ def do_test(args, cfg, model):
                 meshes_text.append('{} {:.2f}'.format(cat, score))
                 color = [c/255.0 for c in util.get_color(idx)]
                 box_mesh = util.mesh_cuboid(bbox3D, pose.tolist(), color=color)
-                meshes.append(box_mesh)
-        
+                meshes_pred.append(box_mesh)
+                bboxes.append(bbox.tolist())
 
-        if len(meshes) > 0:
-            im_drawn_rgb, im_topdown, _ = vis.draw_scene_view(im, K, meshes, text=meshes_text, scale=im.shape[0], blend_weight=0.5, blend_weight_overlay=0.85)
-            
-            util.imwrite(im_drawn_rgb, os.path.join(output_dir, im_name+'_boxes.jpg'))
-            util.imwrite(im_topdown, os.path.join(output_dir, im_name+'_novel.jpg'))
+        if args.display:
+            if len(meshes_pred) > 0:
+
+                # find the img which has im_name in the file_path
+
+                # Example 2. load annotations for image index 0
+                annIds = dataset.getAnnIds(imgIds=img_id)
+                anns = dataset.loadAnns(annIds)
+
+                meshes_gt = []
+                # append gt mesh to meshes
+                for ann in anns:
+                    bbox3D = ann['bbox3D_cam']
+                    pose = ann['R_cam']
+                    dimensions = ann['dimensions']
+                    cube = ann['center_cam'] + dimensions
+                    if ann['category_name'] == 'dontcare':
+                        continue
+                    box_mesh = util.mesh_cuboid(cube, pose, color=color)
+                    meshes_gt.append(box_mesh)
+                    meshes_text.append(ann['category_name'])
+                colors_pred = [np.array([0, 1, 0, 0.6]) for _ in range(len(meshes_pred))]
+                colors_gt   = [np.array([0, 0, 1, 0.6]) for _ in range(len(meshes_gt))]
+
+                meshes = meshes_pred + meshes_gt
+                colors = colors_pred + colors_gt
+
+                im_drawn_rgb, im_topdown, _ = vis.draw_scene_view(im, K, meshes, text=meshes_text, scale=im.shape[0], blend_weight=0.5, blend_weight_overlay=0.85, colors=None)
+                
+                # our bboxes coordinates are (top left, bottom right)
+                # bboxes = Boxes(bboxes)
+                # v_pred = Visualizer(im_drawn_rgb, None)
+                # v_pred = v_pred.overlay_instances(
+                #     boxes=bboxes.tensor.cpu().numpy()
+                # )
+                # im_drawn_rgb = v_pred.get_image()
+                util.imwrite(im_drawn_rgb, os.path.join(output_dir, im_name+'_boxes.jpg'))
+                util.imwrite(im_topdown, os.path.join(output_dir, im_name+'_novel.jpg'))
 
         # save detections
         prediction = {
@@ -161,9 +210,6 @@ def do_test(args, cfg, model):
         # store in overall predictions
         inference_json.append(prediction)
 
-        i += 1
-        if i >10:
-            break
 
     # save 
     eval_helper = Omni3DEvaluationHelper(
